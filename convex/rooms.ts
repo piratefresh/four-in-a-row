@@ -307,7 +307,7 @@ export const joinRoom = mutation({
     );
     if (existingAuthedPlayer) {
       const existingRoom = await ctx.db.get(existingAuthedPlayer.roomId);
-      if (existingRoom?.code === code) {
+      if (existingRoom) {
         return {
           roomId: existingRoom._id,
           code: existingRoom.code,
@@ -316,11 +316,6 @@ export const joinRoom = mutation({
           maxPlayers: existingRoom.maxPlayers,
         };
       }
-
-      throw new ConvexError({
-        code: "ALREADY_IN_ROOM",
-        message: `Player is already in room ${existingRoom?.code ?? "unknown"}.`,
-      });
     }
 
     const activePlayers = await ctx.db
@@ -760,4 +755,3 @@ export const clearAllData = mutation({
     };
   },
 });
-

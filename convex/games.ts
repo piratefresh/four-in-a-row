@@ -1,27 +1,23 @@
 import { ConvexError, v } from "convex/values";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import {
   createInitialGameDocument,
   createShuffledDeck,
   gameDeckTileValidator,
   getNextStage,
+  getNewRevealCountForStage,
   INITIAL_HAND_SIZE,
+  ANTE_AMOUNT,
+  RAISE_LADDER,
+  MAX_RAISES_PER_ROUND,
 } from "./gameState";
 import type { GameStage } from "./gameState";
 import type { Id } from "./_generated/dataModel";
 
 const AI_DEALER_PLAYER_ID = "ai_dealer";
 const INITIAL_CHIPS = 1000;
-const REVEAL_COUNT_BY_STAGE: Record<GameStage, number> = {
-  preflop: 2,
-  flop: 1,
-  turn: 1,
-  river: 1,
-  final: 0,
-  showdown: 0,
-};
 
 export const createGameForRoom = mutation({
   args: {
@@ -116,7 +112,8 @@ export const startGame = mutation({
       participantIds.push(AI_DEALER_PLAYER_ID);
     }
 
-    const requiredTiles = participantIds.length * INITIAL_HAND_SIZE;
+    const COMMUNITY_TILES_COUNT = 5;
+    const requiredTiles = participantIds.length * INITIAL_HAND_SIZE + COMMUNITY_TILES_COUNT;
     const workingDeck =
       game.deck.length > 0 ? [...game.deck] : createShuffledDeck();
 
@@ -136,16 +133,40 @@ export const startGame = mutation({
       await ctx.db.delete(hand._id);
     }
 
+    // Create community tiles (all unrevealed initially)
+    const communityTiles = [];
+    for (let i = 0; i < COMMUNITY_TILES_COUNT; i++) {
+      const tile = workingDeck.splice(0, 1)[0];
+      communityTiles.push({
+        letter: tile.letter,
+        baseValue: tile.baseValue,
+        revealed: false,
+        // Optional: Add multipliers to some tiles
+        // multiplier: i === 2 ? "2L" as const : i === 4 ? "3L" as const : undefined,
+      });
+    }
+
     const now = Date.now();
+    const totalAnte = ANTE_AMOUNT * participantIds.length;
+
     for (const participantId of participantIds) {
       const tiles = workingDeck.splice(0, INITIAL_HAND_SIZE);
+
+      // Validate player has sufficient chips for ante
+      if (INITIAL_CHIPS < ANTE_AMOUNT) {
+        throw new ConvexError({
+          code: "INSUFFICIENT_CHIPS_FOR_ANTE",
+          message: `Players must have at least ${ANTE_AMOUNT} chips to play.`,
+        });
+      }
+
       await ctx.db.insert("playerHands", {
         gameId: game._id,
         playerId: participantId,
         tiles,
-        chips: INITIAL_CHIPS,
+        chips: INITIAL_CHIPS - ANTE_AMOUNT,
         betThisRound: 0,
-        totalBet: 0,
+        totalBet: ANTE_AMOUNT,
         hasActed: false,
         hasFolded: false,
         createdAt: now,
@@ -155,9 +176,12 @@ export const startGame = mutation({
 
     await ctx.db.patch(game._id, {
       status: "active",
+      communityTiles,
       deck: workingDeck,
+      pot: totalAnte,
       currentBet: 0,
       currentPlayerIndex: 0,
+      raisesThisRound: 0,
       updatedAt: now,
     });
     await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
@@ -169,101 +193,6 @@ export const startGame = mutation({
       dealtHandSize: INITIAL_HAND_SIZE,
       playersDealt: participantIds.length,
       includesAiDealer: participantIds.includes(AI_DEALER_PLAYER_ID),
-    };
-  },
-});
-
-export const advanceStage = mutation({
-  args: {
-    gameId: v.id("games"),
-  },
-  handler: async (ctx, args) => {
-    const game = await ctx.db.get(args.gameId);
-    if (!game) {
-      throw new ConvexError({
-        code: "GAME_NOT_FOUND",
-        message: "Game does not exist.",
-      });
-    }
-
-    if (game.status !== "active") {
-      throw new ConvexError({
-        code: "INVALID_GAME_STATUS",
-        message: "Only active games can advance.",
-      });
-    }
-
-    const nextStage = getNextStage(game.stage);
-    const now = Date.now();
-    const roomId = ctx.db.normalizeId("rooms", game.roomId);
-
-    if (!nextStage) {
-      await ctx.db.patch(game._id, {
-        status: "completed",
-        updatedAt: now,
-      });
-      if (roomId) {
-        await setRoomUsersActiveGameId(ctx, roomId, undefined);
-      }
-      return {
-        ok: true,
-        gameId: game._id,
-        stage: game.stage,
-        status: "completed" as const,
-      };
-    }
-
-    // Reveal community tiles based on stage
-    let communityTiles = [...game.communityTiles];
-    let deck = [...game.deck];
-
-    if (nextStage === "flop" && communityTiles.length === 0) {
-      // Reveal 3 cards for flop
-      const newTiles = deck.splice(0, 3);
-      communityTiles = newTiles.map(({ letter, baseValue }) => ({
-        letter,
-        baseValue,
-        revealed: true
-      }));
-    } else if (nextStage === "turn" && communityTiles.length === 3) {
-      // Reveal 1 card for turn
-      const newTile = deck.shift();
-      if (newTile) {
-        communityTiles.push({
-          letter: newTile.letter,
-          baseValue: newTile.baseValue,
-          revealed: true
-        });
-      }
-    } else if (nextStage === "river" && communityTiles.length === 4) {
-      // Reveal 1 card for river
-      const newTile = deck.shift();
-      if (newTile) {
-        communityTiles.push({
-          letter: newTile.letter,
-          baseValue: newTile.baseValue,
-          revealed: true
-        });
-      }
-    }
-
-    const nextStatus = nextStage === "showdown" ? "completed" : game.status;
-    await ctx.db.patch(game._id, {
-      stage: nextStage,
-      status: nextStatus,
-      communityTiles,
-      deck,
-      updatedAt: now,
-    });
-    if (nextStatus === "completed" && roomId) {
-      await setRoomUsersActiveGameId(ctx, roomId, undefined);
-    }
-
-    return {
-      ok: true,
-      gameId: game._id,
-      stage: nextStage,
-      status: nextStatus,
     };
   },
 });
@@ -340,29 +269,6 @@ function sortHandsByTurnOrder<T extends { createdAt: number; playerId: string }>
 }
 
 // Helper to check if betting round is complete
-function isBettingRoundComplete(
-  hands: Array<{
-    hasFolded: boolean;
-    hasActed: boolean;
-    betThisRound: number;
-  }>,
-  currentBet: number,
-): boolean {
-  const activePlayers = hands.filter((h) => !h.hasFolded);
-
-  if (activePlayers.length <= 1) {
-    return true;
-  }
-
-  const allActed = activePlayers.every((h) => h.hasActed);
-  if (!allActed) {
-    return false;
-  }
-
-  const allBetsMatch = activePlayers.every((h) => h.betThisRound === currentBet);
-  return allBetsMatch;
-}
-
 async function setRoomUsersActiveGameId(
   ctx: MutationCtx,
   roomId: Id<"rooms">,
@@ -390,84 +296,6 @@ async function setRoomUsersActiveGameId(
   }
 }
 
-// Helper to auto-advance stage after betting round completes
-async function autoAdvanceStage(
-  ctx: any,
-  gameId: Id<"games">,
-  game: any,
-  hands: any[],
-) {
-  const nextStage = getNextStage(game.stage);
-  const now = Date.now();
-
-  if (!nextStage) {
-    await ctx.db.patch(gameId, {
-      status: "completed" as const,
-      updatedAt: now,
-    });
-    const roomId = ctx.db.normalizeId("rooms", game.roomId);
-    if (roomId) {
-      await setRoomUsersActiveGameId(ctx, roomId, undefined);
-    }
-    return { advanced: true, nextStage: null, status: "completed" as const };
-  }
-
-  const revealCount = REVEAL_COUNT_BY_STAGE[game.stage as GameStage] ?? 0;
-  const nextCommunityTiles = [...game.communityTiles];
-  const nextDeck = [...game.deck];
-
-  if (revealCount > 0) {
-    if (nextDeck.length < revealCount) {
-      throw new ConvexError({
-        code: "DECK_EXHAUSTED",
-        message: `Not enough tiles in deck to reveal ${revealCount} community tile(s).`,
-      });
-    }
-
-    for (let i = 0; i < revealCount; i++) {
-      const tile = nextDeck.shift();
-      if (!tile) {
-        throw new ConvexError({
-          code: "DECK_EXHAUSTED",
-          message: "Deck was unexpectedly exhausted while revealing tiles.",
-        });
-      }
-      nextCommunityTiles.push({
-        letter: tile.letter,
-        baseValue: tile.baseValue,
-        revealed: true,
-      });
-    }
-  }
-
-  // Reset betting for next round
-  for (const hand of hands) {
-    if (!hand.hasFolded) {
-      await ctx.db.patch(hand._id, {
-        betThisRound: 0,
-        hasActed: false,
-        updatedAt: now,
-      });
-    }
-  }
-
-  await ctx.db.patch(gameId, {
-    stage: nextStage,
-    communityTiles: nextCommunityTiles,
-    deck: nextDeck,
-    currentBet: 0,
-    currentPlayerIndex: 0,
-    updatedAt: now,
-  });
-
-  return {
-    advanced: true,
-    nextStage,
-    status: game.status,
-    revealedTiles: revealCount,
-  };
-}
-
 // CHECK mutation - Pass with no bet (only allowed if current bet is 0 or you've already matched it)
 export const check = mutation({
   args: {
@@ -487,6 +315,13 @@ export const check = mutation({
       throw new ConvexError({
         code: "INVALID_GAME_STATUS",
         message: "Only active games can accept bets.",
+      });
+    }
+
+    if (game.stage === "final" || game.stage === "showdown") {
+      throw new ConvexError({
+        code: "BETTING_NOT_ALLOWED",
+        message: `Betting is not allowed during ${game.stage}.`,
       });
     }
 
@@ -547,42 +382,23 @@ export const check = mutation({
       updatedAt: now,
     });
 
-    const updatedHands = orderedHands.map((hand) =>
-      hand._id === currentTurnHand._id ? { ...hand, hasActed: true } : hand,
-    );
+    const updatedHands = orderedHands.map((hand) => ({
+      _id: hand._id,
+      playerId: hand.playerId,
+      hasFolded: hand.hasFolded,
+      hasActed: hand._id === currentTurnHand._id ? true : hand.hasActed,
+      betThisRound: hand.betThisRound,
+      chips: hand.chips,
+      totalBet: hand.totalBet,
+    }));
 
-    // Check if betting round is complete
-    if (isBettingRoundComplete(updatedHands, game.currentBet)) {
-      const advanceResult = await autoAdvanceStage(ctx, game._id, game, updatedHands);
-      return {
-        ok: true,
-        action: "check" as const,
-        playerId,
-        ...advanceResult,
-      };
-    }
-
-    // Move to next player
-    let nextPlayerIndex = game.currentPlayerIndex;
-    for (let step = 1; step <= updatedHands.length; step++) {
-      const candidateIndex = (game.currentPlayerIndex + step) % updatedHands.length;
-      if (!updatedHands[candidateIndex]?.hasFolded) {
-        nextPlayerIndex = candidateIndex;
-        break;
-      }
-    }
-
-    await ctx.db.patch(game._id, {
-      currentPlayerIndex: nextPlayerIndex,
-      updatedAt: now,
-    });
+    // Handle turn and stage progression
+    await handlePostActionProgression(ctx, game, updatedHands);
 
     return {
       ok: true,
       action: "check" as const,
       playerId,
-      advanced: false,
-      nextPlayerId: updatedHands[nextPlayerIndex]?.playerId ?? null,
     };
   },
 });
@@ -606,6 +422,13 @@ export const call = mutation({
       throw new ConvexError({
         code: "INVALID_GAME_STATUS",
         message: "Only active games can accept bets.",
+      });
+    }
+
+    if (game.stage === "final" || game.stage === "showdown") {
+      throw new ConvexError({
+        code: "BETTING_NOT_ALLOWED",
+        message: `Betting is not allowed during ${game.stage}.`,
       });
     }
 
@@ -681,50 +504,26 @@ export const call = mutation({
       updatedAt: now,
     });
 
-    const updatedHands = orderedHands.map((hand) =>
-      hand._id === currentTurnHand._id
-        ? {
-            ...hand,
-            betThisRound: hand.betThisRound + amountToCall,
-            hasActed: true,
-          }
-        : hand,
-    );
+    const updatedHands = orderedHands.map((hand) => ({
+      _id: hand._id,
+      playerId: hand.playerId,
+      hasFolded: hand.hasFolded,
+      hasActed: hand._id === currentTurnHand._id ? true : hand.hasActed,
+      betThisRound: hand._id === currentTurnHand._id ? hand.betThisRound + amountToCall : hand.betThisRound,
+      chips: hand._id === currentTurnHand._id ? hand.chips - amountToCall : hand.chips,
+      totalBet: hand._id === currentTurnHand._id ? hand.totalBet + amountToCall : hand.totalBet,
+    }));
 
-    // Check if betting round is complete
-    if (isBettingRoundComplete(updatedHands, game.currentBet)) {
-      const advanceResult = await autoAdvanceStage(ctx, game._id, game, updatedHands);
-      return {
-        ok: true,
-        action: "call" as const,
-        playerId,
-        amountCalled: amountToCall,
-        ...advanceResult,
-      };
-    }
-
-    // Move to next player
-    let nextPlayerIndex = game.currentPlayerIndex;
-    for (let step = 1; step <= updatedHands.length; step++) {
-      const candidateIndex = (game.currentPlayerIndex + step) % updatedHands.length;
-      if (!updatedHands[candidateIndex]?.hasFolded) {
-        nextPlayerIndex = candidateIndex;
-        break;
-      }
-    }
-
-    await ctx.db.patch(game._id, {
-      currentPlayerIndex: nextPlayerIndex,
-      updatedAt: now,
-    });
+    // Handle turn and stage progression
+    await handlePostActionProgression(ctx, game, updatedHands);
 
     return {
       ok: true,
       action: "call" as const,
       playerId,
       amountCalled: amountToCall,
-      advanced: false,
-      nextPlayerId: updatedHands[nextPlayerIndex]?.playerId ?? null,
+      chipsAfterCall: currentTurnHand.chips - amountToCall,
+      betAfterCall: currentTurnHand.betThisRound + amountToCall,
     };
   },
 });
@@ -752,6 +551,13 @@ export const raise = mutation({
       });
     }
 
+    if (game.stage === "final" || game.stage === "showdown") {
+      throw new ConvexError({
+        code: "BETTING_NOT_ALLOWED",
+        message: `Betting is not allowed during ${game.stage}.`,
+      });
+    }
+
     const playerId = args.playerId.trim();
     if (!playerId) {
       throw new ConvexError({
@@ -760,11 +566,36 @@ export const raise = mutation({
       });
     }
 
+    // Check raise cap
+    const raisesThisRound = game.raisesThisRound ?? 0;
+    if (raisesThisRound >= MAX_RAISES_PER_ROUND) {
+      throw new ConvexError({
+        code: "RAISE_CAP_REACHED",
+        message: `Maximum ${MAX_RAISES_PER_ROUND} raises per betting round reached.`,
+      });
+    }
+
     const raiseToAmount = Math.floor(args.raiseToAmount);
     if (!Number.isFinite(raiseToAmount) || raiseToAmount <= game.currentBet) {
       throw new ConvexError({
         code: "INVALID_RAISE_AMOUNT",
         message: `Raise amount must be greater than current bet of ${game.currentBet}.`,
+      });
+    }
+
+    // Enforce fixed raise ladder (must raise to the next ladder level only)
+    const nextRaiseLevel = RAISE_LADDER.find((amount) => amount > game.currentBet);
+    if (nextRaiseLevel === undefined) {
+      throw new ConvexError({
+        code: "RAISE_CAP_REACHED",
+        message: "Maximum raise level reached.",
+      });
+    }
+
+    if (raiseToAmount !== nextRaiseLevel) {
+      throw new ConvexError({
+        code: "INVALID_RAISE_AMOUNT",
+        message: `Raise amount must be the next ladder level: ${nextRaiseLevel}.`,
       });
     }
 
@@ -830,22 +661,26 @@ export const raise = mutation({
       }
     }
 
-    // Move to next player
-    let nextPlayerIndex = game.currentPlayerIndex;
-    for (let step = 1; step <= orderedHands.length; step++) {
-      const candidateIndex = (game.currentPlayerIndex + step) % orderedHands.length;
-      if (!orderedHands[candidateIndex]?.hasFolded) {
-        nextPlayerIndex = candidateIndex;
-        break;
-      }
-    }
-
     await ctx.db.patch(game._id, {
       pot: game.pot + additionalChipsNeeded,
       currentBet: raiseToAmount,
-      currentPlayerIndex: nextPlayerIndex,
+      raisesThisRound: raisesThisRound + 1,
       updatedAt: now,
     });
+
+    // Build updated hands state for progression logic (raise reopens betting so others have hasActed=false)
+    const updatedHands = orderedHands.map((hand) => ({
+      _id: hand._id,
+      playerId: hand.playerId,
+      hasFolded: hand.hasFolded,
+      hasActed: hand._id === currentTurnHand._id ? true : false, // Only raiser has acted
+      betThisRound: hand._id === currentTurnHand._id ? raiseToAmount : hand.betThisRound,
+      chips: hand._id === currentTurnHand._id ? hand.chips - additionalChipsNeeded : hand.chips,
+      totalBet: hand._id === currentTurnHand._id ? hand.totalBet + additionalChipsNeeded : hand.totalBet,
+    }));
+
+    // Handle turn advancement (stage won't advance because not everyone has acted after raise)
+    await advanceTurn(ctx, game, updatedHands);
 
     return {
       ok: true,
@@ -853,8 +688,6 @@ export const raise = mutation({
       playerId,
       raisedTo: raiseToAmount,
       amountAdded: additionalChipsNeeded,
-      advanced: false,
-      nextPlayerId: orderedHands[nextPlayerIndex]?.playerId ?? null,
     };
   },
 });
@@ -878,6 +711,13 @@ export const fold = mutation({
       throw new ConvexError({
         code: "INVALID_GAME_STATUS",
         message: "Only active games can accept folds.",
+      });
+    }
+
+    if (game.stage === "final" || game.stage === "showdown") {
+      throw new ConvexError({
+        code: "BETTING_NOT_ALLOWED",
+        message: `Folding is not allowed during ${game.stage}.`,
       });
     }
 
@@ -931,66 +771,23 @@ export const fold = mutation({
       updatedAt: now,
     });
 
-    const updatedHands = orderedHands.map((hand) =>
-      hand._id === currentTurnHand._id
-        ? { ...hand, hasFolded: true, hasActed: true }
-        : hand,
-    );
+    const updatedHands = orderedHands.map((hand) => ({
+      _id: hand._id,
+      playerId: hand.playerId,
+      hasFolded: hand._id === currentTurnHand._id ? true : hand.hasFolded,
+      hasActed: hand._id === currentTurnHand._id ? true : hand.hasActed,
+      betThisRound: hand.betThisRound,
+      chips: hand.chips,
+      totalBet: hand.totalBet,
+    }));
 
-    // Check if only one player remains
-    const remainingPlayers = updatedHands.filter((h) => !h.hasFolded);
-    if (remainingPlayers.length <= 1) {
-      await ctx.db.patch(game._id, {
-        status: "completed",
-        updatedAt: now,
-      });
-      const roomId = ctx.db.normalizeId("rooms", game.roomId);
-      if (roomId) {
-        await setRoomUsersActiveGameId(ctx, roomId, undefined);
-      }
-      return {
-        ok: true,
-        action: "fold" as const,
-        playerId,
-        gameOver: true,
-        winner: remainingPlayers[0]?.playerId ?? null,
-      };
-    }
-
-    // Move to next player
-    let nextPlayerIndex = game.currentPlayerIndex;
-    for (let step = 1; step <= updatedHands.length; step++) {
-      const candidateIndex = (game.currentPlayerIndex + step) % updatedHands.length;
-      if (!updatedHands[candidateIndex]?.hasFolded) {
-        nextPlayerIndex = candidateIndex;
-        break;
-      }
-    }
-
-    await ctx.db.patch(game._id, {
-      currentPlayerIndex: nextPlayerIndex,
-      updatedAt: now,
-    });
-
-    // Check if betting round is complete after fold
-    if (isBettingRoundComplete(updatedHands, game.currentBet)) {
-      const advanceResult = await autoAdvanceStage(ctx, game._id, game, updatedHands);
-      return {
-        ok: true,
-        action: "fold" as const,
-        playerId,
-        gameOver: false,
-        ...advanceResult,
-      };
-    }
+    // Handle turn and stage progression
+    await handlePostActionProgression(ctx, game, updatedHands);
 
     return {
       ok: true,
       action: "fold" as const,
       playerId,
-      gameOver: false,
-      advanced: false,
-      nextPlayerId: updatedHands[nextPlayerIndex]?.playerId ?? null,
     };
   },
 });
@@ -1032,10 +829,10 @@ export const submitWordInternal = internalMutation({
       });
     }
 
-    if (game.stage === "showdown") {
+    if (game.stage !== "showdown") {
       throw new ConvexError({
         code: "INVALID_GAME_STAGE",
-        message: "Word submissions are closed during showdown.",
+        message: "Word submissions are only allowed during showdown.",
       });
     }
 
@@ -1051,35 +848,19 @@ export const submitWordInternal = internalMutation({
       });
     }
 
-    const orderedHands = sortHandsByTurnOrder(hands);
-    const currentTurnHand = orderedHands[game.currentPlayerIndex];
-    if (!currentTurnHand) {
+    // During showdown, find the player's hand (no turn order needed)
+    const playerHand = hands.find(h => h.playerId === normalizedPlayerId);
+    if (!playerHand) {
       throw new ConvexError({
-        code: "INVALID_TURN_INDEX",
-        message: "Current turn index is out of range.",
+        code: "PLAYER_NOT_FOUND",
+        message: "Player not found in this game.",
       });
     }
-
-    if (currentTurnHand.playerId !== normalizedPlayerId) {
-      throw new ConvexError({
-        code: "NOT_YOUR_TURN",
-        message: "It is not your turn.",
-      });
-    }
-
-    const playerHand = currentTurnHand;
 
     if (playerHand.hasFolded) {
       throw new ConvexError({
         code: "PLAYER_FOLDED",
         message: "Cannot submit word after folding.",
-      });
-    }
-
-    if (playerHand.hasActed) {
-      throw new ConvexError({
-        code: "PLAYER_ALREADY_ACTED",
-        message: "You have already acted this round.",
       });
     }
 
@@ -1094,7 +875,7 @@ export const submitWordInternal = internalMutation({
     if (existingSubmission) {
       throw new ConvexError({
         code: "ALREADY_SUBMITTED",
-        message: "You have already submitted a word for this stage.",
+        message: "You have already submitted a word for showdown.",
       });
     }
 
@@ -1179,18 +960,207 @@ export const submitWordInternal = internalMutation({
       createdAt: now,
     });
 
-    // Update player state - mark as having acted
-    await ctx.db.patch(playerHand._id, {
-      hasActed: true,
-      updatedAt: now,
-    });
+    // Auto-resolve showdown when all non-folded players have submitted.
+    const eligiblePlayerIds = hands
+      .filter((hand) => !hand.hasFolded)
+      .map((hand) => hand.playerId);
 
+    if (eligiblePlayerIds.length === 0) {
+      await ctx.db.patch(game._id, {
+        status: "completed",
+        updatedAt: now,
+      });
+    } else {
+      const allSubmissions = await ctx.db
+        .query("wordSubmissions")
+        .withIndex("by_game", (q) => q.eq("gameId", gameId))
+        .collect();
+
+      const submissionsByPlayer = new Map<string, typeof allSubmissions[0]>();
+      for (const submission of allSubmissions) {
+        if (!eligiblePlayerIds.includes(submission.playerId)) continue;
+        const existing = submissionsByPlayer.get(submission.playerId);
+        if (!existing || submission.createdAt > existing.createdAt) {
+          submissionsByPlayer.set(submission.playerId, submission);
+        }
+      }
+
+      const allEligibleSubmitted = eligiblePlayerIds.every((playerId) =>
+        submissionsByPlayer.has(playerId),
+      );
+
+      if (allEligibleSubmitted && !game.winnerId) {
+        const eligibleSubmissions = Array.from(submissionsByPlayer.values());
+        const sortedSubmissions = [...eligibleSubmissions].sort((a, b) => {
+          if (a.score !== b.score) {
+            return b.score - a.score;
+          }
+          if (a.scoreBreakdown.lengthPoints !== b.scoreBreakdown.lengthPoints) {
+            return b.scoreBreakdown.lengthPoints - a.scoreBreakdown.lengthPoints;
+          }
+          if (a.createdAt !== b.createdAt) {
+            return a.createdAt - b.createdAt;
+          }
+          return a.playerId.localeCompare(b.playerId);
+        });
+
+        const winningSubmission = sortedSubmissions[0];
+        await ctx.db.patch(game._id, {
+          winnerId: winningSubmission.playerId,
+          winningWord: winningSubmission.word,
+          winningScore: winningSubmission.score,
+          winningScoreBreakdown: winningSubmission.scoreBreakdown,
+          status: "completed",
+          updatedAt: now,
+        });
+      }
+    }
+
+    // During showdown, no turn progression - just return success
     return {
       ok: true,
       word: normalizedWord,
       score: score.total,
       scoreBreakdown: score,
       submissionTime: now,
+    };
+  },
+});
+
+export const forfeitShowdown = mutation({
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      throw new ConvexError({
+        code: "GAME_NOT_FOUND",
+        message: "Game does not exist.",
+      });
+    }
+
+    if (game.status !== "active" || game.stage !== "showdown") {
+      throw new ConvexError({
+        code: "INVALID_GAME_STAGE",
+        message: "Forfeit is only allowed during active showdown.",
+      });
+    }
+
+    const normalizedPlayerId = args.playerId.trim();
+    if (!normalizedPlayerId) {
+      throw new ConvexError({
+        code: "INVALID_PLAYER_ID",
+        message: "Player ID is required.",
+      });
+    }
+
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    const playerHand = hands.find((hand) => hand.playerId === normalizedPlayerId);
+    if (!playerHand) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "Player not found in this game.",
+      });
+    }
+
+    const now = Date.now();
+    if (!playerHand.hasFolded) {
+      await ctx.db.patch(playerHand._id, {
+        hasFolded: true,
+        hasActed: true,
+        updatedAt: now,
+      });
+    }
+
+    // Recompute state after forfeit and resolve showdown if possible.
+    const latestHands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    const eligiblePlayerIds = latestHands
+      .filter((hand) => !hand.hasFolded)
+      .map((hand) => hand.playerId);
+
+    const allSubmissions = await ctx.db
+      .query("wordSubmissions")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    const submissionsByPlayer = new Map<string, typeof allSubmissions[0]>();
+    for (const submission of allSubmissions) {
+      if (!eligiblePlayerIds.includes(submission.playerId)) continue;
+      const existing = submissionsByPlayer.get(submission.playerId);
+      if (!existing || submission.createdAt > existing.createdAt) {
+        submissionsByPlayer.set(submission.playerId, submission);
+      }
+    }
+
+    if (eligiblePlayerIds.length === 0) {
+      await ctx.db.patch(game._id, {
+        status: "completed",
+        updatedAt: now,
+      });
+      return { ok: true, forfeited: true, resolved: true, hasWinner: false };
+    }
+
+    if (eligiblePlayerIds.length === 1) {
+      const winnerId = eligiblePlayerIds[0];
+      const winnerSubmission = submissionsByPlayer.get(winnerId);
+      await ctx.db.patch(game._id, {
+        winnerId,
+        winningWord: winnerSubmission?.word,
+        winningScore: winnerSubmission?.score,
+        winningScoreBreakdown: winnerSubmission?.scoreBreakdown,
+        status: "completed",
+        updatedAt: now,
+      });
+      return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId };
+    }
+
+    const allEligibleSubmitted = eligiblePlayerIds.every((playerId) =>
+      submissionsByPlayer.has(playerId),
+    );
+
+    if (!allEligibleSubmitted) {
+      return { ok: true, forfeited: true, resolved: false, hasWinner: false };
+    }
+
+    const sortedSubmissions = [...submissionsByPlayer.values()].sort((a, b) => {
+      if (a.score !== b.score) {
+        return b.score - a.score;
+      }
+      if (a.scoreBreakdown.lengthPoints !== b.scoreBreakdown.lengthPoints) {
+        return b.scoreBreakdown.lengthPoints - a.scoreBreakdown.lengthPoints;
+      }
+      if (a.createdAt !== b.createdAt) {
+        return a.createdAt - b.createdAt;
+      }
+      return a.playerId.localeCompare(b.playerId);
+    });
+
+    const winningSubmission = sortedSubmissions[0];
+    await ctx.db.patch(game._id, {
+      winnerId: winningSubmission.playerId,
+      winningWord: winningSubmission.word,
+      winningScore: winningSubmission.score,
+      winningScoreBreakdown: winningSubmission.scoreBreakdown,
+      status: "completed",
+      updatedAt: now,
+    });
+
+    return {
+      ok: true,
+      forfeited: true,
+      resolved: true,
+      hasWinner: true,
+      winnerId: winningSubmission.playerId,
     };
   },
 });
@@ -1239,6 +1209,8 @@ export const submitWord = action({
     score: number;
     scoreBreakdown: any;
     submissionTime: number;
+    forfeited?: boolean;
+    message?: string;
   }> => {
     const { gameId, playerId, word, tiles } = args;
     const normalizedPlayerId = playerId.trim();
@@ -1264,10 +1236,24 @@ export const submitWord = action({
       { word: normalizedWord },
     );
     if (!validationData.valid) {
-      throw new ConvexError({
-        code: "INVALID_WORD",
-        message: `"${normalizedWord}" is not a valid dictionary word.`,
+      await ctx.runMutation(api.games.forfeitShowdown, {
+        gameId,
+        playerId: normalizedPlayerId,
       });
+      return {
+        ok: false,
+        word: normalizedWord,
+        score: 0,
+        scoreBreakdown: {
+          lengthPoints: 0,
+          speedBonus: 0,
+          validWordBonus: 0,
+          total: 0,
+        },
+        submissionTime: Date.now(),
+        forfeited: true,
+        message: `"${normalizedWord}" is not a valid dictionary word. You forfeited this showdown.`,
+      };
     }
 
     // Call helper mutation to handle database operations
@@ -1279,3 +1265,391 @@ export const submitWord = action({
     });
   },
 });
+
+// ===== Showdown and Winner Resolution =====
+
+export const resolveShowdown = mutation({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, args) => {
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      throw new ConvexError({
+        code: "GAME_NOT_FOUND",
+        message: "Game does not exist.",
+      });
+    }
+
+    if (game.stage !== "showdown") {
+      throw new ConvexError({
+        code: "INVALID_GAME_STAGE",
+        message: "Game must be in showdown stage to resolve winner.",
+      });
+    }
+
+    if (game.winnerId) {
+      throw new ConvexError({
+        code: "WINNER_ALREADY_DETERMINED",
+        message: "Winner has already been determined for this game.",
+      });
+    }
+
+    // Get all player hands to determine who's eligible (not folded)
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    const eligiblePlayerIds = hands
+      .filter(h => !h.hasFolded)
+      .map(h => h.playerId);
+
+    if (eligiblePlayerIds.length === 0) {
+      // No eligible players - no winner case
+      await ctx.db.patch(game._id, {
+        status: "completed",
+        updatedAt: Date.now(),
+      });
+      return {
+        ok: true,
+        hasWinner: false,
+        message: "No eligible players for showdown.",
+      };
+    }
+
+    // Get final submissions for eligible players (last submission per player)
+    const allSubmissions = await ctx.db
+      .query("wordSubmissions")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    // Group submissions by player and take the latest one
+    const submissionsByPlayer = new Map<string, typeof allSubmissions[0]>();
+    for (const submission of allSubmissions) {
+      if (!eligiblePlayerIds.includes(submission.playerId)) continue;
+
+      const existing = submissionsByPlayer.get(submission.playerId);
+      if (!existing || submission.createdAt > existing.createdAt) {
+        submissionsByPlayer.set(submission.playerId, submission);
+      }
+    }
+
+    const eligibleSubmissions = Array.from(submissionsByPlayer.values());
+
+    if (eligibleSubmissions.length === 0) {
+      // No submissions - no winner case
+      await ctx.db.patch(game._id, {
+        status: "completed",
+        updatedAt: Date.now(),
+      });
+      return {
+        ok: true,
+        hasWinner: false,
+        message: "No valid submissions for showdown.",
+      };
+    }
+
+    // Sort submissions to find winner
+    // Tie-break rules:
+    // 1. Highest total score
+    // 2. Higher word length points
+    // 3. Faster submission time (earlier createdAt)
+    // 4. Deterministic fallback (alphabetical by playerId)
+    const sortedSubmissions = [...eligibleSubmissions].sort((a, b) => {
+      // 1. Highest total score wins
+      if (a.score !== b.score) {
+        return b.score - a.score;
+      }
+
+      // 2. Higher word length points
+      if (a.scoreBreakdown.lengthPoints !== b.scoreBreakdown.lengthPoints) {
+        return b.scoreBreakdown.lengthPoints - a.scoreBreakdown.lengthPoints;
+      }
+
+      // 3. Faster submission time (earlier timestamp wins)
+      if (a.createdAt !== b.createdAt) {
+        return a.createdAt - b.createdAt;
+      }
+
+      // 4. Deterministic fallback
+      return a.playerId.localeCompare(b.playerId);
+    });
+
+    const winningSubmission = sortedSubmissions[0];
+
+    // Persist winner to game
+    const now = Date.now();
+    await ctx.db.patch(game._id, {
+      winnerId: winningSubmission.playerId,
+      winningWord: winningSubmission.word,
+      winningScore: winningSubmission.score,
+      winningScoreBreakdown: winningSubmission.scoreBreakdown,
+      status: "completed",
+      updatedAt: now,
+    });
+
+    return {
+      ok: true,
+      hasWinner: true,
+      winnerId: winningSubmission.playerId,
+      winningWord: winningSubmission.word,
+      winningScore: winningSubmission.score,
+      winningScoreBreakdown: winningSubmission.scoreBreakdown,
+      allSubmissions: sortedSubmissions.map(s => ({
+        playerId: s.playerId,
+        word: s.word,
+        score: s.score,
+        scoreBreakdown: s.scoreBreakdown,
+      })),
+    };
+  },
+});
+
+export const getShowdownResults = query({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, args) => {
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      return null;
+    }
+
+    if (game.stage !== "showdown" || game.status !== "completed") {
+      return null;
+    }
+
+    // Get all submissions
+    const allSubmissions = await ctx.db
+      .query("wordSubmissions")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    // Get player hands to know who folded
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    const eligiblePlayerIds = hands
+      .filter(h => !h.hasFolded)
+      .map(h => h.playerId);
+
+    // Group submissions by player and take the latest one
+    const submissionsByPlayer = new Map<string, typeof allSubmissions[0]>();
+    for (const submission of allSubmissions) {
+      if (!eligiblePlayerIds.includes(submission.playerId)) continue;
+
+      const existing = submissionsByPlayer.get(submission.playerId);
+      if (!existing || submission.createdAt > existing.createdAt) {
+        submissionsByPlayer.set(submission.playerId, submission);
+      }
+    }
+
+    const eligibleSubmissions = Array.from(submissionsByPlayer.values());
+
+    return {
+      hasWinner: !!game.winnerId,
+      winnerId: game.winnerId,
+      winningWord: game.winningWord,
+      winningScore: game.winningScore,
+      winningScoreBreakdown: game.winningScoreBreakdown,
+      allSubmissions: eligibleSubmissions
+        .sort((a, b) => b.score - a.score)
+        .map(s => ({
+          playerId: s.playerId,
+          word: s.word,
+          score: s.score,
+          scoreBreakdown: s.scoreBreakdown,
+        })),
+    };
+  },
+});
+
+// ===== Turn and Stage Advancement Helpers =====
+
+type PlayerHand = {
+  _id: Id<"playerHands">;
+  playerId: string;
+  hasFolded: boolean;
+  hasActed: boolean;
+  betThisRound: number;
+  chips: number;
+  totalBet: number;
+};
+
+/**
+ * Advances turn to the next non-folded player
+ * Returns the new player index
+ */
+async function advanceTurn(
+  ctx: MutationCtx,
+  game: { _id: Id<"games">; currentPlayerIndex: number },
+  orderedHands: PlayerHand[],
+): Promise<number> {
+  let nextPlayerIndex = game.currentPlayerIndex;
+
+  for (let step = 1; step <= orderedHands.length; step++) {
+    const candidateIndex = (game.currentPlayerIndex + step) % orderedHands.length;
+    if (!orderedHands[candidateIndex]?.hasFolded) {
+      nextPlayerIndex = candidateIndex;
+      break;
+    }
+  }
+
+  await ctx.db.patch(game._id, {
+    currentPlayerIndex: nextPlayerIndex,
+    updatedAt: Date.now(),
+  });
+
+  return nextPlayerIndex;
+}
+
+/**
+ * Checks if all active (non-folded) players have acted this stage
+ */
+function allActivePlayersHaveActed(hands: PlayerHand[]): boolean {
+  const activePlayers = hands.filter(h => !h.hasFolded);
+  return activePlayers.length > 0 && activePlayers.every(h => h.hasActed);
+}
+
+/**
+ * Checks if only one player remains active (all others folded)
+ */
+function onlyOnePlayerRemains(hands: PlayerHand[]): boolean {
+  const activePlayers = hands.filter(h => !h.hasFolded);
+  return activePlayers.length === 1;
+}
+
+/**
+ * Advances to the next stage and reveals community tiles
+ * Resets hasActed flags for all active players
+ * Returns true if stage was advanced, false if game should end
+ */
+async function advanceStage(
+  ctx: MutationCtx,
+  game: {
+    _id: Id<"games">;
+    stage: GameStage;
+    communityTiles: Array<{ letter: string; baseValue: number; revealed: boolean; multiplier?: "2L" | "3L" }>;
+    deck: Array<{ letter: string; baseValue: number }>;
+    currentBet: number;
+    raisesThisRound?: number;
+  },
+  orderedHands: PlayerHand[],
+): Promise<boolean> {
+  const nextStage = getNextStage(game.stage);
+
+  if (!nextStage) {
+    // No next stage - game should end
+    return false;
+  }
+
+  const now = Date.now();
+
+  // For final stage, skip betting - mark all players as having acted
+  const skipBetting = nextStage === "final";
+
+  // Reset hasActed for all active players (or mark as acted for final stage)
+  for (const hand of orderedHands) {
+    if (!hand.hasFolded) {
+      await ctx.db.patch(hand._id, {
+        hasActed: skipBetting ? true : false,
+        betThisRound: 0,
+        updatedAt: now,
+      });
+    }
+  }
+
+  // Reveal community tiles for new stage
+  const revealCount = getNewRevealCountForStage(nextStage);
+  const updatedCommunityTiles = [...game.communityTiles];
+  let revealedSoFar = 0;
+
+  for (let i = 0; i < updatedCommunityTiles.length && revealedSoFar < revealCount; i++) {
+    if (!updatedCommunityTiles[i].revealed) {
+      updatedCommunityTiles[i] = { ...updatedCommunityTiles[i], revealed: true };
+      revealedSoFar++;
+    }
+  }
+
+  // Final has no betting round; reveal tile and move straight to showdown.
+  const targetStage = nextStage === "final" ? "showdown" : nextStage;
+
+  // Update game to new stage
+  await ctx.db.patch(game._id, {
+    stage: targetStage,
+    communityTiles: updatedCommunityTiles,
+    currentBet: 0,
+    currentPlayerIndex: 0, // Reset to first player
+    raisesThisRound: 0, // Reset raise counter for new betting round
+    updatedAt: now,
+  });
+
+  return true;
+}
+
+/**
+ * Handles post-action progression: advances turn and potentially stage
+ * Call this after any player action (submit word, fold, check, call, raise)
+ */
+async function handlePostActionProgression(
+  ctx: MutationCtx,
+  game: {
+    _id: Id<"games">;
+    stage: GameStage;
+    currentPlayerIndex: number;
+    communityTiles: Array<{ letter: string; baseValue: number; revealed: boolean; multiplier?: "2L" | "3L" }>;
+    deck: Array<{ letter: string; baseValue: number }>;
+    currentBet: number;
+    raisesThisRound?: number;
+    status: string;
+  },
+  orderedHands: PlayerHand[],
+): Promise<void> {
+  const now = Date.now();
+
+  // Check if only one player remains (early end)
+  if (onlyOnePlayerRemains(orderedHands)) {
+    const winner = orderedHands.find(h => !h.hasFolded);
+
+    if (winner) {
+      // Award the pot to the winner by default (no word comparison needed)
+      await ctx.db.patch(game._id, {
+        stage: "showdown",
+        status: "completed",
+        winnerId: winner.playerId,
+        winningWord: undefined, // No word needed - won by default
+        winningScore: undefined,
+        winningScoreBreakdown: undefined,
+        updatedAt: now,
+      });
+    } else {
+      // Shouldn't happen, but handle gracefully
+      await ctx.db.patch(game._id, {
+        stage: "showdown",
+        status: "completed",
+        updatedAt: now,
+      });
+    }
+    return;
+  }
+
+  // Check if all active players have acted
+  if (allActivePlayersHaveActed(orderedHands)) {
+    // Advance to next stage
+    const advanced = await advanceStage(ctx, game, orderedHands);
+
+    if (!advanced) {
+      // No next stage, game is complete
+      await ctx.db.patch(game._id, {
+        status: "completed",
+        updatedAt: now,
+      });
+    }
+  } else {
+    // Not everyone has acted, just advance turn
+    await advanceTurn(ctx, game, orderedHands);
+  }
+}

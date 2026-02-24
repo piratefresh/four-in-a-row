@@ -31,6 +31,11 @@ export type GameDeckTile = {
 
 export const INITIAL_HAND_SIZE = 2;
 
+// Betting constants
+export const ANTE_AMOUNT = 20;
+export const RAISE_LADDER = [20, 40, 60, 80, 100, 120, 140, 160, 200];
+export const MAX_RAISES_PER_ROUND = 3;
+
 export const gameStageValidator = v.union(
   v.literal("preflop"),
   v.literal("flop"),
@@ -71,6 +76,7 @@ export function createInitialGameDocument(
     pot: 0,
     currentBet: 0,
     currentPlayerIndex: 0,
+    raisesThisRound: 0,
     status: "waiting" as const,
     createdAt: now,
     updatedAt: now,
@@ -145,5 +151,41 @@ export function getNextStage(stage: GameStage): GameStage | null {
       return "showdown";
     case "showdown":
       return null;
+  }
+}
+
+// Canonical reveal counts per stage (cumulative total)
+export function getRevealCountForStage(stage: GameStage): number {
+  switch (stage) {
+    case "preflop":
+      return 0;
+    case "flop":
+      return 2;
+    case "turn":
+      return 3;
+    case "river":
+      return 4;
+    case "final":
+      return 5;
+    case "showdown":
+      return 5;
+  }
+}
+
+// How many new tiles to reveal when transitioning TO this stage
+export function getNewRevealCountForStage(stage: GameStage): number {
+  switch (stage) {
+    case "preflop":
+      return 0;
+    case "flop":
+      return 2; // 0 -> 2
+    case "turn":
+      return 1; // 2 -> 3
+    case "river":
+      return 1; // 3 -> 4
+    case "final":
+      return 1; // 4 -> 5
+    case "showdown":
+      return 0;
   }
 }

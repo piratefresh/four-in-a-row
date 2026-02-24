@@ -9,13 +9,14 @@ export const GAME_RULES = {
 
   gameplay: {
     initialHand: 'Each player receives letter tiles at the start',
-    communityTiles: 'Shared tiles are revealed in stages (flop, turn, river) similar to poker',
-    stages: ['preflop', 'flop', 'turn', 'river', 'showdown'],
+    communityTiles: 'Shared tiles are revealed in stages (flop, turn, river, final) similar to poker',
+    stages: ['preflop', 'flop', 'turn', 'river', 'final', 'showdown'],
     revealSchedule: {
-      preflop: '2 community tiles revealed',
-      flop: '1 additional tile',
+      preflop: '0 community tiles revealed',
+      flop: '2 community tiles revealed',
       turn: '1 additional tile',
       river: '1 additional tile',
+      final: '1 additional tile (5 total)',
       showdown: 'Final scoring'
     }
   },
@@ -47,7 +48,7 @@ export function getGameRulesPrompt(): string {
   return `Game Rules Summary:
 - Multiplayer word game combining poker-style betting with Scrabble-style word building
 - Players have private letter tiles in their hand
-- Community tiles are revealed in stages (preflop, flop, turn, river, showdown)
+- Community tiles are revealed in stages (preflop, flop, turn, river, final, showdown)
 - Players build words using tiles from their hand AND community tiles
 - Each tile can only be used once per word
 - Words must be valid English dictionary words

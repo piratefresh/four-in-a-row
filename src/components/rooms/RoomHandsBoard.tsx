@@ -27,6 +27,8 @@ import { ScrabbleTile } from './ScrabbleTile'
 type Tile = {
   letter: string
   baseValue: number
+  revealed?: boolean
+  multiplier?: '2L' | '3L'
 }
 
 type PlayerHand = {
@@ -38,6 +40,7 @@ type PlayerHand = {
 
 type RoomHandsBoardProps = {
   gameId: Id<'games'>
+  gameStage: 'preflop' | 'flop' | 'turn' | 'river' | 'final' | 'showdown'
   communityTiles: Tile[]
   hands: PlayerHand[]
   getPlayerName: (playerId: string, handIndex: number) => string
@@ -122,6 +125,7 @@ function SortableBuilderTile({ tile, onToggleDisabled }: SortableBuilderTileProp
 
 export function RoomHandsBoard({
   gameId,
+  gameStage,
   communityTiles,
   hands,
   getPlayerName,
@@ -174,13 +178,15 @@ export function RoomHandsBoard({
         source: 'hand' as const,
         disabled: true,
       })),
-      ...communityTiles.map((tile, index) => ({
-        id: `community-${index}-${tile.letter}-${tile.baseValue}`,
-        letter: tile.letter,
-        baseValue: tile.baseValue,
-        source: 'community' as const,
-        disabled: true,
-      })),
+      ...communityTiles
+        .filter((tile) => tile.revealed) // Only include revealed community tiles
+        .map((tile, index) => ({
+          id: `community-${index}-${tile.letter}-${tile.baseValue}`,
+          letter: tile.letter,
+          baseValue: tile.baseValue,
+          source: 'community' as const,
+          disabled: true,
+        })),
     ]
 
     setBuilderTiles((previous) => {
@@ -259,8 +265,12 @@ export function RoomHandsBoard({
         tiles,
       })
 
-      console.log('Word submitted successfully:', result)
-      alert(`Valid word: ${result.word}\nScore: ${result.score}`)
+      if (result?.forfeited) {
+        alert(result.message ?? 'Invalid word. You forfeited this showdown.')
+      } else {
+        console.log('Word submitted successfully:', result)
+        alert(`Valid word: ${result.word}\nScore: ${result.score}`)
+      }
 
       // Clear the word after successful submission
       setBuilderTiles([])
@@ -285,14 +295,15 @@ export function RoomHandsBoard({
         <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-4">
           {Array.from({ length: 5 }).map((_, index) => {
             const tile = communityTiles[index]
+            const isRevealed = tile?.revealed ?? false
             return (
               <ScrabbleTile
                 key={`community-${index}`}
-                letter={tile?.letter ?? ''}
-                baseValue={tile?.baseValue}
+                letter={isRevealed ? (tile?.letter ?? '') : ''}
+                baseValue={isRevealed ? tile?.baseValue : undefined}
                 showValue={false}
                 size="md"
-                variant={tile ? 'community' : 'hidden'}
+                variant={isRevealed ? 'community' : 'hidden'}
               />
             )
           })}
@@ -335,36 +346,44 @@ export function RoomHandsBoard({
             <div className="mb-2 text-center text-sm text-slate-900">
               {getPlayerName(bottomHand.playerId, bottomHandIndex)}
             </div>
-            <div className="mb-2 text-center text-xs uppercase tracking-[0.16em] text-slate-600">
-              Drag cards to build a word. Click a letter to enable it.
-            </div>
-            <SortableContext
-              items={builderTiles.map((tile) => tile.id)}
-              strategy={horizontalListSortingStrategy}
-            >
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                {builderTiles.map((tile) => (
-                  <SortableBuilderTile key={tile.id} tile={tile} onToggleDisabled={handleToggleDisabled} />
-                ))}
+            <>
+              <div className="mb-2 text-center text-xs uppercase tracking-[0.16em] text-slate-600">
+                Drag cards to build a word. Click a letter to enable it.
               </div>
-            </SortableContext>
-            <div className="mt-3 flex flex-col items-center gap-2">
-              <div className="text-center text-lg font-semibold tracking-[0.2em] text-slate-800">
-                {wordPreview || ' '}
+              <SortableContext
+                items={builderTiles.map((tile) => tile.id)}
+                strategy={horizontalListSortingStrategy}
+              >
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  {builderTiles.map((tile) => (
+                    <SortableBuilderTile key={tile.id} tile={tile} onToggleDisabled={handleToggleDisabled} />
+                  ))}
+                </div>
+              </SortableContext>
+              <div className="mt-3 flex flex-col items-center gap-2">
+                <div className="text-center text-lg font-semibold tracking-[0.2em] text-slate-800">
+                  {wordPreview || ' '}
+                </div>
+                {gameStage === 'showdown' ? (
+                  wordPreview && wordPreview.length >= 2 && (
+                    <button
+                      onClick={handleSubmitWord}
+                      disabled={isValidating}
+                      className="rounded-lg bg-green-600 px-6 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
+                    >
+                      {isValidating ? 'Validating...' : 'Submit Word'}
+                    </button>
+                  )
+                ) : (
+                  <div className="text-center text-xs italic text-slate-500">
+                    Practice mode: only revealed community tiles are usable until showdown.
+                  </div>
+                )}
+                {validationError && (
+                  <div className="text-sm font-medium text-red-600">{validationError}</div>
+                )}
               </div>
-              {wordPreview && wordPreview.length >= 2 && (
-                <button
-                  onClick={handleSubmitWord}
-                  disabled={isValidating}
-                  className="rounded-lg bg-green-600 px-6 py-2 text-sm font-semibold text-white shadow-md transition-all hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
-                >
-                  {isValidating ? 'Validating...' : 'Submit Word'}
-                </button>
-              )}
-              {validationError && (
-                <div className="text-sm font-medium text-red-600">{validationError}</div>
-              )}
-            </div>
+            </>
           </div>
         )}
 

@@ -48,7 +48,18 @@ export const appTables = {
     pot: v.number(),
     currentBet: v.number(),
     currentPlayerIndex: v.number(),
+    raisesThisRound: v.optional(v.number()),
     status: gameStatusValidator,
+    winnerId: v.optional(v.string()),
+    winningWord: v.optional(v.string()),
+    winningScore: v.optional(v.number()),
+    winningScoreBreakdown: v.optional(
+      v.object({
+        lengthPoints: v.number(),
+        speedBonus: v.number(),
+        validWordBonus: v.number(),
+      })
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -10,6 +10,9 @@ export const Route = createFileRoute("/rooms/$code")({
 });
 
 const DEALER_PLAYER_ID = "ai_dealer";
+const ANTE_AMOUNT = 20;
+const RAISE_LADDER = [20, 40, 60, 80, 100, 120, 140, 160, 200];
+const MAX_RAISES_PER_ROUND = 3;
 
 function RoomDetailsPage() {
   const { code } = Route.useParams();
@@ -24,10 +27,13 @@ function RoomDetailsPage() {
     api.games.getPlayerHands,
     game ? { gameId: game._id } : "skip",
   );
+  const showdownResults = useQuery(
+    api.games.getShowdownResults,
+    game ? { gameId: game._id } : "skip",
+  );
   const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const startGame = useMutation(api.games.startGame);
-  const advanceStage = useMutation(api.games.advanceStage);
   const check = useMutation((api as any).games.check);
   const call = useMutation((api as any).games.call);
   const raise = useMutation((api as any).games.raise);
@@ -58,9 +64,14 @@ function RoomDetailsPage() {
   const [gameMessage, setGameMessage] = useState<string | null>(null);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
-  const [isAdvancingStage, setIsAdvancingStage] = useState(false);
   const [isBetting, setIsBetting] = useState(false);
-  const [raiseAmount, setRaiseAmount] = useState("");
+
+  const isTransientActionMessage = (message: string | null) =>
+    !!message &&
+    (message === "Checked." ||
+      message === "Folded." ||
+      message.startsWith("Matched ") ||
+      message.startsWith("Raised to "));
 
   useEffect(() => {
     myPlayerRef.current = myPlayer;
@@ -163,7 +174,8 @@ function RoomDetailsPage() {
       game.status !== "active"
     )
       return false;
-    return game.currentBet > 0 && myHand.betThisRound < game.currentBet;
+    const amountNeeded = game.currentBet - myHand.betThisRound;
+    return game.currentBet > 0 && amountNeeded > 0 && myHand.chips >= amountNeeded;
   }, [game, myHand, currentTurnPlayerId, playerId]);
 
   const callAmount = useMemo(() => {
@@ -173,6 +185,18 @@ function RoomDetailsPage() {
 
   const isMyTurn =
     currentTurnPlayerId === playerId && game?.status === "active";
+  const raisesThisRound = game?.raisesThisRound ?? 0;
+  const nextRaiseLevel = useMemo(
+    () => RAISE_LADDER.find((amount) => amount > (game?.currentBet ?? 0)),
+    [game?.currentBet],
+  );
+  const effectiveNextRaiseLevel =
+    raisesThisRound >= MAX_RAISES_PER_ROUND ? undefined : nextRaiseLevel;
+  const canRaise =
+    Boolean(game && myHand && effectiveNextRaiseLevel !== undefined) &&
+    isMyTurn &&
+    raisesThisRound < MAX_RAISES_PER_ROUND &&
+    myHand!.chips >= (effectiveNextRaiseLevel! - myHand!.betThisRound);
 
 
   useEffect(() => {
@@ -192,6 +216,11 @@ function RoomDetailsPage() {
       void navigate({ to: "/login" });
     }
   }, [session, isAuthPending, navigate]);
+
+  useEffect(() => {
+    if (!isTransientActionMessage(gameMessage)) return;
+    setGameMessage(null);
+  }, [game?.currentBet, game?.currentPlayerIndex, game?.stage, gameMessage]);
 
   const handleLeaveRoom = async () => {
     if (!myPlayerRef.current) {
@@ -256,22 +285,6 @@ function RoomDetailsPage() {
     }
   };
 
-  const handleAdvanceStage = async () => {
-    if (!game?._id) return;
-    setIsAdvancingStage(true);
-    setGameMessage(null);
-    try {
-      await advanceStage({ gameId: game._id });
-      setGameMessage("Stage advanced.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to advance stage.";
-      setGameMessage(message);
-    } finally {
-      setIsAdvancingStage(false);
-    }
-  };
-
   const handleCheck = async () => {
     if (!game?._id || !playerId) return;
     setIsBetting(true);
@@ -293,8 +306,8 @@ function RoomDetailsPage() {
     setIsBetting(true);
     setGameMessage(null);
     try {
-      await call({ gameId: game._id, playerId });
-      setGameMessage(`Called ${callAmount} chips.`);
+      const result = await call({ gameId: game._id, playerId });
+      setGameMessage(`Matched ${result.amountCalled} chips.`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to call.";
@@ -305,20 +318,16 @@ function RoomDetailsPage() {
   };
 
   const handleRaise = async () => {
-    if (!game?._id || !playerId) return;
-    const amount = parseInt(raiseAmount, 10);
-    if (!Number.isFinite(amount) || amount <= (game.currentBet ?? 0)) {
-      setGameMessage(
-        `Raise amount must be greater than current bet of ${game.currentBet ?? 0}.`,
-      );
+    if (!game?._id || !playerId || effectiveNextRaiseLevel === undefined) return;
+    if (raisesThisRound >= MAX_RAISES_PER_ROUND) {
+      setGameMessage(`Raise limit reached (${MAX_RAISES_PER_ROUND}/${MAX_RAISES_PER_ROUND}).`);
       return;
     }
     setIsBetting(true);
     setGameMessage(null);
     try {
-      await raise({ gameId: game._id, playerId, raiseToAmount: amount });
-      setGameMessage(`Raised to ${amount} chips.`);
-      setRaiseAmount("");
+      await raise({ gameId: game._id, playerId, raiseToAmount: effectiveNextRaiseLevel });
+      setGameMessage(`Raised to ${effectiveNextRaiseLevel} chips.`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to raise.";
@@ -440,9 +449,19 @@ function RoomDetailsPage() {
                       <span className="text-cyan-300">{game.pot} chips</span>
                     </p>
                     <p className="text-slate-300">
+                      Ante:{" "}
+                      <span className="text-cyan-300">{ANTE_AMOUNT} chips/player</span>
+                    </p>
+                    <p className="text-slate-300">
                       Current Bet:{" "}
                       <span className="text-cyan-300">
                         {game.currentBet ?? 0} chips
+                      </span>
+                    </p>
+                    <p className="text-slate-300">
+                      Raises This Round:{" "}
+                      <span className="text-cyan-300">
+                        {raisesThisRound}/{MAX_RAISES_PER_ROUND}
                       </span>
                     </p>
                     {myHand && (
@@ -483,6 +502,13 @@ function RoomDetailsPage() {
                       </p>
                     </div>
                   )}
+                  {game.status === "active" && game.stage === "showdown" && (
+                    <div className="mb-3 rounded-md border border-cyan-500 bg-cyan-500/10 p-3">
+                      <p className="text-sm font-semibold text-cyan-300">
+                        Final tile revealed. Showdown is active.
+                      </p>
+                    </div>
+                  )}
                   <div className="mb-3 rounded-md border border-slate-700 bg-slate-950/40 p-3">
                     <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">
                       Dealt Hands
@@ -499,6 +525,7 @@ function RoomDetailsPage() {
                     {playerHands && nonDealerHands.length > 0 && (
                       <RoomHandsBoard
                         gameId={game._id}
+                        gameStage={game.stage}
                         communityTiles={game.communityTiles}
                         hands={nonDealerHands}
                         bottomPlayerId={playerId ?? nonDealerHands[0]?.playerId}
@@ -509,6 +536,88 @@ function RoomDetailsPage() {
                       />
                     )}
                   </div>
+
+                  {/* Showdown Results Section */}
+                  {showdownResults && (
+                    <div className="mb-3 rounded-md border border-purple-700 bg-purple-950/40 p-4">
+                      <h3 className="mb-3 text-lg font-bold text-purple-300">
+                        🏆 Showdown Results
+                      </h3>
+
+                      {showdownResults.hasWinner ? (
+                        <>
+                          <div className="mb-4 rounded-md border border-amber-500 bg-amber-500/10 p-3">
+                            <p className="mb-1 text-sm font-semibold text-amber-300">
+                              Winner: {showdownResults.winnerId === playerId ? "You!" : memberById.get(showdownResults.winnerId ?? "")?.name ?? showdownResults.winnerId}
+                            </p>
+                            {showdownResults.winningWord ? (
+                              <>
+                                <p className="mb-1 text-xl font-bold text-white">
+                                  {showdownResults.winningWord.toUpperCase()}
+                                </p>
+                                <p className="mb-2 text-2xl font-bold text-amber-400">
+                                  {showdownResults.winningScore} points
+                                </p>
+                                {showdownResults.winningScoreBreakdown && (
+                                  <div className="text-xs text-slate-300">
+                                    <p>Length Points: {showdownResults.winningScoreBreakdown.lengthPoints}</p>
+                                    <p>Speed Bonus: {showdownResults.winningScoreBreakdown.speedBonus}</p>
+                                    <p>Valid Word Bonus: {showdownResults.winningScoreBreakdown.validWordBonus}</p>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <p className="mt-2 text-sm italic text-slate-300">
+                                Won by default (all other players folded)
+                              </p>
+                            )}
+                          </div>
+
+                          {showdownResults.allSubmissions && showdownResults.allSubmissions.length > 0 && (
+                            <div>
+                              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-300">
+                                All Submissions
+                              </p>
+                              <div className="space-y-2">
+                                {showdownResults.allSubmissions.map((submission) => (
+                                  <div
+                                    key={submission.playerId}
+                                    className={`rounded-md border p-2 text-sm ${
+                                      submission.playerId === showdownResults.winnerId
+                                        ? "border-amber-500 bg-amber-500/5"
+                                        : "border-slate-600 bg-slate-800/50"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <span className="font-semibold text-slate-200">
+                                          {submission.playerId === playerId ? "You" : memberById.get(submission.playerId)?.name ?? submission.playerId}
+                                        </span>
+                                        <span className="mx-2 text-slate-400">•</span>
+                                        <span className="font-bold text-white">
+                                          {submission.word.toUpperCase()}
+                                        </span>
+                                      </div>
+                                      <span className="font-bold text-cyan-300">
+                                        {submission.score} pts
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 text-xs text-slate-400">
+                                      Length: {submission.scoreBreakdown.lengthPoints} | Speed: {submission.scoreBreakdown.speedBonus} | Valid: {submission.scoreBreakdown.validWordBonus}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm text-slate-300">
+                          No winner - no eligible submissions.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
@@ -536,24 +645,23 @@ function RoomDetailsPage() {
                   >
                     {isStartingGame ? "Starting..." : "Start game"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleAdvanceStage()}
-                    disabled={
-                      !game || game.status !== "active" || isAdvancingStage
-                    }
-                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                  >
-                    {isAdvancingStage
-                      ? "Advancing..."
-                      : "Advance stage (Debug)"}
-                  </button>
                 </div>
 
-                {game?.status === "active" && isMyTurn && (
+                {game?.status === "active" &&
+                  game.stage !== "final" &&
+                  game.stage !== "showdown" &&
+                  isMyTurn && (
                   <div className="rounded-lg border border-amber-500 bg-amber-500/5 p-3">
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">
                       Betting Actions
+                    </p>
+                    <p className="mb-2 text-xs text-slate-300">
+                      Next Raise:{" "}
+                      <span className="text-cyan-300">
+                        {effectiveNextRaiseLevel !== undefined
+                          ? `${effectiveNextRaiseLevel} chips`
+                          : "Max level reached"}
+                      </span>
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {canCheck && (
@@ -573,27 +681,21 @@ function RoomDetailsPage() {
                           disabled={isBetting}
                           className="rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-600"
                         >
-                          {isBetting ? "Betting..." : `Call ${callAmount}`}
+                          {isBetting ? "Betting..." : `Match ${callAmount}`}
                         </button>
                       )}
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={raiseAmount}
-                          onChange={(e) => setRaiseAmount(e.target.value)}
-                          placeholder="Raise to..."
-                          min={(game.currentBet ?? 0) + 1}
-                          className="w-24 rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void handleRaise()}
-                          disabled={isBetting || !raiseAmount}
-                          className="rounded-md bg-amber-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                        >
-                          {isBetting ? "Betting..." : "Raise"}
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleRaise()}
+                        disabled={isBetting || !canRaise}
+                        className="rounded-md bg-amber-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                      >
+                        {isBetting
+                          ? "Betting..."
+                          : effectiveNextRaiseLevel !== undefined
+                            ? `Raise to ${effectiveNextRaiseLevel}`
+                            : "Raise Maxed"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => void handleFold()}
