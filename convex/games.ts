@@ -7,9 +7,29 @@ import {
   getNextStage,
   INITIAL_HAND_SIZE,
 } from "./gameState";
+import type { GameStage } from "./gameState";
 import type { Id } from "./_generated/dataModel";
 
 const AI_DEALER_PLAYER_ID = "ai_dealer";
+const REVEAL_COUNT_BY_STAGE: Record<GameStage, number> = {
+  preflop: 2,
+  flop: 1,
+  turn: 1,
+  river: 1,
+  final: 0,
+  showdown: 0,
+};
+
+function sortHandsByTurnOrder<T extends { createdAt: number; playerId: string }>(
+  hands: T[],
+) {
+  return [...hands].sort((a, b) => {
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt - b.createdAt;
+    }
+    return a.playerId.localeCompare(b.playerId);
+  });
+}
 
 export const createGameForRoom = mutation({
   args: {
@@ -193,9 +213,39 @@ export const advanceStage = mutation({
       };
     }
 
-    const nextStatus = nextStage === "showdown" ? "completed" : game.status;
+    const revealCount = REVEAL_COUNT_BY_STAGE[game.stage] ?? 0;
+    const nextCommunityTiles = [...game.communityTiles];
+    const nextDeck = [...game.deck];
+
+    if (revealCount > 0) {
+      if (nextDeck.length < revealCount) {
+        throw new ConvexError({
+          code: "DECK_EXHAUSTED",
+          message: `Not enough tiles in deck to reveal ${revealCount} community tile(s).`,
+        });
+      }
+
+      for (let i = 0; i < revealCount; i++) {
+        const tile = nextDeck.shift();
+        if (!tile) {
+          throw new ConvexError({
+            code: "DECK_EXHAUSTED",
+            message: "Deck was unexpectedly exhausted while revealing tiles.",
+          });
+        }
+        nextCommunityTiles.push({
+          letter: tile.letter,
+          baseValue: tile.baseValue,
+          revealed: true,
+        });
+      }
+    }
+
+    const nextStatus = game.status;
     await ctx.db.patch(game._id, {
       stage: nextStage,
+      communityTiles: nextCommunityTiles,
+      deck: nextDeck,
       status: nextStatus,
       updatedAt: now,
     });
@@ -204,7 +254,142 @@ export const advanceStage = mutation({
       ok: true,
       gameId: game._id,
       stage: nextStage,
+      revealedTiles: revealCount,
+      communityTileCount: nextCommunityTiles.length,
       status: nextStatus,
+    };
+  },
+});
+
+export const skipRound = mutation({
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    pointsToLose: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      throw new ConvexError({
+        code: "GAME_NOT_FOUND",
+        message: "Game does not exist.",
+      });
+    }
+
+    if (game.status !== "active") {
+      throw new ConvexError({
+        code: "INVALID_GAME_STATUS",
+        message: "Only active games can skip a round.",
+      });
+    }
+
+    const playerId = args.playerId.trim();
+    if (!playerId) {
+      throw new ConvexError({
+        code: "INVALID_PLAYER_ID",
+        message: "Player ID is required.",
+      });
+    }
+
+    const pointsToLose = Math.floor(args.pointsToLose ?? 10);
+    if (!Number.isFinite(pointsToLose) || pointsToLose < 0) {
+      throw new ConvexError({
+        code: "INVALID_SKIP_POINTS",
+        message: "Skip points must be a non-negative number.",
+      });
+    }
+
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", game._id))
+      .collect();
+
+    if (hands.length === 0) {
+      throw new ConvexError({
+        code: "HANDS_NOT_FOUND",
+        message: "No hands found for this game.",
+      });
+    }
+
+    const orderedHands = sortHandsByTurnOrder(hands);
+    const currentTurnHand = orderedHands[game.currentPlayerIndex];
+    if (!currentTurnHand) {
+      throw new ConvexError({
+        code: "INVALID_TURN_INDEX",
+        message: "Current turn index is out of range.",
+      });
+    }
+
+    if (currentTurnHand.playerId !== playerId) {
+      throw new ConvexError({
+        code: "NOT_YOUR_TURN",
+        message: "It is not your turn.",
+      });
+    }
+
+    if (currentTurnHand.hasFolded) {
+      throw new ConvexError({
+        code: "PLAYER_ALREADY_FOLDED",
+        message: "You already skipped this round.",
+      });
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(currentTurnHand._id, {
+      hasFolded: true,
+      hasActed: true,
+      bet: currentTurnHand.bet + pointsToLose,
+      updatedAt: now,
+    });
+
+    const updatedHands = orderedHands.map((hand) =>
+      hand._id === currentTurnHand._id
+        ? {
+            ...hand,
+            hasFolded: true,
+            hasActed: true,
+          }
+        : hand,
+    );
+
+    const remainingPlayers = updatedHands.filter((hand) => !hand.hasFolded);
+    if (remainingPlayers.length <= 1) {
+      await ctx.db.patch(game._id, {
+        pot: game.pot + pointsToLose,
+        status: "completed",
+        updatedAt: now,
+      });
+      return {
+        ok: true,
+        gameId: game._id,
+        status: "completed" as const,
+        playerId,
+        pointsLost: pointsToLose,
+      };
+    }
+
+    let nextPlayerIndex = game.currentPlayerIndex;
+    for (let step = 1; step <= updatedHands.length; step++) {
+      const candidateIndex = (game.currentPlayerIndex + step) % updatedHands.length;
+      if (!updatedHands[candidateIndex]?.hasFolded) {
+        nextPlayerIndex = candidateIndex;
+        break;
+      }
+    }
+
+    await ctx.db.patch(game._id, {
+      pot: game.pot + pointsToLose,
+      currentPlayerIndex: nextPlayerIndex,
+      updatedAt: now,
+    });
+
+    return {
+      ok: true,
+      gameId: game._id,
+      status: "active" as const,
+      playerId,
+      pointsLost: pointsToLose,
+      nextPlayerId: updatedHands[nextPlayerIndex]?.playerId ?? null,
     };
   },
 });

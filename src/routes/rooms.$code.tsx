@@ -1,6 +1,7 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery } from 'convex/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { RoomHandsBoard } from '@/components/rooms/RoomHandsBoard'
 import { api } from '../../convex/_generated/api'
 
 export const Route = createFileRoute('/rooms/$code')({
@@ -9,7 +10,10 @@ export const Route = createFileRoute('/rooms/$code')({
 
 const PLAYER_TOKEN_STORAGE_KEY = 'fourinarow.playerToken'
 const PLAYER_ROOM_CODE_STORAGE_KEY = 'fourinarow.roomCode'
+const PLAYER_ID_STORAGE_KEY = 'fourinarow.playerId'
 const HEARTBEAT_INTERVAL_MS = 30_000
+const DEALER_PLAYER_ID = 'ai_dealer'
+const SKIP_ROUND_POINTS = 10
 
 function RoomDetailsPage() {
   const { code } = Route.useParams()
@@ -27,8 +31,10 @@ function RoomDetailsPage() {
   const createGameForRoom = useMutation(api.games.createGameForRoom)
   const startGame = useMutation(api.games.startGame)
   const advanceStage = useMutation(api.games.advanceStage)
+  const skipRound = useMutation((api as any).games.skipRound)
 
   const [playerToken, setPlayerToken] = useState<string | null>(null)
+  const [playerId, setPlayerId] = useState<string | null>(null)
   const [joinedRoomCode, setJoinedRoomCode] = useState<string | null>(null)
   const [isLeavingRoom, setIsLeavingRoom] = useState(false)
   const [leaveMessage, setLeaveMessage] = useState<string | null>(null)
@@ -36,10 +42,44 @@ function RoomDetailsPage() {
   const [isCreatingGame, setIsCreatingGame] = useState(false)
   const [isStartingGame, setIsStartingGame] = useState(false)
   const [isAdvancingStage, setIsAdvancingStage] = useState(false)
+  const [isSkippingRound, setIsSkippingRound] = useState(false)
+  const [isSkipConfirmOpen, setIsSkipConfirmOpen] = useState(false)
+  const memberById = useMemo(() => {
+    return new Map(
+      (roomData?.members ?? []).map((member) => [String(member._id), member]),
+    )
+  }, [roomData?.members])
+  const nonDealerHands = useMemo(
+    () =>
+      [...(playerHands ?? [])]
+        .filter((hand) => hand.playerId !== DEALER_PLAYER_ID)
+        .sort((a, b) => {
+          const seatA = memberById.get(a.playerId)?.seatIndex ?? Number.MAX_SAFE_INTEGER
+          const seatB = memberById.get(b.playerId)?.seatIndex ?? Number.MAX_SAFE_INTEGER
+          return seatA - seatB
+        }),
+    [memberById, playerHands],
+  )
+  const turnOrderedHands = useMemo(
+    () =>
+      [...(playerHands ?? [])].sort((a, b) => {
+        if (a.createdAt !== b.createdAt) {
+          return a.createdAt - b.createdAt
+        }
+        return a.playerId.localeCompare(b.playerId)
+      }),
+    [playerHands],
+  )
+  const currentTurnPlayerId = useMemo(
+    () => (game ? turnOrderedHands[game.currentPlayerIndex]?.playerId ?? null : null),
+    [game, turnOrderedHands],
+  )
+  const canSkipRound = !!game && game.status === 'active' && !!playerId && currentTurnPlayerId === playerId
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     setPlayerToken(window.localStorage.getItem(PLAYER_TOKEN_STORAGE_KEY))
+    setPlayerId(window.localStorage.getItem(PLAYER_ID_STORAGE_KEY))
     setJoinedRoomCode(window.localStorage.getItem(PLAYER_ROOM_CODE_STORAGE_KEY))
   }, [])
 
@@ -51,7 +91,12 @@ function RoomDetailsPage() {
 
     const sendHeartbeat = async () => {
       try {
-        await heartbeat({ playerToken })
+        const result = await heartbeat({ playerToken })
+        const resolvedPlayerId = String(result.playerId)
+        setPlayerId(resolvedPlayerId)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, resolvedPlayerId)
+        }
       } catch {
         // Keep UI stable; leave/join flows will recover token issues.
       }
@@ -86,8 +131,10 @@ function RoomDetailsPage() {
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem(PLAYER_TOKEN_STORAGE_KEY)
         window.localStorage.removeItem(PLAYER_ROOM_CODE_STORAGE_KEY)
+        window.localStorage.removeItem(PLAYER_ID_STORAGE_KEY)
       }
       setPlayerToken(null)
+      setPlayerId(null)
       setJoinedRoomCode(null)
       await navigate({ to: '/' })
     } catch (error) {
@@ -147,9 +194,36 @@ function RoomDetailsPage() {
     }
   }
 
+  const handleOpenSkipConfirm = () => {
+    if (!canSkipRound) return
+    setGameMessage(null)
+    setIsSkipConfirmOpen(true)
+  }
+
+  const handleSkipRound = async () => {
+    if (!game?._id || !playerId || !canSkipRound) return
+    setIsSkippingRound(true)
+    setGameMessage(null)
+    try {
+      await skipRound({
+        gameId: game._id,
+        playerId,
+        pointsToLose: SKIP_ROUND_POINTS,
+      })
+      setIsSkipConfirmOpen(false)
+      setGameMessage(`Round skipped. You lost ${SKIP_ROUND_POINTS} points.`)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to skip round.'
+      setGameMessage(message)
+    } finally {
+      setIsSkippingRound(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
-      <div className="mx-auto max-w-3xl rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+    <div className="h-screen overflow-hidden bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4 md:p-6">
+      <div className="mx-auto h-full w-full max-w-none overflow-hidden rounded-xl border border-slate-700 bg-slate-800/50 p-4 md:p-6">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white">Room {code}</h1>
           <div className="flex items-center gap-2">
@@ -184,40 +258,6 @@ function RoomDetailsPage() {
 
         {roomData && (
           <div className="space-y-6">
-            <div>
-              <p className="mb-4 text-sm text-slate-300">
-                Joined members: {roomData.members.length}/
-                {roomData.room.maxPlayers}
-              </p>
-              {roomData.members.length === 0 && (
-                <p className="text-sm text-slate-400">No members joined yet.</p>
-              )}
-              {roomData.members.length > 0 && (
-                <ul className="space-y-3">
-                  {roomData.members.map((member) => (
-                    <li
-                      key={member._id}
-                      className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-900/50 px-4 py-3"
-                    >
-                      <div>
-                        <p className="font-semibold text-cyan-300">
-                          {member.name}
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          Seat {member.seatIndex + 1}
-                        </p>
-                      </div>
-                      {member.isHost && (
-                        <span className="rounded bg-amber-500/20 px-2 py-1 text-xs font-medium text-amber-300">
-                          Host
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
             <section className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-white">Game (MVP)</h2>
@@ -250,6 +290,12 @@ function RoomDetailsPage() {
                         {game.currentPlayerIndex}
                       </span>
                     </p>
+                    <p className="text-slate-300">
+                      Players:{' '}
+                      <span className="text-cyan-300">
+                        {roomData.members.length}/{roomData.room.maxPlayers}
+                      </span>
+                    </p>
                   </div>
                   <div className="mb-3 rounded-md border border-slate-700 bg-slate-950/40 p-3">
                     <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">
@@ -263,26 +309,15 @@ function RoomDetailsPage() {
                         No hands dealt yet. Start the game to distribute letters.
                       </p>
                     )}
-                    {playerHands && playerHands.length > 0 && (
-                      <ul className="space-y-2">
-                        {playerHands.map((hand) => (
-                          <li
-                            key={hand._id}
-                            className="flex items-center justify-between text-sm"
-                          >
-                            <span className="text-slate-300">
-                              {hand.playerId === 'ai_dealer'
-                                ? 'AI Dealer'
-                                : hand.playerId}
-                            </span>
-                            <span className="text-cyan-300">
-                              {hand.tiles
-                                .map((tile) => `${tile.letter}(${tile.baseValue})`)
-                                .join(' ')}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                    {playerHands && nonDealerHands.length > 0 && (
+                      <RoomHandsBoard
+                        communityTiles={game.communityTiles}
+                        hands={nonDealerHands}
+                        bottomPlayerId={playerId ?? nonDealerHands[0]?.playerId}
+                        getPlayerName={(playerId, handIndex) =>
+                          memberById.get(playerId)?.name ?? `Player ${handIndex + 1}`
+                        }
+                      />
                     )}
                   </div>
                 </>
@@ -317,11 +352,59 @@ function RoomDetailsPage() {
                 >
                   {isAdvancingStage ? 'Advancing...' : 'Advance stage'}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleOpenSkipConfirm}
+                  disabled={!canSkipRound || isSkippingRound}
+                  className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                >
+                  {isSkippingRound
+                    ? 'Skipping...'
+                    : `Skip Round (Lose ${SKIP_ROUND_POINTS} Points)`}
+                </button>
               </div>
+              <p className="mt-3 text-sm text-amber-300">
+                Skipping ends the round and reduces your score.
+              </p>
             </section>
           </div>
         )}
       </div>
+      {isSkipConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="skip-round-title"
+        >
+          <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-4 md:p-6">
+            <h2 id="skip-round-title" className="text-lg font-semibold text-white">
+              Are you sure you want to skip?
+            </h2>
+            <p className="mt-2 text-sm text-slate-300">
+              This will end the round and lose {SKIP_ROUND_POINTS} points.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsSkipConfirmOpen(false)}
+                disabled={isSkippingRound}
+                className="rounded-md bg-slate-700 px-3 py-2 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSkipRound()}
+                disabled={isSkippingRound}
+                className="rounded-md bg-rose-600 px-3 py-2 text-sm text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+              >
+                Yes, Skip Round
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
