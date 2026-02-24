@@ -42,6 +42,7 @@ function RoomDetailsPage() {
   }, [session, roomData])
 
   const playerId = myPlayer?._id ? String(myPlayer._id) : null
+
   const [isLeavingRoom, setIsLeavingRoom] = useState(false)
   const [leaveMessage, setLeaveMessage] = useState<string | null>(null)
   const [gameMessage, setGameMessage] = useState<string | null>(null)
@@ -50,6 +51,24 @@ function RoomDetailsPage() {
   const [isAdvancingStage, setIsAdvancingStage] = useState(false)
   const [isBetting, setIsBetting] = useState(false)
   const [raiseAmount, setRaiseAmount] = useState('')
+
+  const memberById = useMemo(() => {
+    return new Map(
+      (roomData?.members ?? []).map((member) => [String(member._id), member]),
+    )
+  }, [roomData?.members])
+
+  const nonDealerHands = useMemo(
+    () =>
+      [...(playerHands ?? [])]
+        .filter((hand) => hand.playerId !== DEALER_PLAYER_ID)
+        .sort((a, b) => {
+          const seatA = memberById.get(a.playerId)?.seatIndex ?? Number.MAX_SAFE_INTEGER
+          const seatB = memberById.get(b.playerId)?.seatIndex ?? Number.MAX_SAFE_INTEGER
+          return seatA - seatB
+        }),
+    [memberById, playerHands],
+  )
 
   // Calculate turn order and current player
   const turnOrderedHands = useMemo(
@@ -420,26 +439,15 @@ function RoomDetailsPage() {
                         No hands dealt yet. Start the game to distribute letters.
                       </p>
                     )}
-                    {playerHands && playerHands.length > 0 && (
-                      <ul className="space-y-2">
-                        {playerHands.map((hand) => (
-                          <li
-                            key={hand._id}
-                            className="flex items-center justify-between text-sm"
-                          >
-                            <span className="text-slate-300">
-                              {hand.playerId === 'ai_dealer'
-                                ? 'AI Dealer'
-                                : hand.playerId}
-                            </span>
-                            <span className="text-cyan-300">
-                              {hand.tiles
-                                .map((tile) => `${tile.letter}(${tile.baseValue})`)
-                                .join(' ')}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                    {playerHands && nonDealerHands.length > 0 && (
+                      <RoomHandsBoard
+                        communityTiles={game.communityTiles}
+                        hands={nonDealerHands}
+                        bottomPlayerId={playerId ?? nonDealerHands[0]?.playerId}
+                        getPlayerName={(playerId, handIndex) =>
+                          memberById.get(playerId)?.name ?? `Player ${handIndex + 1}`
+                        }
+                      />
                     )}
                   </div>
                 </>
