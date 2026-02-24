@@ -2,19 +2,19 @@ import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery } from 'convex/react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../convex/_generated/api'
+import { authClient } from '@/lib/auth-client'
 
 export const Route = createFileRoute('/rooms/$code')({
   component: RoomDetailsPage,
 })
 
-const PLAYER_TOKEN_STORAGE_KEY = 'fourinarow.playerToken'
-const PLAYER_ROOM_CODE_STORAGE_KEY = 'fourinarow.roomCode'
-const PLAYER_ID_STORAGE_KEY = 'fourinarow.playerId'
 const HEARTBEAT_INTERVAL_MS = 30_000
 
 function RoomDetailsPage() {
   const { code } = Route.useParams()
   const navigate = useNavigate()
+  const { data: session, isPending: isAuthPending } = authClient.useSession()
+
   const roomData = useQuery(api.rooms.getRoomMembers, { code })
   const game = useQuery(api.games.getGameByRoom, {
     roomId: roomData?.room._id ?? '',
@@ -33,9 +33,13 @@ function RoomDetailsPage() {
   const raise = useMutation((api as any).games.raise)
   const fold = useMutation((api as any).games.fold)
 
-  const [playerToken, setPlayerToken] = useState<string | null>(null)
-  const [playerId, setPlayerId] = useState<string | null>(null)
-  const [joinedRoomCode, setJoinedRoomCode] = useState<string | null>(null)
+  // Get the player ID from the room members based on authenticated user
+  const myPlayer = useMemo(() => {
+    if (!session?.user || !roomData?.members) return null
+    return roomData.members.find(m => m.authUserId === session.user.id)
+  }, [session, roomData])
+
+  const playerId = myPlayer?._id ? String(myPlayer._id) : null
   const [isLeavingRoom, setIsLeavingRoom] = useState(false)
   const [leaveMessage, setLeaveMessage] = useState<string | null>(null)
   const [gameMessage, setGameMessage] = useState<string | null>(null)
@@ -88,29 +92,15 @@ function RoomDetailsPage() {
 
   const isMyTurn = currentTurnPlayerId === playerId && game?.status === 'active'
 
+  // Heartbeat for authenticated users
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    setPlayerToken(window.localStorage.getItem(PLAYER_TOKEN_STORAGE_KEY))
-    setPlayerId(window.localStorage.getItem(PLAYER_ID_STORAGE_KEY))
-    setJoinedRoomCode(window.localStorage.getItem(PLAYER_ROOM_CODE_STORAGE_KEY))
-  }, [])
-
-  const canLeaveThisRoom =
-    !!playerToken && !!joinedRoomCode && joinedRoomCode === code.toUpperCase()
-
-  useEffect(() => {
-    if (!playerToken || !canLeaveThisRoom) return
+    if (!myPlayer?.playerToken) return
 
     const sendHeartbeat = async () => {
       try {
-        const result = await heartbeat({ playerToken })
-        const resolvedPlayerId = String(result.playerId)
-        setPlayerId(resolvedPlayerId)
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, resolvedPlayerId)
-        }
+        await heartbeat({ playerToken: myPlayer.playerToken })
       } catch {
-        // Keep UI stable; leave/join flows will recover token issues.
+        // Keep UI stable
       }
     }
 
@@ -122,16 +112,19 @@ function RoomDetailsPage() {
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [canLeaveThisRoom, heartbeat, playerToken])
+  }, [myPlayer?.playerToken, heartbeat])
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (isAuthPending) return
+    if (!session?.user) {
+      void navigate({ to: '/login' })
+    }
+  }, [session, isAuthPending, navigate])
 
   const handleLeaveRoom = async () => {
-    if (!playerToken) {
-      setLeaveMessage('No active room token found.')
-      return
-    }
-
-    if (!canLeaveThisRoom) {
-      setLeaveMessage('You are not currently joined in this room.')
+    if (!myPlayer?.playerToken) {
+      setLeaveMessage('You are not a member of this room.')
       return
     }
 
@@ -139,13 +132,7 @@ function RoomDetailsPage() {
     setLeaveMessage(null)
 
     try {
-      await leaveRoom({ playerToken })
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(PLAYER_TOKEN_STORAGE_KEY)
-        window.localStorage.removeItem(PLAYER_ROOM_CODE_STORAGE_KEY)
-      }
-      setPlayerToken(null)
-      setJoinedRoomCode(null)
+      await leaveRoom({ playerToken: myPlayer.playerToken })
       await navigate({ to: '/' })
     } catch (error) {
       const message =
@@ -272,6 +259,28 @@ function RoomDetailsPage() {
     }
   }
 
+  // Show loading while checking auth
+  if (isAuthPending) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
+        <div className="mx-auto max-w-3xl rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+          <p className="text-sm text-slate-300">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Will redirect to login in useEffect if not authenticated
+  if (!session?.user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
+        <div className="mx-auto max-w-3xl rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+          <p className="text-sm text-slate-300">Redirecting to login...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
       <div className="mx-auto max-w-3xl rounded-xl border border-slate-700 bg-slate-800/50 p-6">
@@ -281,7 +290,7 @@ function RoomDetailsPage() {
             <button
               type="button"
               onClick={() => void handleLeaveRoom()}
-              disabled={!canLeaveThisRoom || isLeavingRoom}
+              disabled={!myPlayer || isLeavingRoom}
               className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-600"
             >
               {isLeavingRoom ? 'Leaving...' : 'Leave room'}
