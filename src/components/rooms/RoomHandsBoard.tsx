@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { validateWord } from '@/lib/word-validation'
+import { useAction } from 'convex/react'
+import { api } from '../../../convex/_generated/api'
+import type { Id } from '../../../convex/_generated/dataModel'
 import {
   DndContext,
   DragOverlay,
@@ -35,6 +37,7 @@ type PlayerHand = {
 }
 
 type RoomHandsBoardProps = {
+  gameId: Id<'games'>
   communityTiles: Tile[]
   hands: PlayerHand[]
   getPlayerName: (playerId: string, handIndex: number) => string
@@ -118,11 +121,13 @@ function SortableBuilderTile({ tile, onToggleDisabled }: SortableBuilderTileProp
 }
 
 export function RoomHandsBoard({
+  gameId,
   communityTiles,
   hands,
   getPlayerName,
   bottomPlayerId,
 }: RoomHandsBoardProps) {
+  const submitWord = useAction(api.games.submitWord)
   const [builderTiles, setBuilderTiles] = useState<BuilderTile[]>([])
   const [activeTile, setActiveTile] = useState<BuilderTile | null>(null)
   const [isValidating, setIsValidating] = useState(false)
@@ -228,28 +233,42 @@ export function RoomHandsBoard({
       return
     }
 
+    if (!bottomHand) {
+      setValidationError('No player hand available')
+      return
+    }
+
     setIsValidating(true)
     setValidationError(null)
 
     try {
-      const isValid = await validateWord(wordPreview)
+      // Prepare tiles for submission
+      const tiles = builderTiles
+        .filter((tile) => !tile.disabled)
+        .map((tile) => ({
+          letter: tile.letter,
+          baseValue: tile.baseValue,
+          source: tile.source,
+        }))
 
-      if (!isValid) {
-        setValidationError(`"${wordPreview}" is not a valid word`)
-        setIsValidating(false)
-        return
-      }
+      // Submit to backend
+      const result = await submitWord({
+        gameId,
+        playerId: bottomHand.playerId,
+        word: wordPreview,
+        tiles,
+      })
 
-      // TODO: Submit word to game backend
-      console.log('Valid word submitted:', wordPreview)
-      alert(`Valid word: ${wordPreview}`)
+      console.log('Word submitted successfully:', result)
+      alert(`Valid word: ${result.word}\nScore: ${result.score}`)
 
       // Clear the word after successful submission
       setBuilderTiles([])
       setIsValidating(false)
     } catch (error) {
       console.error('Error submitting word:', error)
-      setValidationError('Error validating word. Please try again.')
+      const message = error instanceof Error ? error.message : 'Error submitting word. Please try again.'
+      setValidationError(message)
       setIsValidating(false)
     }
   }

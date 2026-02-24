@@ -1,10 +1,10 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { authComponent, createAuth } from "./auth";
 import {
   PLAYER_NAME_MAX_LENGTH,
-  PLAYER_TOKEN_ALPHABET,
-  PLAYER_TOKEN_LENGTH,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   ROOM_CODE_MAX_ATTEMPTS,
@@ -35,10 +35,6 @@ function randomString(length: number, alphabet: string) {
 
 function generateRoomCode() {
   return randomString(ROOM_CODE_LENGTH, ROOM_CODE_ALPHABET);
-}
-
-function generatePlayerToken() {
-  return randomString(PLAYER_TOKEN_LENGTH, PLAYER_TOKEN_ALPHABET);
 }
 
 function findFirstAvailableSeat(
@@ -88,6 +84,19 @@ async function createOpenRoom(ctx: MutationCtx) {
   return { roomId, code, now };
 }
 
+async function getAuthenticatedUserId(
+  ctx: MutationCtx | QueryCtx,
+): Promise<string | undefined> {
+  const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+  const session = await auth.api.getSession({ headers });
+  const rawUserId = session?.user?.id ?? session?.session?.userId;
+  if (!rawUserId) {
+    return undefined;
+  }
+
+  return rawUserId;
+}
+
 async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
   const name = normalizeName(rawName);
   if (name.length === 0 || name.length > PLAYER_NAME_MAX_LENGTH) {
@@ -99,12 +108,18 @@ async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
 
   const { roomId, code, now } = await createOpenRoom(ctx);
 
-  const playerToken = generatePlayerToken();
+  const authUserId = await getAuthenticatedUserId(ctx);
+  if (!authUserId) {
+    throw new ConvexError({
+      code: "UNAUTHORIZED",
+      message: "Authentication required.",
+    });
+  }
   const playerId = await ctx.db.insert("players", {
     roomId,
+    authUserId,
     name,
     seatIndex: 0,
-    playerToken,
     isHost: true,
     status: "active",
     lastSeenAt: now,
@@ -116,9 +131,115 @@ async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
     roomId,
     code,
     playerId,
-    playerToken,
     seatIndex: 0,
     maxPlayers: ROOM_MAX_PLAYERS,
+  };
+}
+
+async function getActiveAuthedPlayerInRoom(
+  ctx: MutationCtx,
+  roomId: Id<"rooms">,
+  authUserId: string,
+) {
+  const activePlayersForUser = await ctx.db
+    .query("players")
+    .withIndex("authUserId_status", (q) =>
+      q.eq("authUserId", authUserId).eq("status", "active"),
+    )
+    .collect();
+  return (
+    activePlayersForUser.find((player) => player.roomId === roomId) ?? null
+  );
+}
+
+async function getAnyActiveAuthedPlayer(
+  ctx: MutationCtx,
+  authUserId: string,
+) {
+  return await ctx.db
+    .query("players")
+    .withIndex("authUserId_status", (q) =>
+      q.eq("authUserId", authUserId).eq("status", "active"),
+    )
+    .first();
+}
+
+async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
+  const room = await ctx.db.get(player.roomId);
+  if (!room) {
+    throw new ConvexError({
+      code: "ROOM_NOT_FOUND",
+      message: "Room no longer exists.",
+    });
+  }
+
+  if (player.status === "left") {
+    return {
+      ok: true,
+      roomId: room._id,
+      wasAlreadyLeft: true,
+      roomStatus: room.status,
+    };
+  }
+
+  const now = Date.now();
+  await ctx.db.patch(player._id, {
+    status: "left",
+    lastSeenAt: now,
+    isHost: false,
+  });
+
+  const activePlayers = await ctx.db
+    .query("players")
+    .withIndex("roomId_status", (q) =>
+      q.eq("roomId", room._id).eq("status", "active"),
+    )
+    .collect();
+
+  if (activePlayers.length === 0) {
+    await ctx.db.patch(room._id, {
+      status: "closed",
+      hostPlayerId: undefined,
+      lastActiveAt: now,
+    });
+
+    const remainingOpenRooms = await ctx.db
+      .query("rooms")
+      .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
+      .take(1);
+
+    if (remainingOpenRooms.length === 0) {
+      await createOpenRoom(ctx);
+    }
+
+    return {
+      ok: true,
+      roomId: room._id,
+      wasAlreadyLeft: false,
+      roomStatus: "closed",
+    };
+  }
+
+  let nextHostPlayerId = room.hostPlayerId;
+  if (player.isHost || !room.hostPlayerId) {
+    const nextHost = [...activePlayers].sort(
+      (a, b) => a.seatIndex - b.seatIndex,
+    )[0];
+    await ctx.db.patch(nextHost._id, { isHost: true });
+    nextHostPlayerId = nextHost._id;
+  }
+
+  await ctx.db.patch(room._id, {
+    hostPlayerId: nextHostPlayerId,
+    lastActiveAt: now,
+    status: "open",
+  });
+
+  return {
+    ok: true,
+    roomId: room._id,
+    wasAlreadyLeft: false,
+    roomStatus: "open",
   };
 }
 
@@ -135,7 +256,6 @@ export const joinRoom = mutation({
   args: {
     code: v.string(),
     name: v.string(),
-    playerToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const code = normalizeRoomCode(args.code);
@@ -154,30 +274,12 @@ export const joinRoom = mutation({
       });
     }
 
-    if (args.playerToken) {
-      const existingPlayer = await ctx.db
-        .query("players")
-        .withIndex("playerToken", (q) => q.eq("playerToken", args.playerToken!))
-        .unique();
-
-      if (existingPlayer && existingPlayer.status === "active") {
-        const existingRoom = await ctx.db.get(existingPlayer.roomId);
-        if (existingRoom?.code === code) {
-          return {
-            roomId: existingRoom._id,
-            code: existingRoom.code,
-            playerId: existingPlayer._id,
-            playerToken: existingPlayer.playerToken,
-            seatIndex: existingPlayer.seatIndex,
-            maxPlayers: existingRoom.maxPlayers,
-          };
-        }
-
-        throw new ConvexError({
-          code: "ALREADY_IN_ROOM",
-          message: `Player is already in room ${existingRoom?.code ?? "unknown"}.`,
-        });
-      }
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
     }
 
     const room = await ctx.db
@@ -199,6 +301,28 @@ export const joinRoom = mutation({
       });
     }
 
+    const existingAuthedPlayer = await getAnyActiveAuthedPlayer(
+      ctx,
+      authUserId,
+    );
+    if (existingAuthedPlayer) {
+      const existingRoom = await ctx.db.get(existingAuthedPlayer.roomId);
+      if (existingRoom?.code === code) {
+        return {
+          roomId: existingRoom._id,
+          code: existingRoom.code,
+          playerId: existingAuthedPlayer._id,
+          seatIndex: existingAuthedPlayer.seatIndex,
+          maxPlayers: existingRoom.maxPlayers,
+        };
+      }
+
+      throw new ConvexError({
+        code: "ALREADY_IN_ROOM",
+        message: `Player is already in room ${existingRoom?.code ?? "unknown"}.`,
+      });
+    }
+
     const activePlayers = await ctx.db
       .query("players")
       .withIndex("roomId_status", (q) =>
@@ -213,7 +337,9 @@ export const joinRoom = mutation({
       });
     }
 
-    const occupiedSeats = new Set(activePlayers.map((player) => player.seatIndex));
+    const occupiedSeats = new Set(
+      activePlayers.map((player) => player.seatIndex),
+    );
     const seatIndex = findFirstAvailableSeat(occupiedSeats, room.maxPlayers);
     if (seatIndex === null) {
       throw new ConvexError({
@@ -224,12 +350,12 @@ export const joinRoom = mutation({
 
     const isHost = activePlayers.length === 0;
     const now = Date.now();
-    const playerToken = generatePlayerToken();
+
     const playerId = await ctx.db.insert("players", {
       roomId: room._id,
+      authUserId,
       name,
       seatIndex,
-      playerToken,
       isHost,
       status: "active",
       lastSeenAt: now,
@@ -244,7 +370,6 @@ export const joinRoom = mutation({
       roomId: room._id,
       code: room.code,
       playerId,
-      playerToken,
       seatIndex,
       maxPlayers: room.maxPlayers,
     };
@@ -252,131 +377,98 @@ export const joinRoom = mutation({
 });
 
 export const leaveRoom = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const player = await getAnyActiveAuthedPlayer(ctx, authUserId);
+    if (!player) {
+      return { ok: true, roomId: null, wasAlreadyLeft: true, roomStatus: null };
+    }
+
+    return leavePlayer(ctx, player);
+  },
+});
+
+export const leaveRoomByCode = mutation({
   args: {
-    playerToken: v.string(),
+    code: v.string(),
   },
   handler: async (ctx, args) => {
-    const playerToken = args.playerToken.trim();
-    if (!playerToken) {
+    const code = normalizeRoomCode(args.code);
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
       throw new ConvexError({
-        code: "INVALID_PLAYER_TOKEN",
-        message: "Player token is required.",
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
       });
     }
 
-    const player = await ctx.db
-      .query("players")
-      .withIndex("playerToken", (q) => q.eq("playerToken", playerToken))
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("code", (q) => q.eq("code", code))
       .unique();
-
-    if (!player) {
-      throw new ConvexError({
-        code: "INVALID_PLAYER_TOKEN",
-        message: "Player token is invalid.",
-      });
-    }
-
-    const room = await ctx.db.get(player.roomId);
     if (!room) {
       throw new ConvexError({
         code: "ROOM_NOT_FOUND",
-        message: "Room no longer exists.",
+        message: "Room does not exist.",
       });
     }
 
-    if (player.status === "left") {
-      return {
-        ok: true,
-        roomId: room._id,
-        wasAlreadyLeft: true,
-        roomStatus: room.status,
-      };
-    }
-
-    const now = Date.now();
-    await ctx.db.patch(player._id, {
-      status: "left",
-      lastSeenAt: now,
-      isHost: false,
-    });
-
-    const activePlayers = await ctx.db
-      .query("players")
-      .withIndex("roomId_status", (q) =>
-        q.eq("roomId", room._id).eq("status", "active"),
-      )
-      .collect();
-
-    if (activePlayers.length === 0) {
-      await ctx.db.patch(room._id, {
-        status: "closed",
-        hostPlayerId: undefined,
-        lastActiveAt: now,
+    const player = await getActiveAuthedPlayerInRoom(ctx, room._id, authUserId);
+    if (!player) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You are not an active member of this room.",
       });
-
-      const remainingOpenRooms = await ctx.db
-        .query("rooms")
-        .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
-        .take(1);
-
-      if (remainingOpenRooms.length === 0) {
-        await createOpenRoom(ctx);
-      }
-
-      return {
-        ok: true,
-        roomId: room._id,
-        wasAlreadyLeft: false,
-        roomStatus: "closed",
-      };
     }
 
-    let nextHostPlayerId = room.hostPlayerId;
-    if (player.isHost || !room.hostPlayerId) {
-      const nextHost = [...activePlayers].sort(
-        (a, b) => a.seatIndex - b.seatIndex,
-      )[0];
-      await ctx.db.patch(nextHost._id, { isHost: true });
-      nextHostPlayerId = nextHost._id;
+    return leavePlayer(ctx, player);
+  },
+});
+
+export const leaveCurrentRoom = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
     }
 
-    await ctx.db.patch(room._id, {
-      hostPlayerId: nextHostPlayerId,
-      lastActiveAt: now,
-      status: "open",
-    });
+    const player = await getAnyActiveAuthedPlayer(ctx, authUserId);
+    if (!player) {
+      return { ok: true, roomId: null, wasAlreadyLeft: true, roomStatus: null };
+    }
 
-    return {
-      ok: true,
-      roomId: room._id,
-      wasAlreadyLeft: false,
-      roomStatus: "open",
-    };
+    return leavePlayer(ctx, player);
   },
 });
 
 export const heartbeat = mutation({
-  args: {
-    playerToken: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const playerToken = args.playerToken.trim();
-    if (!playerToken) {
+  args: {},
+  handler: async (ctx) => {
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
       throw new ConvexError({
-        code: "INVALID_PLAYER_TOKEN",
-        message: "Player token is required.",
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
       });
     }
 
-    const player = await ctx.db
-      .query("players")
-      .withIndex("playerToken", (q) => q.eq("playerToken", playerToken))
-      .unique();
-
+    const player = await getAnyActiveAuthedPlayer(ctx, authUserId);
     if (!player) {
       throw new ConvexError({
-        code: "INVALID_PLAYER_TOKEN",
-        message: "Player token is invalid.",
+        code: "PLAYER_NOT_FOUND",
+        message: "You are not an active member of a room.",
       });
     }
 
@@ -387,11 +479,48 @@ export const heartbeat = mutation({
       });
     }
 
-    const room = await ctx.db.get(player.roomId);
+    const now = Date.now();
+    await ctx.db.patch(player._id, { lastSeenAt: now });
+
+    return {
+      ok: true,
+      roomId: player.roomId,
+      playerId: player._id,
+      lastSeenAt: now,
+    };
+  },
+});
+
+export const heartbeatByCode = mutation({
+  args: {
+    code: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const code = normalizeRoomCode(args.code);
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("code", (q) => q.eq("code", code))
+      .unique();
     if (!room) {
       throw new ConvexError({
         code: "ROOM_NOT_FOUND",
-        message: "Room no longer exists.",
+        message: "Room does not exist.",
+      });
+    }
+
+    const player = await getActiveAuthedPlayerInRoom(ctx, room._id, authUserId);
+    if (!player) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You are not an active member of this room.",
       });
     }
 
@@ -530,6 +659,15 @@ export const getRoomMembers = query({
 
     activePlayers.sort((a, b) => a.seatIndex - b.seatIndex);
 
+    let viewerPlayerId: Id<"players"> | null = null;
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (authUserId) {
+      const viewerPlayer =
+        activePlayers.find((player) => player.authUserId === authUserId) ??
+        null;
+      viewerPlayerId = viewerPlayer?._id ?? null;
+    }
+
     return {
       room: {
         _id: room._id,
@@ -544,8 +682,82 @@ export const getRoomMembers = query({
         seatIndex: player.seatIndex,
         isHost: player.isHost,
         authUserId: player.authUserId,
-        playerToken: player.playerToken,
       })),
+      viewerPlayerId,
     };
   },
 });
+
+export const getMyActiveRoom = query({
+  args: {},
+  handler: async (ctx) => {
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      return null;
+    }
+
+    const activePlayer = await ctx.db
+      .query("players")
+      .withIndex("authUserId_status", (q) =>
+        q.eq("authUserId", authUserId).eq("status", "active"),
+      )
+      .first();
+
+    if (!activePlayer) {
+      return null;
+    }
+
+    const room = await ctx.db.get(activePlayer.roomId);
+    if (!room) {
+      return null;
+    }
+
+    return {
+      roomId: room._id,
+      code: room.code,
+      playerId: activePlayer._id,
+      seatIndex: activePlayer.seatIndex,
+    };
+  },
+});
+
+// DEBUG: Clear all data
+export const clearAllData = mutation({
+  args: {},
+  handler: async (ctx) => {
+    // Delete all player hands
+    const allHands = await ctx.db.query("playerHands").collect();
+    for (const hand of allHands) {
+      await ctx.db.delete(hand._id);
+    }
+
+    // Delete all games
+    const allGames = await ctx.db.query("games").collect();
+    for (const game of allGames) {
+      await ctx.db.delete(game._id);
+    }
+
+    // Delete all players
+    const allPlayers = await ctx.db.query("players").collect();
+    for (const player of allPlayers) {
+      await ctx.db.delete(player._id);
+    }
+
+    // Delete all rooms
+    const allRooms = await ctx.db.query("rooms").collect();
+    for (const room of allRooms) {
+      await ctx.db.delete(room._id);
+    }
+
+    return {
+      ok: true,
+      deleted: {
+        playerHands: allHands.length,
+        games: allGames.length,
+        players: allPlayers.length,
+        rooms: allRooms.length,
+      },
+    };
+  },
+});
+

@@ -1,8 +1,8 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
-import { api } from '../../convex/_generated/api'
-import { authClient } from '@/lib/auth-client'
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { authClient } from "@/lib/auth-client";
 import {
   Zap,
   Server,
@@ -10,146 +10,100 @@ import {
   Shield,
   Waves,
   Sparkles,
-} from 'lucide-react'
+} from "lucide-react";
 
-export const Route = createFileRoute('/')({ component: App })
-
-const PLAYER_TOKEN_STORAGE_KEY = 'fourinarow.playerToken'
-const PLAYER_ROOM_CODE_STORAGE_KEY = 'fourinarow.roomCode'
-const PLAYER_ID_STORAGE_KEY = 'fourinarow.playerId'
+export const Route = createFileRoute("/")({ component: App });
 
 function App() {
-  const navigate = useNavigate()
-  const { data: session } = authClient.useSession()
-  const rooms = useQuery(api.rooms.listRooms)
-  const ensureSeedRooms = useMutation(api.rooms.ensureSeedRooms)
-  const joinRoom = useMutation(api.rooms.joinRoom)
-  const leaveRoom = useMutation(api.rooms.leaveRoom)
-  const seededRef = useRef(false)
-  const [joiningRoomCode, setJoiningRoomCode] = useState<string | null>(null)
-  const [isLeavingRoom, setIsLeavingRoom] = useState(false)
-  const [joinMessage, setJoinMessage] = useState<string | null>(null)
-  const [playerToken, setPlayerToken] = useState<string | null>(null)
-  const [joinedRoomCode, setJoinedRoomCode] = useState<string | null>(null)
+  const navigate = useNavigate();
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const convexAuthUser = useQuery(api.auth.getCurrentUser);
+  const rooms = useQuery(api.rooms.listRooms);
+  const ensureSeedRooms = useMutation(api.rooms.ensureSeedRooms);
+  const joinRoom = useMutation(api.rooms.joinRoom);
+  const seededRef = useRef(false);
+  const [joiningRoomCode, setJoiningRoomCode] = useState<string | null>(null);
+  const [joinMessage, setJoinMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (seededRef.current) return
-    seededRef.current = true
-    void ensureSeedRooms({})
-  }, [ensureSeedRooms])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const storedToken = window.localStorage.getItem(PLAYER_TOKEN_STORAGE_KEY)
-    const storedRoomCode = window.localStorage.getItem(
-      PLAYER_ROOM_CODE_STORAGE_KEY,
-    )
-    setPlayerToken(storedToken)
-    setJoinedRoomCode(storedRoomCode)
-  }, [])
+    if (seededRef.current) return;
+    seededRef.current = true;
+    void ensureSeedRooms({});
+  }, [ensureSeedRooms]);
 
   const handleJoinRoom = async (roomCode: string) => {
-    const displayName =
-      session?.user?.name?.trim() || session?.user?.email || 'Player'
-
-    if (joinedRoomCode && joinedRoomCode !== roomCode) {
-      setJoinMessage(
-        `You are already in room ${joinedRoomCode}. Leave that room before joining another.`,
-      )
-      return
+    if (!session?.user) {
+      await navigate({ to: "/login" });
+      return;
+    }
+    if (convexAuthUser === undefined) {
+      setJoinMessage("Checking authentication, please try again in a moment.");
+      return;
+    }
+    if (!convexAuthUser) {
+      setJoinMessage("Convex auth is not ready. Please sign out and sign back in.");
+      return;
     }
 
-    setJoiningRoomCode(roomCode)
-    setJoinMessage(null)
+    const displayName =
+      session?.user?.name?.trim() || session?.user?.email || "Player";
+
+    setJoiningRoomCode(roomCode);
+    setJoinMessage(null);
 
     try {
       const result = await joinRoom({
         code: roomCode,
         name: displayName,
-        playerToken: playerToken ?? undefined,
-      })
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(PLAYER_TOKEN_STORAGE_KEY, result.playerToken)
-        window.localStorage.setItem(PLAYER_ROOM_CODE_STORAGE_KEY, result.code)
-        window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, String(result.playerId))
-      }
-      setPlayerToken(result.playerToken)
-      setJoinedRoomCode(result.code)
-      await navigate({ to: '/rooms/$code', params: { code: result.code } })
+      });
+      await navigate({ to: "/rooms/$code", params: { code: result.code } });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Failed to join room.'
-      setJoinMessage(message)
+        error instanceof Error ? error.message : "Failed to join room.";
+      setJoinMessage(message);
     } finally {
-      setJoiningRoomCode(null)
+      setJoiningRoomCode(null);
     }
-  }
-
-  const handleLeaveRoom = async () => {
-    if (!playerToken) {
-      setJoinMessage('No active room token found.')
-      return
-    }
-
-    setIsLeavingRoom(true)
-    setJoinMessage(null)
-    try {
-      await leaveRoom({ playerToken })
-      if (typeof window !== 'undefined') {
-        window.localStorage.removeItem(PLAYER_TOKEN_STORAGE_KEY)
-        window.localStorage.removeItem(PLAYER_ROOM_CODE_STORAGE_KEY)
-        window.localStorage.removeItem(PLAYER_ID_STORAGE_KEY)
-      }
-      setPlayerToken(null)
-      setJoinedRoomCode(null)
-      setJoinMessage('You left the room.')
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to leave room.'
-      setJoinMessage(message)
-    } finally {
-      setIsLeavingRoom(false)
-    }
-  }
+  };
 
   const features = [
     {
       icon: <Zap className="w-12 h-12 text-cyan-400" />,
-      title: 'Powerful Server Functions',
+      title: "Powerful Server Functions",
       description:
-        'Write server-side code that seamlessly integrates with your client components. Type-safe, secure, and simple.',
+        "Write server-side code that seamlessly integrates with your client components. Type-safe, secure, and simple.",
     },
     {
       icon: <Server className="w-12 h-12 text-cyan-400" />,
-      title: 'Flexible Server Side Rendering',
+      title: "Flexible Server Side Rendering",
       description:
-        'Full-document SSR, streaming, and progressive enhancement out of the box. Control exactly what renders where.',
+        "Full-document SSR, streaming, and progressive enhancement out of the box. Control exactly what renders where.",
     },
     {
       icon: <RouteIcon className="w-12 h-12 text-cyan-400" />,
-      title: 'API Routes',
+      title: "API Routes",
       description:
-        'Build type-safe API endpoints alongside your application. No separate backend needed.',
+        "Build type-safe API endpoints alongside your application. No separate backend needed.",
     },
     {
       icon: <Shield className="w-12 h-12 text-cyan-400" />,
-      title: 'Strongly Typed Everything',
+      title: "Strongly Typed Everything",
       description:
-        'End-to-end type safety from server to client. Catch errors before they reach production.',
+        "End-to-end type safety from server to client. Catch errors before they reach production.",
     },
     {
       icon: <Waves className="w-12 h-12 text-cyan-400" />,
-      title: 'Full Streaming Support',
+      title: "Full Streaming Support",
       description:
-        'Stream data from server to client progressively. Perfect for AI applications and real-time updates.',
+        "Stream data from server to client progressively. Perfect for AI applications and real-time updates.",
     },
     {
       icon: <Sparkles className="w-12 h-12 text-cyan-400" />,
-      title: 'Next Generation Ready',
+      title: "Next Generation Ready",
       description:
-        'Built from the ground up for modern web applications. Deploy anywhere JavaScript runs.',
+        "Built from the ground up for modern web applications. Deploy anywhere JavaScript runs.",
     },
-  ]
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
@@ -163,7 +117,7 @@ function App() {
               className="w-24 h-24 md:w-32 md:h-32"
             />
             <h1 className="text-6xl md:text-7xl font-black text-white [letter-spacing:-0.08em]">
-              <span className="text-gray-300">TANSTACK</span>{' '}
+              <span className="text-gray-300">TANSTACK</span>{" "}
               <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
                 START
               </span>
@@ -187,7 +141,7 @@ function App() {
               Documentation
             </a>
             <p className="text-gray-400 text-sm mt-2">
-              Begin your TanStack Start journey by editing{' '}
+              Begin your TanStack Start journey by editing{" "}
               <code className="px-2 py-1 bg-slate-700 rounded text-cyan-400">
                 /src/routes/index.tsx
               </code>
@@ -196,38 +150,11 @@ function App() {
         </div>
       </section>
 
-      <section className="py-16 px-6 max-w-7xl mx-auto">
+      <section className="py-16 px-6 mx-auto">
         <div className="mb-10 rounded-xl border border-slate-700 bg-slate-800/50 p-6">
           <h2 className="mb-4 text-2xl font-bold text-white">
             Generated Rooms
           </h2>
-          {joinedRoomCode && (
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-xs text-amber-300">Current room: {joinedRoomCode}</p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    void navigate({
-                      to: '/rooms/$code',
-                      params: { code: joinedRoomCode },
-                    })
-                  }
-                  className="rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-cyan-700"
-                >
-                  Open room
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleLeaveRoom()}
-                  disabled={isLeavingRoom}
-                  className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                >
-                  {isLeavingRoom ? 'Leaving...' : 'Leave room'}
-                </button>
-              </div>
-            </div>
-          )}
           {joinMessage && (
             <p className="mb-4 text-sm text-cyan-300">{joinMessage}</p>
           )}
@@ -258,11 +185,17 @@ function App() {
                     </p>
                     <button
                       type="button"
-                      disabled={joiningRoomCode === room.code}
+                      disabled={
+                        joiningRoomCode === room.code ||
+                        isSessionPending ||
+                        !session?.user ||
+                        convexAuthUser === undefined ||
+                        !convexAuthUser
+                      }
                       onClick={() => void handleJoinRoom(room.code)}
                       className="rounded-md bg-cyan-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-cyan-600 disabled:cursor-not-allowed disabled:bg-slate-600"
                     >
-                      {joiningRoomCode === room.code ? 'Joining...' : 'Join'}
+                      {joiningRoomCode === room.code ? "Joining..." : "Join"}
                     </button>
                   </div>
                 </li>
@@ -289,6 +222,5 @@ function App() {
         </div>
       </section>
     </div>
-  )
+  );
 }
-

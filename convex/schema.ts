@@ -21,10 +21,9 @@ export const appTables = {
     .index("status_lastActiveAt", ["status", "lastActiveAt"]),
   players: defineTable({
     roomId: v.id("rooms"),
-    authUserId: v.optional(v.id("user")),
+    authUserId: v.string(),
     name: v.string(),
     seatIndex: v.number(),
-    playerToken: v.string(),
     isHost: v.boolean(),
     status: v.union(v.literal("active"), v.literal("left")),
     lastSeenAt: v.number(),
@@ -32,8 +31,7 @@ export const appTables = {
     .index("roomId", ["roomId"])
     .index("roomId_status", ["roomId", "status"])
     .index("roomId_seatIndex", ["roomId", "seatIndex"])
-    .index("authUserId_status", ["authUserId", "status"])
-    .index("playerToken", ["playerToken"]),
+    .index("authUserId_status", ["authUserId", "status"]),
   messages: defineTable({
     roomId: v.id("rooms"),
     playerId: v.id("players"),
@@ -69,6 +67,29 @@ export const appTables = {
     updatedAt: v.number(),
   })
     .index("by_game", ["gameId"])
+    .index("by_player", ["playerId"]),
+  wordSubmissions: defineTable({
+    gameId: v.id("games"),
+    playerId: v.string(),
+    stage: gameStageValidator,
+    word: v.string(),
+    tiles: v.array(
+      v.object({
+        letter: v.string(),
+        baseValue: v.number(),
+        source: v.union(v.literal("hand"), v.literal("community")),
+      })
+    ),
+    score: v.number(),
+    scoreBreakdown: v.object({
+      lengthPoints: v.number(),
+      speedBonus: v.number(),
+      validWordBonus: v.number(),
+    }),
+    createdAt: v.number(),
+  })
+    .index("by_game", ["gameId"])
+    .index("by_game_player", ["gameId", "playerId"])
     .index("by_player", ["playerId"]),
 };
 

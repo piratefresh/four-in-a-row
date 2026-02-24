@@ -3,11 +3,12 @@ import { createClient } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import authConfig from "./auth.config";
 import { components } from "./_generated/api";
-import { query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import type { GenericCtx } from "@convex-dev/better-auth";
 import type { DataModel } from "./_generated/dataModel";
 import { Resend } from "@convex-dev/resend";
 import { requireActionCtx } from "@convex-dev/better-auth/utils";
+import { ConvexError, v } from "convex/values";
 
 const siteUrl =
   process.env.BETTER_AUTH_BASE_URL ||
@@ -24,6 +25,15 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
     baseURL: siteUrl,
     database: authComponent.adapter(ctx),
+    user: {
+      additionalFields: {
+        activeGameId: {
+          type: "string",
+          required: false,
+          input: false,
+        },
+      },
+    },
     // Email/password with verification required for sign in.
     emailAndPassword: {
       enabled: true,
@@ -59,6 +69,27 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
 export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    return await authComponent.getAuthUser(ctx);
+    return await ctx.auth.getUserIdentity();
+  },
+});
+
+export const setActiveGameId = mutation({
+  args: {
+    activeGameId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.getAuthUser(ctx);
+    const authUserId = authUser.userId
+      ? ctx.db.normalizeId("user", authUser.userId)
+      : null;
+
+    if (!authUserId) {
+      throw new ConvexError("Unauthenticated");
+    }
+
+    const activeGameId = args.activeGameId?.trim() || undefined;
+    await ctx.db.patch(authUserId, { activeGameId });
+
+    return { ok: true, activeGameId: activeGameId ?? null };
   },
 });

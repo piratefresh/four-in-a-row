@@ -9,10 +9,18 @@ export async function validateWord(word: string): Promise<boolean> {
   }
 
   try {
-    const response = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`,
-    )
-    return response.ok
+    const convexUrl = import.meta.env.VITE_CONVEX_URL
+    if (!convexUrl) {
+      return false
+    }
+
+    const response = await fetch(`${convexUrl}/validateWord?word=${encodeURIComponent(word)}`)
+    if (!response.ok) {
+      return false
+    }
+
+    const data = await response.json()
+    return !!data?.valid
   } catch (error) {
     console.error('Error validating word:', error)
     return false
@@ -30,17 +38,18 @@ export async function getWordDefinition(word: string): Promise<string | null> {
   }
 
   try {
-    const response = await fetch(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`,
-    )
+    const convexUrl = import.meta.env.VITE_CONVEX_URL
+    if (!convexUrl) {
+      return null
+    }
 
+    const response = await fetch(`${convexUrl}/validateWord?word=${encodeURIComponent(word)}`)
     if (!response.ok) {
       return null
     }
 
     const data = await response.json()
-    const firstMeaning = data[0]?.meanings?.[0]?.definitions?.[0]?.definition
-    return firstMeaning || null
+    return data?.definition ?? null
   } catch (error) {
     console.error('Error getting word definition:', error)
     return null

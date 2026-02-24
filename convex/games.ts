@@ -1,5 +1,7 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, internalMutation, mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import {
   createInitialGameDocument,
   createShuffledDeck,
@@ -158,6 +160,7 @@ export const startGame = mutation({
       currentPlayerIndex: 0,
       updatedAt: now,
     });
+    await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
 
     return {
       ok: true,
@@ -192,12 +195,16 @@ export const advanceStage = mutation({
 
     const nextStage = getNextStage(game.stage);
     const now = Date.now();
+    const roomId = ctx.db.normalizeId("rooms", game.roomId);
 
     if (!nextStage) {
       await ctx.db.patch(game._id, {
         status: "completed",
         updatedAt: now,
       });
+      if (roomId) {
+        await setRoomUsersActiveGameId(ctx, roomId, undefined);
+      }
       return {
         ok: true,
         gameId: game._id,
@@ -206,12 +213,51 @@ export const advanceStage = mutation({
       };
     }
 
+    // Reveal community tiles based on stage
+    let communityTiles = [...game.communityTiles];
+    let deck = [...game.deck];
+
+    if (nextStage === "flop" && communityTiles.length === 0) {
+      // Reveal 3 cards for flop
+      const newTiles = deck.splice(0, 3);
+      communityTiles = newTiles.map(({ letter, baseValue }) => ({
+        letter,
+        baseValue,
+        revealed: true
+      }));
+    } else if (nextStage === "turn" && communityTiles.length === 3) {
+      // Reveal 1 card for turn
+      const newTile = deck.shift();
+      if (newTile) {
+        communityTiles.push({
+          letter: newTile.letter,
+          baseValue: newTile.baseValue,
+          revealed: true
+        });
+      }
+    } else if (nextStage === "river" && communityTiles.length === 4) {
+      // Reveal 1 card for river
+      const newTile = deck.shift();
+      if (newTile) {
+        communityTiles.push({
+          letter: newTile.letter,
+          baseValue: newTile.baseValue,
+          revealed: true
+        });
+      }
+    }
+
     const nextStatus = nextStage === "showdown" ? "completed" : game.status;
     await ctx.db.patch(game._id, {
       stage: nextStage,
       status: nextStatus,
+      communityTiles,
+      deck,
       updatedAt: now,
     });
+    if (nextStatus === "completed" && roomId) {
+      await setRoomUsersActiveGameId(ctx, roomId, undefined);
+    }
 
     return {
       ok: true,
@@ -317,6 +363,33 @@ function isBettingRoundComplete(
   return allBetsMatch;
 }
 
+async function setRoomUsersActiveGameId(
+  ctx: MutationCtx,
+  roomId: Id<"rooms">,
+  activeGameId?: string,
+) {
+  const activePlayers = await ctx.db
+    .query("players")
+    .withIndex("roomId_status", (q) =>
+      q.eq("roomId", roomId).eq("status", "active"),
+    )
+    .collect();
+
+  const userIds = new Set<string>();
+  for (const player of activePlayers) {
+    if (player.authUserId) {
+      userIds.add(player.authUserId);
+    }
+  }
+
+  for (const userId of userIds) {
+    const normalizedUserId = ctx.db.normalizeId("user", userId);
+    if (normalizedUserId) {
+      await ctx.db.patch(normalizedUserId, { activeGameId });
+    }
+  }
+}
+
 // Helper to auto-advance stage after betting round completes
 async function autoAdvanceStage(
   ctx: any,
@@ -332,6 +405,10 @@ async function autoAdvanceStage(
       status: "completed" as const,
       updatedAt: now,
     });
+    const roomId = ctx.db.normalizeId("rooms", game.roomId);
+    if (roomId) {
+      await setRoomUsersActiveGameId(ctx, roomId, undefined);
+    }
     return { advanced: true, nextStage: null, status: "completed" as const };
   }
 
@@ -867,6 +944,10 @@ export const fold = mutation({
         status: "completed",
         updatedAt: now,
       });
+      const roomId = ctx.db.normalizeId("rooms", game.roomId);
+      if (roomId) {
+        await setRoomUsersActiveGameId(ctx, roomId, undefined);
+      }
       return {
         ok: true,
         action: "fold" as const,
@@ -911,5 +992,290 @@ export const fold = mutation({
       advanced: false,
       nextPlayerId: updatedHands[nextPlayerIndex]?.playerId ?? null,
     };
+  },
+});
+
+// Word validation via Dictionary API
+// Internal mutation for database operations
+export const submitWordInternal = internalMutation({
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    word: v.string(),
+    tiles: v.array(
+      v.object({
+        letter: v.string(),
+        baseValue: v.number(),
+        source: v.union(v.literal("hand"), v.literal("community")),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { gameId, playerId, word, tiles } = args;
+
+    const normalizedWord = word.toLowerCase().trim();
+    const normalizedPlayerId = playerId.trim();
+
+    // Get game state
+    const game = await ctx.db.get(gameId);
+    if (!game) {
+      throw new ConvexError({
+        code: "GAME_NOT_FOUND",
+        message: "Game does not exist.",
+      });
+    }
+
+    if (game.status !== "active") {
+      throw new ConvexError({
+        code: "INVALID_GAME_STATUS",
+        message: "Game is not active.",
+      });
+    }
+
+    if (game.stage === "showdown") {
+      throw new ConvexError({
+        code: "INVALID_GAME_STAGE",
+        message: "Word submissions are closed during showdown.",
+      });
+    }
+
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", gameId))
+      .collect();
+
+    if (hands.length === 0) {
+      throw new ConvexError({
+        code: "HANDS_NOT_FOUND",
+        message: "No hands found for this game.",
+      });
+    }
+
+    const orderedHands = sortHandsByTurnOrder(hands);
+    const currentTurnHand = orderedHands[game.currentPlayerIndex];
+    if (!currentTurnHand) {
+      throw new ConvexError({
+        code: "INVALID_TURN_INDEX",
+        message: "Current turn index is out of range.",
+      });
+    }
+
+    if (currentTurnHand.playerId !== normalizedPlayerId) {
+      throw new ConvexError({
+        code: "NOT_YOUR_TURN",
+        message: "It is not your turn.",
+      });
+    }
+
+    const playerHand = currentTurnHand;
+
+    if (playerHand.hasFolded) {
+      throw new ConvexError({
+        code: "PLAYER_FOLDED",
+        message: "Cannot submit word after folding.",
+      });
+    }
+
+    if (playerHand.hasActed) {
+      throw new ConvexError({
+        code: "PLAYER_ALREADY_ACTED",
+        message: "You have already acted this round.",
+      });
+    }
+
+    const existingSubmission = await ctx.db
+      .query("wordSubmissions")
+      .withIndex("by_game_player", (q) =>
+        q.eq("gameId", gameId).eq("playerId", normalizedPlayerId),
+      )
+      .filter((q) => q.eq(q.field("stage"), game.stage))
+      .unique();
+
+    if (existingSubmission) {
+      throw new ConvexError({
+        code: "ALREADY_SUBMITTED",
+        message: "You have already submitted a word for this stage.",
+      });
+    }
+
+    // Validate tiles
+    const handTileCount = new Map<string, number>();
+    for (const tile of playerHand.tiles) {
+      const key = `${tile.letter}-${tile.baseValue}`;
+      handTileCount.set(key, (handTileCount.get(key) || 0) + 1);
+    }
+
+    const communityTileCount = new Map<string, number>();
+    for (const tile of game.communityTiles.filter(t => t.revealed)) {
+      const key = `${tile.letter}-${tile.baseValue}`;
+      communityTileCount.set(key, (communityTileCount.get(key) || 0) + 1);
+    }
+
+    const usedHandTiles = new Map<string, number>();
+    const usedCommunityTiles = new Map<string, number>();
+
+    for (const tile of tiles) {
+      const key = `${tile.letter}-${tile.baseValue}`;
+
+      if (tile.source === "hand") {
+        const used = (usedHandTiles.get(key) || 0) + 1;
+        const available = handTileCount.get(key) || 0;
+        if (used > available) {
+          throw new ConvexError({
+            code: "INVALID_TILE_USAGE",
+            message: `Tile ${tile.letter} not available in hand or used too many times.`,
+          });
+        }
+        usedHandTiles.set(key, used);
+      } else {
+        const used = (usedCommunityTiles.get(key) || 0) + 1;
+        const available = communityTileCount.get(key) || 0;
+        if (used > available) {
+          throw new ConvexError({
+            code: "INVALID_TILE_USAGE",
+            message: `Community tile ${tile.letter} not available or used too many times.`,
+          });
+        }
+        usedCommunityTiles.set(key, used);
+      }
+    }
+
+    // Validate word matches tiles
+    const wordLetters = normalizedWord.split("");
+    const tileLetters = tiles.map(t => t.letter.toLowerCase());
+    if (wordLetters.length !== tileLetters.length) {
+      throw new ConvexError({
+        code: "WORD_TILE_MISMATCH",
+        message: "Word length does not match number of tiles.",
+      });
+    }
+
+    for (let i = 0; i < wordLetters.length; i++) {
+      if (wordLetters[i] !== tileLetters[i]) {
+        throw new ConvexError({
+          code: "WORD_TILE_MISMATCH",
+          message: "Word does not match tile letters.",
+        });
+      }
+    }
+
+    // Calculate score
+    const now = Date.now();
+    const score = calculateScore(normalizedWord, now, game.updatedAt);
+
+    // Create submission
+    await ctx.db.insert("wordSubmissions", {
+      gameId,
+      playerId: normalizedPlayerId,
+      stage: game.stage,
+      word: normalizedWord,
+      tiles,
+      score: score.total,
+      scoreBreakdown: {
+        lengthPoints: score.lengthPoints,
+        speedBonus: score.speedBonus,
+        validWordBonus: score.validWordBonus,
+      },
+      createdAt: now,
+    });
+
+    // Update player state - mark as having acted
+    await ctx.db.patch(playerHand._id, {
+      hasActed: true,
+      updatedAt: now,
+    });
+
+    return {
+      ok: true,
+      word: normalizedWord,
+      score: score.total,
+      scoreBreakdown: score,
+      submissionTime: now,
+    };
+  },
+});
+
+// Scoring logic - 3 points per letter as per ticket requirements
+function calculateLengthPoints(wordLength: number): number {
+  return wordLength * 3;
+}
+
+function calculateSpeedBonus(submissionTime: number, stageStartTime: number): number {
+  const secondsElapsed = (submissionTime - stageStartTime) / 1000;
+  if (secondsElapsed <= 10) return 10;
+  if (secondsElapsed <= 20) return 5;
+  return 0;
+}
+
+function calculateScore(word: string, submissionTime: number, stageStartTime: number) {
+  const lengthPoints = calculateLengthPoints(word.length);
+  const speedBonus = calculateSpeedBonus(submissionTime, stageStartTime);
+  const validWordBonus = 5; // Always 5 since we validate before calling this
+
+  return {
+    lengthPoints,
+    speedBonus,
+    validWordBonus,
+    total: lengthPoints + speedBonus + validWordBonus,
+  };
+}
+
+export const submitWord = action({
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    word: v.string(),
+    tiles: v.array(
+      v.object({
+        letter: v.string(),
+        baseValue: v.number(),
+        source: v.union(v.literal("hand"), v.literal("community")),
+      })
+    ),
+  },
+  handler: async (ctx, args): Promise<{
+    ok: boolean;
+    word: string;
+    score: number;
+    scoreBreakdown: any;
+    submissionTime: number;
+  }> => {
+    const { gameId, playerId, word, tiles } = args;
+    const normalizedPlayerId = playerId.trim();
+
+    // Validate word format
+    const normalizedWord = word.toLowerCase().trim();
+    if (!normalizedPlayerId) {
+      throw new ConvexError({
+        code: "INVALID_PLAYER_ID",
+        message: "Player ID is required.",
+      });
+    }
+    if (normalizedWord.length < 2 || normalizedWord.length > 7) {
+      throw new ConvexError({
+        code: "INVALID_WORD_LENGTH",
+        message: "Word must be between 2 and 7 letters.",
+      });
+    }
+
+    // Validate word via Free Dictionary API through internal action.
+    const validationData = await ctx.runAction(
+      internal.validateWord.validateDictionaryWord,
+      { word: normalizedWord },
+    );
+    if (!validationData.valid) {
+      throw new ConvexError({
+        code: "INVALID_WORD",
+        message: `"${normalizedWord}" is not a valid dictionary word.`,
+      });
+    }
+
+    // Call helper mutation to handle database operations
+    return await ctx.runMutation(internal.games.submitWordInternal, {
+      gameId,
+      playerId: normalizedPlayerId,
+      word: normalizedWord,
+      tiles,
+    });
   },
 });
