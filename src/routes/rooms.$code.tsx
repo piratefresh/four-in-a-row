@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery } from 'convex/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../convex/_generated/api'
 
 export const Route = createFileRoute('/rooms/$code')({
@@ -9,6 +9,7 @@ export const Route = createFileRoute('/rooms/$code')({
 
 const PLAYER_TOKEN_STORAGE_KEY = 'fourinarow.playerToken'
 const PLAYER_ROOM_CODE_STORAGE_KEY = 'fourinarow.roomCode'
+const PLAYER_ID_STORAGE_KEY = 'fourinarow.playerId'
 const HEARTBEAT_INTERVAL_MS = 30_000
 
 function RoomDetailsPage() {
@@ -27,8 +28,13 @@ function RoomDetailsPage() {
   const createGameForRoom = useMutation(api.games.createGameForRoom)
   const startGame = useMutation(api.games.startGame)
   const advanceStage = useMutation(api.games.advanceStage)
+  const check = useMutation((api as any).games.check)
+  const call = useMutation((api as any).games.call)
+  const raise = useMutation((api as any).games.raise)
+  const fold = useMutation((api as any).games.fold)
 
   const [playerToken, setPlayerToken] = useState<string | null>(null)
+  const [playerId, setPlayerId] = useState<string | null>(null)
   const [joinedRoomCode, setJoinedRoomCode] = useState<string | null>(null)
   const [isLeavingRoom, setIsLeavingRoom] = useState(false)
   const [leaveMessage, setLeaveMessage] = useState<string | null>(null)
@@ -36,10 +42,56 @@ function RoomDetailsPage() {
   const [isCreatingGame, setIsCreatingGame] = useState(false)
   const [isStartingGame, setIsStartingGame] = useState(false)
   const [isAdvancingStage, setIsAdvancingStage] = useState(false)
+  const [isBetting, setIsBetting] = useState(false)
+  const [raiseAmount, setRaiseAmount] = useState('')
+
+  // Calculate turn order and current player
+  const turnOrderedHands = useMemo(
+    () =>
+      [...(playerHands ?? [])].sort((a, b) => {
+        if (a.createdAt !== b.createdAt) {
+          return a.createdAt - b.createdAt
+        }
+        return a.playerId.localeCompare(b.playerId)
+      }),
+    [playerHands],
+  )
+
+  const currentTurnPlayerId = useMemo(
+    () =>
+      game ? turnOrderedHands[game.currentPlayerIndex]?.playerId ?? null : null,
+    [game, turnOrderedHands],
+  )
+
+  const myHand = useMemo(
+    () =>
+      playerId
+        ? playerHands?.find((hand) => hand.playerId === playerId)
+        : undefined,
+    [playerId, playerHands],
+  )
+
+  const canCheck = useMemo(() => {
+    if (!game || !myHand || currentTurnPlayerId !== playerId || game.status !== 'active') return false
+    return game.currentBet === 0 || myHand.betThisRound === game.currentBet
+  }, [game, myHand, currentTurnPlayerId, playerId])
+
+  const canCall = useMemo(() => {
+    if (!game || !myHand || currentTurnPlayerId !== playerId || game.status !== 'active') return false
+    return game.currentBet > 0 && myHand.betThisRound < game.currentBet
+  }, [game, myHand, currentTurnPlayerId, playerId])
+
+  const callAmount = useMemo(() => {
+    if (!game || !myHand) return 0
+    return game.currentBet - myHand.betThisRound
+  }, [game, myHand])
+
+  const isMyTurn = currentTurnPlayerId === playerId && game?.status === 'active'
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     setPlayerToken(window.localStorage.getItem(PLAYER_TOKEN_STORAGE_KEY))
+    setPlayerId(window.localStorage.getItem(PLAYER_ID_STORAGE_KEY))
     setJoinedRoomCode(window.localStorage.getItem(PLAYER_ROOM_CODE_STORAGE_KEY))
   }, [])
 
@@ -51,7 +103,12 @@ function RoomDetailsPage() {
 
     const sendHeartbeat = async () => {
       try {
-        await heartbeat({ playerToken })
+        const result = await heartbeat({ playerToken })
+        const resolvedPlayerId = String(result.playerId)
+        setPlayerId(resolvedPlayerId)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, resolvedPlayerId)
+        }
       } catch {
         // Keep UI stable; leave/join flows will recover token issues.
       }
@@ -144,6 +201,74 @@ function RoomDetailsPage() {
       setGameMessage(message)
     } finally {
       setIsAdvancingStage(false)
+    }
+  }
+
+  const handleCheck = async () => {
+    if (!game?._id || !playerId) return
+    setIsBetting(true)
+    setGameMessage(null)
+    try {
+      await check({ gameId: game._id, playerId })
+      setGameMessage('Checked.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to check.'
+      setGameMessage(message)
+    } finally {
+      setIsBetting(false)
+    }
+  }
+
+  const handleCall = async () => {
+    if (!game?._id || !playerId) return
+    setIsBetting(true)
+    setGameMessage(null)
+    try {
+      await call({ gameId: game._id, playerId })
+      setGameMessage(`Called ${callAmount} chips.`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to call.'
+      setGameMessage(message)
+    } finally {
+      setIsBetting(false)
+    }
+  }
+
+  const handleRaise = async () => {
+    if (!game?._id || !playerId) return
+    const amount = parseInt(raiseAmount, 10)
+    if (!Number.isFinite(amount) || amount <= (game.currentBet ?? 0)) {
+      setGameMessage(
+        `Raise amount must be greater than current bet of ${game.currentBet ?? 0}.`,
+      )
+      return
+    }
+    setIsBetting(true)
+    setGameMessage(null)
+    try {
+      await raise({ gameId: game._id, playerId, raiseToAmount: amount })
+      setGameMessage(`Raised to ${amount} chips.`)
+      setRaiseAmount('')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to raise.'
+      setGameMessage(message)
+    } finally {
+      setIsBetting(false)
+    }
+  }
+
+  const handleFold = async () => {
+    if (!game?._id || !playerId) return
+    setIsBetting(true)
+    setGameMessage(null)
+    try {
+      await fold({ gameId: game._id, playerId })
+      setGameMessage('Folded.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fold.'
+      setGameMessage(message)
+    } finally {
+      setIsBetting(false)
     }
   }
 
@@ -242,15 +367,36 @@ function RoomDetailsPage() {
                       Status: <span className="text-cyan-300">{game.status}</span>
                     </p>
                     <p className="text-slate-300">
-                      Pot: <span className="text-cyan-300">{game.pot}</span>
+                      Pot: <span className="text-cyan-300">{game.pot} chips</span>
                     </p>
                     <p className="text-slate-300">
-                      Current Player Index:{' '}
+                      Current Bet:{' '}
                       <span className="text-cyan-300">
-                        {game.currentPlayerIndex}
+                        {game.currentBet ?? 0} chips
                       </span>
                     </p>
+                    {myHand && (
+                      <>
+                        <p className="text-slate-300">
+                          Your Chips:{' '}
+                          <span className="text-cyan-300">{myHand.chips} chips</span>
+                        </p>
+                        <p className="text-slate-300">
+                          Your Bet This Round:{' '}
+                          <span className="text-cyan-300">
+                            {myHand.betThisRound} chips
+                          </span>
+                        </p>
+                      </>
+                    )}
                   </div>
+                  {isMyTurn && (
+                    <div className="mb-3 rounded-md border border-amber-500 bg-amber-500/10 p-3">
+                      <p className="text-sm font-semibold text-amber-300">
+                        It's your turn!
+                      </p>
+                    </div>
+                  )}
                   <div className="mb-3 rounded-md border border-slate-700 bg-slate-950/40 p-3">
                     <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">
                       Dealt Hands
@@ -292,31 +438,89 @@ function RoomDetailsPage() {
                 <p className="mb-3 text-sm text-cyan-300">{gameMessage}</p>
               )}
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleCreateGame()}
-                  disabled={!roomData || !!game || isCreatingGame}
-                  className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                >
-                  {isCreatingGame ? 'Creating...' : 'Create game'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleStartGame()}
-                  disabled={!game || game.status !== 'waiting' || isStartingGame}
-                  className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                >
-                  {isStartingGame ? 'Starting...' : 'Start game'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleAdvanceStage()}
-                  disabled={!game || game.status !== 'active' || isAdvancingStage}
-                  className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                >
-                  {isAdvancingStage ? 'Advancing...' : 'Advance stage'}
-                </button>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateGame()}
+                    disabled={!roomData || !!game || isCreatingGame}
+                    className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                  >
+                    {isCreatingGame ? 'Creating...' : 'Create game'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleStartGame()}
+                    disabled={!game || game.status !== 'waiting' || isStartingGame}
+                    className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                  >
+                    {isStartingGame ? 'Starting...' : 'Start game'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleAdvanceStage()}
+                    disabled={!game || game.status !== 'active' || isAdvancingStage}
+                    className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                  >
+                    {isAdvancingStage ? 'Advancing...' : 'Advance stage (Debug)'}
+                  </button>
+                </div>
+
+                {game?.status === 'active' && isMyTurn && (
+                  <div className="rounded-lg border border-amber-500 bg-amber-500/5 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">
+                      Betting Actions
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {canCheck && (
+                        <button
+                          type="button"
+                          onClick={() => void handleCheck()}
+                          disabled={isBetting}
+                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                        >
+                          {isBetting ? 'Betting...' : 'Check'}
+                        </button>
+                      )}
+                      {canCall && (
+                        <button
+                          type="button"
+                          onClick={() => void handleCall()}
+                          disabled={isBetting}
+                          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                        >
+                          {isBetting ? 'Betting...' : `Call ${callAmount}`}
+                        </button>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={raiseAmount}
+                          onChange={(e) => setRaiseAmount(e.target.value)}
+                          placeholder="Raise to..."
+                          min={(game.currentBet ?? 0) + 1}
+                          className="w-24 rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleRaise()}
+                          disabled={isBetting || !raiseAmount}
+                          className="rounded-md bg-amber-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                        >
+                          {isBetting ? 'Betting...' : 'Raise'}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleFold()}
+                        disabled={isBetting}
+                        className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                      >
+                        {isBetting ? 'Betting...' : 'Fold'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           </div>

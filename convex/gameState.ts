@@ -69,6 +69,7 @@ export function createInitialGameDocument(
     communityTiles: [] as GameTile[],
     deck,
     pot: 0,
+    currentBet: 0,
     currentPlayerIndex: 0,
     status: "waiting" as const,
     createdAt: now,
