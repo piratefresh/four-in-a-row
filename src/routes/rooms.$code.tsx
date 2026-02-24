@@ -1,6 +1,7 @@
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery } from 'convex/react'
 import { useEffect, useMemo, useState } from 'react'
+import { RoomHandsBoard } from '@/components/rooms/RoomHandsBoard'
 import { api } from '../../convex/_generated/api'
 import { authClient } from '@/lib/auth-client'
 
@@ -9,6 +10,7 @@ export const Route = createFileRoute('/rooms/$code')({
 })
 
 const HEARTBEAT_INTERVAL_MS = 30_000
+const DEALER_PLAYER_ID = 'ai_dealer'
 
 function RoomDetailsPage() {
   const { code } = Route.useParams()
