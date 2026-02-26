@@ -9,10 +9,12 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoomsCodeRouteImport } from './routes/rooms.$code'
+import { Route as ResultsCodeRouteImport } from './routes/results.$code'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as DemoBetterAuthRouteImport } from './routes/demo/better-auth'
 import { Route as DemoStartServerFuncsRouteImport } from './routes/demo/start.server-funcs'
@@ -24,6 +26,11 @@ import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr
 import { Route as DemoStartSsrFullSsrRouteImport } from './routes/demo/start.ssr.full-ssr'
 import { Route as DemoStartSsrDataOnlyRouteImport } from './routes/demo/start.ssr.data-only'
 
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
   path: '/register',
@@ -42,6 +49,11 @@ const IndexRoute = IndexRouteImport.update({
 const RoomsCodeRoute = RoomsCodeRouteImport.update({
   id: '/rooms/$code',
   path: '/rooms/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResultsCodeRoute = ResultsCodeRouteImport.update({
+  id: '/results/$code',
+  path: '/results/$code',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoConvexRoute = DemoConvexRouteImport.update({
@@ -99,8 +111,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/settings': typeof SettingsRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -115,8 +129,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/settings': typeof SettingsRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -132,8 +148,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/settings': typeof SettingsRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -150,8 +168,10 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/settings'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/results/$code'
     | '/rooms/$code'
     | '/api/auth/$'
     | '/demo/api/names'
@@ -166,8 +186,10 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/settings'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/results/$code'
     | '/rooms/$code'
     | '/api/auth/$'
     | '/demo/api/names'
@@ -182,8 +204,10 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/register'
+    | '/settings'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/results/$code'
     | '/rooms/$code'
     | '/api/auth/$'
     | '/demo/api/names'
@@ -199,8 +223,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  SettingsRoute: typeof SettingsRoute
   DemoBetterAuthRoute: typeof DemoBetterAuthRoute
   DemoConvexRoute: typeof DemoConvexRoute
+  ResultsCodeRoute: typeof ResultsCodeRoute
   RoomsCodeRoute: typeof RoomsCodeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   DemoApiNamesRoute: typeof DemoApiNamesRoute
@@ -214,6 +240,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/register': {
       id: '/register'
       path: '/register'
@@ -240,6 +273,13 @@ declare module '@tanstack/react-router' {
       path: '/rooms/$code'
       fullPath: '/rooms/$code'
       preLoaderRoute: typeof RoomsCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/results/$code': {
+      id: '/results/$code'
+      path: '/results/$code'
+      fullPath: '/results/$code'
+      preLoaderRoute: typeof ResultsCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/convex': {
@@ -319,8 +359,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  SettingsRoute: SettingsRoute,
   DemoBetterAuthRoute: DemoBetterAuthRoute,
   DemoConvexRoute: DemoConvexRoute,
+  ResultsCodeRoute: ResultsCodeRoute,
   RoomsCodeRoute: RoomsCodeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   DemoApiNamesRoute: DemoApiNamesRoute,

@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import { action, internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import {
   createInitialGameDocument,
   createShuffledDeck,
@@ -12,8 +12,10 @@ import {
   ANTE_AMOUNT,
   RAISE_LADDER,
   MAX_RAISES_PER_ROUND,
+  SPEED_BONUS_TIER_1_SECONDS,
+  SPEED_BONUS_TIER_2_SECONDS,
 } from "./gameState";
-import type { GameStage } from "./gameState";
+import type { GameStage, GameDeckTile, GameTile } from "./gameState";
 import type { Id } from "./_generated/dataModel";
 
 const AI_DEALER_PLAYER_ID = "ai_dealer";
@@ -114,8 +116,13 @@ export const startGame = mutation({
 
     const COMMUNITY_TILES_COUNT = 5;
     const requiredTiles = participantIds.length * INITIAL_HAND_SIZE + COMMUNITY_TILES_COUNT;
-    const workingDeck =
-      game.deck.length > 0 ? [...game.deck] : createShuffledDeck();
+
+    // Always generate a fresh deck with choice cards when starting a game
+    const workingDeck = createShuffledDeck();
+
+    // Debug: Log choice card count
+    const choiceCards = workingDeck.filter(card => card.kind === "choice");
+    console.log(`Deck generated: ${workingDeck.length} total cards, ${choiceCards.length} choice cards`);
 
     if (workingDeck.length < requiredTiles) {
       throw new ConvexError({
@@ -136,14 +143,34 @@ export const startGame = mutation({
     // Create community tiles (all unrevealed initially)
     const communityTiles = [];
     for (let i = 0; i < COMMUNITY_TILES_COUNT; i++) {
-      const tile = workingDeck.splice(0, 1)[0];
-      communityTiles.push({
-        letter: tile.letter,
-        baseValue: tile.baseValue,
-        revealed: false,
-        // Optional: Add multipliers to some tiles
-        // multiplier: i === 2 ? "2L" as const : i === 4 ? "3L" as const : undefined,
-      });
+      const card = workingDeck.splice(0, 1)[0];
+      if (!card) {
+        throw new ConvexError({
+          code: "DECK_EXHAUSTED",
+          message: "Deck ran out of cards during community tile creation.",
+        });
+      }
+
+      if (card.kind === "single") {
+        communityTiles.push({
+          kind: "single" as const,
+          letter: card.letter,
+          baseValue: card.baseValue,
+          revealed: false,
+          // Optional: Add multipliers to some tiles
+          // multiplier: i === 2 ? "2L" as const : i === 4 ? "3L" as const : undefined,
+        });
+      } else {
+        // Choice card
+        communityTiles.push({
+          kind: "choice" as const,
+          options: card.options,
+          baseValues: card.baseValues,
+          revealed: false,
+          // Optional: Add multipliers to some tiles
+          // multiplier: i === 2 ? "2L" as const : i === 4 ? "3L" as const : undefined,
+        });
+      }
     }
 
     const now = Date.now();
@@ -194,6 +221,120 @@ export const startGame = mutation({
       playersDealt: participantIds.length,
       includesAiDealer: participantIds.includes(AI_DEALER_PLAYER_ID),
     };
+  },
+});
+
+// Internal mutation for auto-starting game (called by scheduler)
+export const internalStartGame = internalMutation({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, args) => {
+    const game = await ctx.db.get(args.gameId);
+    if (!game || game.status !== "waiting") {
+      // Game already started or doesn't exist, silently return
+      return { ok: false, reason: "Game not in waiting state" };
+    }
+
+    const roomId = game.roomId as Id<"rooms">;
+    const room = await ctx.db.get(roomId);
+    if (!room) {
+      return { ok: false, reason: "Room not found" };
+    }
+
+    const activePlayers = await ctx.db
+      .query("players")
+      .withIndex("roomId_status", (q) =>
+        q.eq("roomId", room._id).eq("status", "active"),
+      )
+      .collect();
+
+    if (activePlayers.length < 1) {
+      return { ok: false, reason: "Not enough players" };
+    }
+
+    activePlayers.sort((a, b) => a.seatIndex - b.seatIndex);
+    const participantIds = activePlayers.map((player) => player._id as string);
+    if (participantIds.length === 1) {
+      participantIds.push(AI_DEALER_PLAYER_ID);
+    }
+
+    const COMMUNITY_TILES_COUNT = 5;
+    const requiredTiles = participantIds.length * INITIAL_HAND_SIZE + COMMUNITY_TILES_COUNT;
+
+    const workingDeck = createShuffledDeck();
+
+    if (workingDeck.length < requiredTiles) {
+      return { ok: false, reason: "Deck exhausted" };
+    }
+
+    const existingHands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", game._id))
+      .collect();
+
+    for (const hand of existingHands) {
+      await ctx.db.delete(hand._id);
+    }
+
+    // Create community tiles (all unrevealed initially)
+    const communityTiles = [];
+    for (let i = 0; i < COMMUNITY_TILES_COUNT; i++) {
+      const card = workingDeck.splice(0, 1)[0];
+      if (!card) {
+        return { ok: false, reason: "Deck exhausted during community tile creation" };
+      }
+
+      if (card.kind === "single") {
+        communityTiles.push({
+          kind: "single" as const,
+          letter: card.letter,
+          baseValue: card.baseValue,
+          revealed: false,
+        });
+      } else {
+        communityTiles.push({
+          kind: "choice" as const,
+          options: card.options,
+          baseValues: card.baseValues,
+          revealed: false,
+        });
+      }
+    }
+
+    const now = Date.now();
+    const totalAnte = ANTE_AMOUNT * participantIds.length;
+
+    for (const participantId of participantIds) {
+      const tiles = workingDeck.splice(0, INITIAL_HAND_SIZE);
+
+      await ctx.db.insert("playerHands", {
+        gameId: game._id,
+        playerId: participantId,
+        tiles,
+        chips: INITIAL_CHIPS - ANTE_AMOUNT,
+        betThisRound: 0,
+        totalBet: ANTE_AMOUNT,
+        hasActed: false,
+        hasFolded: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.db.patch(game._id, {
+      status: "active",
+      communityTiles,
+      deck: workingDeck,
+      pot: totalAnte,
+      currentBet: 0,
+      currentPlayerIndex: 0,
+      raisesThisRound: 0,
+      updatedAt: now,
+    });
+    await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
+
+    return { ok: true };
   },
 });
 
@@ -393,7 +534,7 @@ export const check = mutation({
     }));
 
     // Handle turn and stage progression
-    await handlePostActionProgression(ctx, game, updatedHands);
+    await handlePostActionProgression(ctx, game as any, updatedHands);
 
     return {
       ok: true,
@@ -515,7 +656,7 @@ export const call = mutation({
     }));
 
     // Handle turn and stage progression
-    await handlePostActionProgression(ctx, game, updatedHands);
+    await handlePostActionProgression(ctx, game as any, updatedHands);
 
     return {
       ok: true,
@@ -680,7 +821,7 @@ export const raise = mutation({
     }));
 
     // Handle turn advancement (stage won't advance because not everyone has acted after raise)
-    await advanceTurn(ctx, game, updatedHands);
+    await advanceTurn(ctx, game as any, updatedHands);
 
     return {
       ok: true,
@@ -782,7 +923,7 @@ export const fold = mutation({
     }));
 
     // Handle turn and stage progression
-    await handlePostActionProgression(ctx, game, updatedHands);
+    await handlePostActionProgression(ctx, game as any, updatedHands);
 
     return {
       ok: true,
@@ -804,11 +945,20 @@ export const submitWordInternal = internalMutation({
         letter: v.string(),
         baseValue: v.number(),
         source: v.union(v.literal("hand"), v.literal("community")),
+        cardIndex: v.optional(v.number()),
+        wasChoice: v.optional(v.boolean()),
       })
     ),
+    choiceResolutions: v.optional(
+      v.object({
+        hand: v.optional(v.record(v.string(), v.string())),
+        community: v.optional(v.record(v.string(), v.string())),
+      })
+    ),
+    invalidWord: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { gameId, playerId, word, tiles } = args;
+    const { gameId, playerId, word, tiles, choiceResolutions, invalidWord } = args;
 
     const normalizedWord = word.toLowerCase().trim();
     const normalizedPlayerId = playerId.trim();
@@ -882,21 +1032,38 @@ export const submitWordInternal = internalMutation({
     // Validate tiles
     const handTileCount = new Map<string, number>();
     for (const tile of playerHand.tiles) {
-      const key = `${tile.letter}-${tile.baseValue}`;
-      handTileCount.set(key, (handTileCount.get(key) || 0) + 1);
+      if (tile.kind === "single") {
+        const key = `${tile.letter}-${tile.baseValue}`;
+        handTileCount.set(key, (handTileCount.get(key) || 0) + 1);
+      } else {
+        // For choice cards, we'll use the card index for tracking
+        const key = `choice-${playerHand.tiles.indexOf(tile)}`;
+        handTileCount.set(key, 1);
+      }
     }
 
     const communityTileCount = new Map<string, number>();
-    for (const tile of game.communityTiles.filter(t => t.revealed)) {
-      const key = `${tile.letter}-${tile.baseValue}`;
-      communityTileCount.set(key, (communityTileCount.get(key) || 0) + 1);
-    }
+    game.communityTiles
+      .filter((t: GameTile) => t.revealed)
+      .forEach((tile: GameTile, index: number) => {
+        if (tile.kind === "single") {
+          const key = `${tile.letter}-${tile.baseValue}`;
+          communityTileCount.set(key, (communityTileCount.get(key) || 0) + 1);
+        } else {
+          // For choice cards, use the card index
+          const key = `choice-${index}`;
+          communityTileCount.set(key, 1);
+        }
+      });
 
     const usedHandTiles = new Map<string, number>();
     const usedCommunityTiles = new Map<string, number>();
 
     for (const tile of tiles) {
-      const key = `${tile.letter}-${tile.baseValue}`;
+      // For choice cards, use cardIndex; for single cards, use letter-baseValue
+      const key = tile.wasChoice && tile.cardIndex !== undefined
+        ? `choice-${tile.cardIndex}`
+        : `${tile.letter}-${tile.baseValue}`;
 
       if (tile.source === "hand") {
         const used = (usedHandTiles.get(key) || 0) + 1;
@@ -940,9 +1107,12 @@ export const submitWordInternal = internalMutation({
       }
     }
 
-    // Calculate score
+    // Calculate score (0 for invalid words)
     const now = Date.now();
-    const score = calculateScore(normalizedWord, now, game.updatedAt);
+    const showdownStart = game.showdownStartedAt ?? game.updatedAt;
+    const score = invalidWord
+      ? { total: 0, lengthPoints: 0, speedBonus: 0, validWordBonus: 0 }
+      : calculateScore(normalizedWord, now, showdownStart);
 
     // Create submission
     await ctx.db.insert("wordSubmissions", {
@@ -951,6 +1121,7 @@ export const submitWordInternal = internalMutation({
       stage: game.stage,
       word: normalizedWord,
       tiles,
+      choiceResolutions,
       score: score.total,
       scoreBreakdown: {
         lengthPoints: score.lengthPoints,
@@ -1018,11 +1189,15 @@ export const submitWordInternal = internalMutation({
 
     // During showdown, no turn progression - just return success
     return {
-      ok: true,
+      ok: !invalidWord,
       word: normalizedWord,
       score: score.total,
       scoreBreakdown: score,
       submissionTime: now,
+      forfeited: invalidWord,
+      message: invalidWord
+        ? `"${normalizedWord}" is not a valid dictionary word. Submitted with 0 points.`
+        : undefined,
     };
   },
 });
@@ -1170,10 +1345,10 @@ function calculateLengthPoints(wordLength: number): number {
   return wordLength * 3;
 }
 
-function calculateSpeedBonus(submissionTime: number, stageStartTime: number): number {
-  const secondsElapsed = (submissionTime - stageStartTime) / 1000;
-  if (secondsElapsed <= 10) return 10;
-  if (secondsElapsed <= 20) return 5;
+function calculateSpeedBonus(submissionTime: number, showdownStartTime: number): number {
+  const secondsElapsed = (submissionTime - showdownStartTime) / 1000;
+  if (secondsElapsed <= SPEED_BONUS_TIER_1_SECONDS) return 10;
+  if (secondsElapsed <= SPEED_BONUS_TIER_2_SECONDS) return 5;
   return 0;
 }
 
@@ -1200,6 +1375,14 @@ export const submitWord = action({
         letter: v.string(),
         baseValue: v.number(),
         source: v.union(v.literal("hand"), v.literal("community")),
+        cardIndex: v.optional(v.number()),
+        wasChoice: v.optional(v.boolean()),
+      })
+    ),
+    choiceResolutions: v.optional(
+      v.object({
+        hand: v.optional(v.record(v.string(), v.string())),
+        community: v.optional(v.record(v.string(), v.string())),
       })
     ),
   },
@@ -1212,7 +1395,7 @@ export const submitWord = action({
     forfeited?: boolean;
     message?: string;
   }> => {
-    const { gameId, playerId, word, tiles } = args;
+    const { gameId, playerId, word, tiles, choiceResolutions } = args;
     const normalizedPlayerId = playerId.trim();
 
     // Validate word format
@@ -1236,24 +1419,16 @@ export const submitWord = action({
       { word: normalizedWord },
     );
     if (!validationData.valid) {
-      await ctx.runMutation(api.games.forfeitShowdown, {
+      // Submit invalid word with score of 0 instead of forfeiting
+      // This allows players to see all submissions before game ends
+      return await ctx.runMutation(internal.games.submitWordInternal, {
         gameId,
         playerId: normalizedPlayerId,
-      });
-      return {
-        ok: false,
         word: normalizedWord,
-        score: 0,
-        scoreBreakdown: {
-          lengthPoints: 0,
-          speedBonus: 0,
-          validWordBonus: 0,
-          total: 0,
-        },
-        submissionTime: Date.now(),
-        forfeited: true,
-        message: `"${normalizedWord}" is not a valid dictionary word. You forfeited this showdown.`,
-      };
+        tiles,
+        choiceResolutions,
+        invalidWord: true, // Mark as invalid but still submit
+      });
     }
 
     // Call helper mutation to handle database operations
@@ -1262,6 +1437,7 @@ export const submitWord = action({
       playerId: normalizedPlayerId,
       word: normalizedWord,
       tiles,
+      choiceResolutions,
     });
   },
 });
@@ -1406,7 +1582,7 @@ export const resolveShowdown = mutation({
   },
 });
 
-export const getShowdownResults = query({
+export const getWordSubmissions = query({
   args: {
     gameId: v.id("games"),
   },
@@ -1416,7 +1592,7 @@ export const getShowdownResults = query({
       return null;
     }
 
-    if (game.stage !== "showdown" || game.status !== "completed") {
+    if (game.stage !== "showdown") {
       return null;
     }
 
@@ -1450,19 +1626,98 @@ export const getShowdownResults = query({
     const eligibleSubmissions = Array.from(submissionsByPlayer.values());
 
     return {
+      submissions: eligibleSubmissions
+        .sort((a, b) => b.score - a.score)
+        .map(s => ({
+          playerId: s.playerId,
+          word: s.word,
+          tiles: s.tiles,
+          choiceResolutions: s.choiceResolutions,
+          score: s.score,
+          scoreBreakdown: s.scoreBreakdown,
+        })),
+      isCompleted: game.status === "completed",
+      winnerId: game.winnerId,
+    };
+  },
+});
+
+export const getShowdownResults = query({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, args) => {
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      return null;
+    }
+
+    if (game.stage !== "showdown" || game.status !== "completed") {
+      return null;
+    }
+
+    // Get all submissions
+    const allSubmissions = await ctx.db
+      .query("wordSubmissions")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    // Get player hands to know who folded
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
+    // Group submissions by player and take the latest one
+    const submissionsByPlayer = new Map<string, typeof allSubmissions[0]>();
+    for (const submission of allSubmissions) {
+      const existing = submissionsByPlayer.get(submission.playerId);
+      if (!existing || submission.createdAt > existing.createdAt) {
+        submissionsByPlayer.set(submission.playerId, submission);
+      }
+    }
+
+    // Create results for all players including forfeited/folded players
+    const allPlayerResults = hands.map(hand => {
+      const submission = submissionsByPlayer.get(hand.playerId);
+
+      if (hand.hasFolded && !submission) {
+        // Player forfeited/folded without submitting
+        return {
+          playerId: hand.playerId,
+          word: null,
+          score: 0,
+          scoreBreakdown: null,
+          status: "forfeited" as const,
+        };
+      } else if (submission) {
+        // Player submitted a word
+        return {
+          playerId: submission.playerId,
+          word: submission.word,
+          score: submission.score,
+          scoreBreakdown: submission.scoreBreakdown,
+          status: "submitted" as const,
+        };
+      } else {
+        // Player didn't submit (shouldn't happen, but handle it)
+        return {
+          playerId: hand.playerId,
+          word: null,
+          score: 0,
+          scoreBreakdown: null,
+          status: "no-submission" as const,
+        };
+      }
+    });
+
+    return {
       hasWinner: !!game.winnerId,
       winnerId: game.winnerId,
       winningWord: game.winningWord,
       winningScore: game.winningScore,
       winningScoreBreakdown: game.winningScoreBreakdown,
-      allSubmissions: eligibleSubmissions
-        .sort((a, b) => b.score - a.score)
-        .map(s => ({
-          playerId: s.playerId,
-          word: s.word,
-          score: s.score,
-          scoreBreakdown: s.scoreBreakdown,
-        })),
+      allSubmissions: allPlayerResults.sort((a, b) => b.score - a.score),
     };
   },
 });
@@ -1532,8 +1787,8 @@ async function advanceStage(
   game: {
     _id: Id<"games">;
     stage: GameStage;
-    communityTiles: Array<{ letter: string; baseValue: number; revealed: boolean; multiplier?: "2L" | "3L" }>;
-    deck: Array<{ letter: string; baseValue: number }>;
+    communityTiles: GameTile[];
+    deck: GameDeckTile[];
     currentBet: number;
     raisesThisRound?: number;
   },
@@ -1578,14 +1833,21 @@ async function advanceStage(
   const targetStage = nextStage === "final" ? "showdown" : nextStage;
 
   // Update game to new stage
-  await ctx.db.patch(game._id, {
+  const updateData: any = {
     stage: targetStage,
     communityTiles: updatedCommunityTiles,
     currentBet: 0,
     currentPlayerIndex: 0, // Reset to first player
     raisesThisRound: 0, // Reset raise counter for new betting round
     updatedAt: now,
-  });
+  };
+
+  // Set showdown start time when entering showdown stage
+  if (targetStage === "showdown") {
+    updateData.showdownStartedAt = now;
+  }
+
+  await ctx.db.patch(game._id, updateData);
 
   return true;
 }
@@ -1600,8 +1862,8 @@ async function handlePostActionProgression(
     _id: Id<"games">;
     stage: GameStage;
     currentPlayerIndex: number;
-    communityTiles: Array<{ letter: string; baseValue: number; revealed: boolean; multiplier?: "2L" | "3L" }>;
-    deck: Array<{ letter: string; baseValue: number }>;
+    communityTiles: GameTile[];
+    deck: GameDeckTile[];
     currentBet: number;
     raisesThisRound?: number;
     status: string;

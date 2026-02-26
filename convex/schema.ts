@@ -26,6 +26,7 @@ export const appTables = {
     seatIndex: v.number(),
     isHost: v.boolean(),
     status: v.union(v.literal("active"), v.literal("left")),
+    readyStatus: v.optional(v.boolean()),
     lastSeenAt: v.number(),
   })
     .index("roomId", ["roomId"])
@@ -60,6 +61,7 @@ export const appTables = {
         validWordBonus: v.number(),
       })
     ),
+    showdownStartedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -89,6 +91,16 @@ export const appTables = {
         letter: v.string(),
         baseValue: v.number(),
         source: v.union(v.literal("hand"), v.literal("community")),
+        // For resolved choice cards - which card index and which option was chosen
+        cardIndex: v.optional(v.number()),
+        wasChoice: v.optional(v.boolean()),
+      })
+    ),
+    // Map of card indices to selected letter choices (for choice cards used in submission)
+    choiceResolutions: v.optional(
+      v.object({
+        hand: v.optional(v.record(v.string(), v.string())), // handCardIndex -> selectedLetter
+        community: v.optional(v.record(v.string(), v.string())), // communityCardIndex -> selectedLetter
       })
     ),
     score: v.number(),

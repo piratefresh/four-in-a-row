@@ -1,9 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RoomHandsBoard } from "@/components/rooms/RoomHandsBoard";
+import { RoomHandsBoardV2 } from "@/components/rooms/RoomHandsBoardV2";
+import { RoomGameProvider } from "@/components/rooms/RoomGameContext";
+import { RoomLobbyPanel } from "@/components/rooms/RoomLobbyPanel";
+import { RoomPageProvider } from "@/components/rooms/RoomPageContext";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
+import { SHOWDOWN_TIMER_MS } from "../../convex/gameState";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 
 export const Route = createFileRoute("/rooms/$code")({
   component: RoomDetailsPage,
@@ -13,6 +18,26 @@ const DEALER_PLAYER_ID = "ai_dealer";
 const ANTE_AMOUNT = 20;
 const RAISE_LADDER = [20, 40, 60, 80, 100, 120, 140, 160, 200];
 const MAX_RAISES_PER_ROUND = 3;
+const INITIAL_CHIPS = 1000;
+// SHOWDOWN_TIMER_MS is imported from gameState.ts
+
+function StatusScreen({ message }: { message: string }) {
+  return (
+    <div className="relative min-h-screen bg-[#252525]">
+      <LoadingOverlay message={message} />
+    </div>
+  );
+}
+
+function isTransientActionMessage(message: string | null) {
+  return (
+    !!message &&
+    (message === "Checked." ||
+      message === "Folded." ||
+      message.startsWith("Matched ") ||
+      message.startsWith("Raised to "))
+  );
+}
 
 function RoomDetailsPage() {
   const { code } = Route.useParams();
@@ -31,28 +56,50 @@ function RoomDetailsPage() {
     api.games.getShowdownResults,
     game ? { gameId: game._id } : "skip",
   );
+  const wordSubmissions = useQuery(
+    api.games.getWordSubmissions,
+    game ? { gameId: game._id } : "skip",
+  );
   const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
-  const startGame = useMutation(api.games.startGame);
+  const toggleReady = useMutation(api.rooms.toggleReady);
   const check = useMutation((api as any).games.check);
   const call = useMutation((api as any).games.call);
   const raise = useMutation((api as any).games.raise);
   const fold = useMutation((api as any).games.fold);
-  console.log("roomData", roomData);
-  console.log("session", session);
-  // Prefer server-identified viewer membership; fall back to auth ID match.
+  const forfeitShowdown = useMutation(api.games.forfeitShowdown);
+
   const myPlayer = useMemo(() => {
     if (!roomData?.members) return null;
 
+    if (session?.user) {
+      const authMatched =
+        roomData.members.find(
+          (member) => member.authUserId === session.user.id,
+        ) ?? null;
+      if (authMatched) return authMatched;
+    }
+
     if (roomData.viewerPlayerId) {
       return (
-        roomData.members.find((m) => m._id === roomData.viewerPlayerId) ?? null
+        roomData.members.find(
+          (member) => member._id === roomData.viewerPlayerId,
+        ) ?? null
       );
     }
 
-    if (!session?.user) return null;
-    return roomData.members.find((m) => m.authUserId === session.user.id);
-  }, [session, roomData]);
+    return null;
+  }, [roomData, session?.user]);
+
+  const sessionNameLower = session?.user?.name?.trim().toLowerCase() ?? null;
+  const nameMatchedPlayerId = useMemo(() => {
+    if (!sessionNameLower || !roomData?.members) return null;
+    const byName =
+      roomData.members.find(
+        (member) => member.name.trim().toLowerCase() === sessionNameLower,
+      ) ?? null;
+    return byName?._id ? String(byName._id) : null;
+  }, [roomData?.members, sessionNameLower]);
 
   const playerId = myPlayer?._id ? String(myPlayer._id) : null;
   const myPlayerRef = useRef<typeof myPlayer>(null);
@@ -63,15 +110,11 @@ function RoomDetailsPage() {
   const [leaveMessage, setLeaveMessage] = useState<string | null>(null);
   const [gameMessage, setGameMessage] = useState<string | null>(null);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
-  const [isStartingGame, setIsStartingGame] = useState(false);
   const [isBetting, setIsBetting] = useState(false);
-
-  const isTransientActionMessage = (message: string | null) =>
-    !!message &&
-    (message === "Checked." ||
-      message === "Folded." ||
-      message.startsWith("Matched ") ||
-      message.startsWith("Raised to "));
+  const [isTogglingReady, setIsTogglingReady] = useState(false);
+  const [showdownTimeRemaining, setShowdownTimeRemaining] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     myPlayerRef.current = myPlayer;
@@ -107,11 +150,20 @@ function RoomDetailsPage() {
     [leaveRoom],
   );
 
-  const memberById = useMemo(() => {
-    return new Map(
-      (roomData?.members ?? []).map((member) => [String(member._id), member]),
-    );
-  }, [roomData?.members]);
+  const memberById = useMemo(
+    () =>
+      new Map(
+        (roomData?.members ?? []).map((member) => [String(member._id), member]),
+      ),
+    [roomData?.members],
+  );
+
+  const getPlayerName = useCallback(
+    (targetPlayerId: string, handIndex?: number) =>
+      memberById.get(targetPlayerId)?.name ??
+      (handIndex !== undefined ? `Player ${handIndex + 1}` : targetPlayerId),
+    [memberById],
+  );
 
   const nonDealerHands = useMemo(
     () =>
@@ -127,7 +179,21 @@ function RoomDetailsPage() {
     [memberById, playerHands],
   );
 
-  // Calculate turn order and current player
+  const bottomPlayerId =
+    playerId ?? nameMatchedPlayerId ?? nonDealerHands[0]?.playerId ?? undefined;
+
+  const rotatedHands = useMemo(() => {
+    if (!bottomPlayerId || nonDealerHands.length === 0) return nonDealerHands;
+    const bottomIndex = nonDealerHands.findIndex(
+      (hand) => hand.playerId === bottomPlayerId,
+    );
+    if (bottomIndex <= 0) return nonDealerHands;
+    return [
+      ...nonDealerHands.slice(bottomIndex),
+      ...nonDealerHands.slice(0, bottomIndex),
+    ];
+  }, [bottomPlayerId, nonDealerHands]);
+
   const turnOrderedHands = useMemo(
     () =>
       [...(playerHands ?? [])].sort((a, b) => {
@@ -152,7 +218,7 @@ function RoomDetailsPage() {
       playerId
         ? playerHands?.find((hand) => hand.playerId === playerId)
         : undefined,
-    [playerId, playerHands],
+    [playerHands, playerId],
   );
 
   const canCheck = useMemo(() => {
@@ -161,10 +227,11 @@ function RoomDetailsPage() {
       !myHand ||
       currentTurnPlayerId !== playerId ||
       game.status !== "active"
-    )
+    ) {
       return false;
+    }
     return game.currentBet === 0 || myHand.betThisRound === game.currentBet;
-  }, [game, myHand, currentTurnPlayerId, playerId]);
+  }, [currentTurnPlayerId, game, myHand, playerId]);
 
   const canCall = useMemo(() => {
     if (
@@ -172,11 +239,14 @@ function RoomDetailsPage() {
       !myHand ||
       currentTurnPlayerId !== playerId ||
       game.status !== "active"
-    )
+    ) {
       return false;
+    }
     const amountNeeded = game.currentBet - myHand.betThisRound;
-    return game.currentBet > 0 && amountNeeded > 0 && myHand.chips >= amountNeeded;
-  }, [game, myHand, currentTurnPlayerId, playerId]);
+    return (
+      game.currentBet > 0 && amountNeeded > 0 && myHand.chips >= amountNeeded
+    );
+  }, [currentTurnPlayerId, game, myHand, playerId]);
 
   const callAmount = useMemo(() => {
     if (!game || !myHand) return 0;
@@ -196,8 +266,21 @@ function RoomDetailsPage() {
     Boolean(game && myHand && effectiveNextRaiseLevel !== undefined) &&
     isMyTurn &&
     raisesThisRound < MAX_RAISES_PER_ROUND &&
-    myHand!.chips >= (effectiveNextRaiseLevel! - myHand!.betThisRound);
+    myHand!.chips >= effectiveNextRaiseLevel! - myHand!.betThisRound;
 
+  const displayHands = useMemo(() => {
+    if (game?.status === "waiting" && roomData?.members) {
+      return roomData.members.map((member) => ({
+        _id: String(member._id),
+        playerId: String(member._id),
+        tiles: [],
+        chips: INITIAL_CHIPS,
+        betThisRound: 0,
+        totalBet: 0,
+      }));
+    }
+    return rotatedHands;
+  }, [game?.status, roomData?.members, rotatedHands]);
 
   useEffect(() => {
     const onPageHide = () => {
@@ -209,20 +292,36 @@ function RoomDetailsPage() {
     };
   }, [leaveCurrentRoom]);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (isAuthPending) return;
     if (!session?.user) {
       void navigate({ to: "/login" });
     }
-  }, [session, isAuthPending, navigate]);
+  }, [isAuthPending, navigate, session?.user]);
 
   useEffect(() => {
     if (!isTransientActionMessage(gameMessage)) return;
     setGameMessage(null);
   }, [game?.currentBet, game?.currentPlayerIndex, game?.stage, gameMessage]);
 
-  const handleLeaveRoom = async () => {
+  useEffect(() => {
+    if (!roomData?.room._id || game !== undefined || isCreatingGame) return;
+
+    const autoCreateGame = async () => {
+      setIsCreatingGame(true);
+      try {
+        await createGameForRoom({ roomId: roomData.room._id });
+      } catch (error) {
+        console.error("Failed to auto-create game:", error);
+      } finally {
+        setIsCreatingGame(false);
+      }
+    };
+
+    void autoCreateGame();
+  }, [createGameForRoom, game, isCreatingGame, roomData?.room._id]);
+
+  const handleLeaveRoom = useCallback(async () => {
     if (!myPlayerRef.current) {
       setLeaveMessage("You are not a member of this room.");
       return;
@@ -239,9 +338,9 @@ function RoomDetailsPage() {
     } finally {
       setIsLeavingRoom(false);
     }
-  };
+  }, [leaveCurrentRoom, navigate]);
 
-  const handleBack = async () => {
+  const handleBack = useCallback(async () => {
     if (isLeavingRoom) return;
     setIsLeavingRoom(true);
     setLeaveMessage(null);
@@ -251,41 +350,67 @@ function RoomDetailsPage() {
     } finally {
       setIsLeavingRoom(false);
     }
-  };
+  }, [isLeavingRoom, leaveCurrentRoom, navigate]);
 
-  const handleCreateGame = async () => {
-    if (!roomData) return;
-    setIsCreatingGame(true);
-    setGameMessage(null);
-    try {
-      await createGameForRoom({ roomId: roomData.room._id });
-      setGameMessage("Game created.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to create game.";
-      setGameMessage(message);
-    } finally {
-      setIsCreatingGame(false);
+  const handleViewResults = useCallback(async () => {
+    await navigate({ to: "/results/$code", params: { code } });
+  }, [code, navigate]);
+
+  useEffect(() => {
+    if (game?.status !== "completed" || !showdownResults) return;
+    const timer = setTimeout(() => {
+      void handleViewResults();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [game?.status, handleViewResults, showdownResults]);
+
+  // Showdown timer - synced with backend showdownStartedAt timestamp
+  useEffect(() => {
+    if (game?.stage !== "showdown" || game?.status !== "active") {
+      setShowdownTimeRemaining(null);
+      return;
     }
-  };
 
-  const handleStartGame = async () => {
-    if (!game?._id) return;
-    setIsStartingGame(true);
-    setGameMessage(null);
-    try {
-      await startGame({ gameId: game._id });
-      setGameMessage("Game started.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to start game.";
-      setGameMessage(message);
-    } finally {
-      setIsStartingGame(false);
-    }
-  };
+    // Use backend showdownStartedAt if available, otherwise use current time
+    const showdownStart = game.showdownStartedAt ?? Date.now();
 
-  const handleCheck = async () => {
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - showdownStart;
+      const remaining = Math.max(0, SHOWDOWN_TIMER_MS - elapsed);
+
+      setShowdownTimeRemaining(remaining);
+
+      if (remaining === 0) {
+        clearInterval(interval);
+        // Auto-forfeit if timer runs out and player hasn't submitted
+        const hasSubmitted = wordSubmissions?.submissions?.some(
+          (s) => s.playerId === playerId,
+        );
+        if (
+          !hasSubmitted &&
+          playerId &&
+          game._id &&
+          myHand &&
+          !myHand.hasFolded
+        ) {
+          void forfeitShowdown({ gameId: game._id, playerId });
+        }
+      }
+    }, 100); // Update every 100ms for smooth countdown
+
+    return () => clearInterval(interval);
+  }, [
+    game?.stage,
+    game?.status,
+    game?.showdownStartedAt,
+    game?._id,
+    playerId,
+    myHand,
+    wordSubmissions,
+    forfeitShowdown,
+  ]);
+
+  const handleCheck = useCallback(async () => {
     if (!game?._id || !playerId) return;
     setIsBetting(true);
     setGameMessage(null);
@@ -299,9 +424,9 @@ function RoomDetailsPage() {
     } finally {
       setIsBetting(false);
     }
-  };
+  }, [check, game?._id, playerId]);
 
-  const handleCall = async () => {
+  const handleCall = useCallback(async () => {
     if (!game?._id || !playerId) return;
     setIsBetting(true);
     setGameMessage(null);
@@ -315,18 +440,26 @@ function RoomDetailsPage() {
     } finally {
       setIsBetting(false);
     }
-  };
+  }, [call, game?._id, playerId]);
 
-  const handleRaise = async () => {
-    if (!game?._id || !playerId || effectiveNextRaiseLevel === undefined) return;
+  const handleRaise = useCallback(async () => {
+    if (!game?._id || !playerId || effectiveNextRaiseLevel === undefined) {
+      return;
+    }
     if (raisesThisRound >= MAX_RAISES_PER_ROUND) {
-      setGameMessage(`Raise limit reached (${MAX_RAISES_PER_ROUND}/${MAX_RAISES_PER_ROUND}).`);
+      setGameMessage(
+        `Raise limit reached (${MAX_RAISES_PER_ROUND}/${MAX_RAISES_PER_ROUND}).`,
+      );
       return;
     }
     setIsBetting(true);
     setGameMessage(null);
     try {
-      await raise({ gameId: game._id, playerId, raiseToAmount: effectiveNextRaiseLevel });
+      await raise({
+        gameId: game._id,
+        playerId,
+        raiseToAmount: effectiveNextRaiseLevel,
+      });
       setGameMessage(`Raised to ${effectiveNextRaiseLevel} chips.`);
     } catch (error) {
       const message =
@@ -335,9 +468,9 @@ function RoomDetailsPage() {
     } finally {
       setIsBetting(false);
     }
-  };
+  }, [effectiveNextRaiseLevel, game?._id, playerId, raise, raisesThisRound]);
 
-  const handleFold = async () => {
+  const handleFold = useCallback(async () => {
     if (!game?._id || !playerId) return;
     setIsBetting(true);
     setGameMessage(null);
@@ -351,369 +484,181 @@ function RoomDetailsPage() {
     } finally {
       setIsBetting(false);
     }
-  };
+  }, [fold, game?._id, playerId]);
 
-  // Show loading while checking auth
+  const handleToggleReady = useCallback(async () => {
+    setIsTogglingReady(true);
+    setGameMessage(null);
+    try {
+      await toggleReady({ code });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to toggle ready status.";
+      setGameMessage(message);
+    } finally {
+      setIsTogglingReady(false);
+    }
+  }, [code, toggleReady]);
+
+  const roomGameContextValue = useMemo(
+    () => ({
+      anteAmount: ANTE_AMOUNT,
+      raisesThisRound,
+      maxRaisesPerRound: MAX_RAISES_PER_ROUND,
+      actionMessage: gameMessage,
+      showBettingControls:
+        game?.status === "active" &&
+        game.stage !== "final" &&
+        game.stage !== "showdown",
+      showReadyButton: game?.status === "waiting",
+      onReady: game?.status === "waiting" ? handleToggleReady : undefined,
+      isReady: myPlayer?.readyStatus ?? false,
+      isTogglingReady,
+      readyCount:
+        roomData?.members.filter((member) => member.readyStatus).length ?? 0,
+      totalPlayers: roomData?.members.length ?? 0,
+      allPlayersReady:
+        (roomData?.members?.length ?? 0) > 0 &&
+        (roomData?.members?.every((member) => member.readyStatus) ?? false),
+      isBetting,
+      canCheck,
+      canCall,
+      canRaise,
+      canFold: isMyTurn,
+      onCheck: canCheck ? handleCheck : undefined,
+      onCall: canCall ? handleCall : undefined,
+      onRaise: isMyTurn ? handleRaise : undefined,
+      onFold: isMyTurn ? handleFold : undefined,
+      onLeaveRoom: handleBack,
+      callLabel: callAmount > 0 ? `Call ${callAmount}` : "Call",
+      raiseLabel:
+        effectiveNextRaiseLevel !== undefined
+          ? `Raise to ${effectiveNextRaiseLevel}`
+          : "Raise Maxed",
+      showdownTimeRemaining,
+    }),
+    [
+      callAmount,
+      canCall,
+      canCheck,
+      canRaise,
+      effectiveNextRaiseLevel,
+      game?.stage,
+      game?.status,
+      gameMessage,
+      handleBack,
+      handleCall,
+      handleCheck,
+      handleFold,
+      handleRaise,
+      handleToggleReady,
+      isBetting,
+      isMyTurn,
+      isTogglingReady,
+      myPlayer?.readyStatus,
+      raisesThisRound,
+      roomData?.members,
+      showdownTimeRemaining,
+    ],
+  );
+
+  const roomPageContextValue = useMemo(
+    () => ({
+      state: {
+        code,
+        roomData,
+        game,
+        playerHands,
+        showdownResults: showdownResults ?? undefined,
+        playerId,
+        myPlayerReady: myPlayer?.readyStatus ?? false,
+        isLeavingRoom,
+        leaveMessage,
+        gameMessage,
+        isTogglingReady,
+        isBetting,
+        isMyTurn,
+        canCheck,
+        canCall,
+        canRaise,
+        callAmount,
+        effectiveNextRaiseLevel,
+      },
+      actions: {
+        leaveRoom: handleLeaveRoom,
+        back: handleBack,
+        toggleReady: handleToggleReady,
+        check: handleCheck,
+        call: handleCall,
+        raise: handleRaise,
+        fold: handleFold,
+      },
+      meta: {
+        getPlayerName,
+      },
+    }),
+    [
+      callAmount,
+      canCall,
+      canCheck,
+      canRaise,
+      code,
+      effectiveNextRaiseLevel,
+      game,
+      gameMessage,
+      getPlayerName,
+      handleBack,
+      handleCall,
+      handleCheck,
+      handleFold,
+      handleLeaveRoom,
+      handleRaise,
+      handleToggleReady,
+      isBetting,
+      isLeavingRoom,
+      isMyTurn,
+      isTogglingReady,
+      leaveMessage,
+      myPlayer?.readyStatus,
+      playerHands,
+      playerId,
+      roomData,
+      showdownResults,
+    ],
+  );
+
   if (isAuthPending) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
-        <div className="mx-auto max-w-3xl rounded-xl border border-slate-700 bg-slate-800/50 p-6">
-          <p className="text-sm text-slate-300">Loading...</p>
-        </div>
-      </div>
-    );
+    return <StatusScreen message="Loading..." />;
   }
 
-  // Will redirect to login in useEffect if not authenticated
   if (!session?.user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
-        <div className="mx-auto max-w-3xl rounded-xl border border-slate-700 bg-slate-800/50 p-6">
-          <p className="text-sm text-slate-300">Redirecting to login...</p>
-        </div>
-      </div>
-    );
+    return <StatusScreen message="Redirecting to login..." />;
+  }
+
+  // Show loading overlay while initial data is loading
+  if (roomData === undefined) {
+    return <StatusScreen message="Joining room..." />;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
-      <div className="mx-auto rounded-xl border border-slate-700 bg-slate-800/50 p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">Room {code}</h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleLeaveRoom()}
-              disabled={!myPlayer || isLeavingRoom}
-              className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-            >
-              {isLeavingRoom ? "Leaving..." : "Leave room"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBack()}
-              disabled={isLeavingRoom}
-              className="rounded-md bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-600"
-            >
-              Back
-            </button>
-          </div>
-        </div>
-
-        {leaveMessage && (
-          <p className="mb-4 text-sm text-rose-300">{leaveMessage}</p>
-        )}
-
-        {roomData === undefined && (
-          <p className="text-sm text-slate-300">Loading room...</p>
-        )}
-
-        {roomData === null && (
-          <p className="text-sm text-rose-300">Room not found.</p>
-        )}
-
-        {roomData && (
-          <div className="space-y-6">
-            <div>
-              {roomData.members.length === 0 && (
-                <p className="text-sm text-slate-400">No members joined yet.</p>
-              )}
-            </div>
-
-            <section className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-white">Game (MVP)</h2>
-                <span className="text-xs text-slate-400">
-                  Room ID: {roomData.room._id}
-                </span>
-              </div>
-
-              {!game && (
-                <p className="mb-3 text-sm text-slate-300">
-                  No game has been created for this room.
-                </p>
-              )}
-
-              {game && (
-                <>
-                  <div className="mb-3 grid grid-cols-2 gap-3 text-sm">
-                    <p className="text-slate-300">
-                      Stage: <span className="text-cyan-300">{game.stage}</span>
-                    </p>
-                    <p className="text-slate-300">
-                      Status:{" "}
-                      <span className="text-cyan-300">{game.status}</span>
-                    </p>
-                    <p className="text-slate-300">
-                      Pot:{" "}
-                      <span className="text-cyan-300">{game.pot} chips</span>
-                    </p>
-                    <p className="text-slate-300">
-                      Ante:{" "}
-                      <span className="text-cyan-300">{ANTE_AMOUNT} chips/player</span>
-                    </p>
-                    <p className="text-slate-300">
-                      Current Bet:{" "}
-                      <span className="text-cyan-300">
-                        {game.currentBet ?? 0} chips
-                      </span>
-                    </p>
-                    <p className="text-slate-300">
-                      Raises This Round:{" "}
-                      <span className="text-cyan-300">
-                        {raisesThisRound}/{MAX_RAISES_PER_ROUND}
-                      </span>
-                    </p>
-                    {myHand && (
-                      <>
-                        <p className="text-slate-300">
-                          Your Chips:{" "}
-                          <span className="text-cyan-300">
-                            {myHand.chips} chips
-                          </span>
-                        </p>
-                        <p className="text-slate-300">
-                          Your Bet This Round:{" "}
-                          <span className="text-cyan-300">
-                            {myHand.betThisRound} chips
-                          </span>
-                        </p>
-                      </>
-                    )}
-                    <p className="text-slate-300">
-                      Current Turn:{" "}
-                      <span className="text-cyan-300">
-                        {currentTurnPlayerId === playerId
-                          ? "You"
-                          : currentTurnPlayerId || "Unknown"}
-                      </span>
-                    </p>
-                    <p className="text-slate-300">
-                      Your ID:{" "}
-                      <span className="text-cyan-300">
-                        {playerId || "None"}
-                      </span>
-                    </p>
-                  </div>
-                  {isMyTurn && (
-                    <div className="mb-3 rounded-md border border-amber-500 bg-amber-500/10 p-3">
-                      <p className="text-sm font-semibold text-amber-300">
-                        It's your turn!
-                      </p>
-                    </div>
-                  )}
-                  {game.status === "active" && game.stage === "showdown" && (
-                    <div className="mb-3 rounded-md border border-cyan-500 bg-cyan-500/10 p-3">
-                      <p className="text-sm font-semibold text-cyan-300">
-                        Final tile revealed. Showdown is active.
-                      </p>
-                    </div>
-                  )}
-                  <div className="mb-3 rounded-md border border-slate-700 bg-slate-950/40 p-3">
-                    <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">
-                      Dealt Hands
-                    </p>
-                    {!playerHands && (
-                      <p className="text-sm text-slate-400">Loading hands...</p>
-                    )}
-                    {playerHands && playerHands.length === 0 && (
-                      <p className="text-sm text-slate-400">
-                        No hands dealt yet. Start the game to distribute
-                        letters.
-                      </p>
-                    )}
-                    {playerHands && nonDealerHands.length > 0 && (
-                      <RoomHandsBoard
-                        gameId={game._id}
-                        gameStage={game.stage}
-                        communityTiles={game.communityTiles}
-                        hands={nonDealerHands}
-                        bottomPlayerId={playerId ?? nonDealerHands[0]?.playerId}
-                        getPlayerName={(playerId, handIndex) =>
-                          memberById.get(playerId)?.name ??
-                          `Player ${handIndex + 1}`
-                        }
-                      />
-                    )}
-                  </div>
-
-                  {/* Showdown Results Section */}
-                  {showdownResults && (
-                    <div className="mb-3 rounded-md border border-purple-700 bg-purple-950/40 p-4">
-                      <h3 className="mb-3 text-lg font-bold text-purple-300">
-                        🏆 Showdown Results
-                      </h3>
-
-                      {showdownResults.hasWinner ? (
-                        <>
-                          <div className="mb-4 rounded-md border border-amber-500 bg-amber-500/10 p-3">
-                            <p className="mb-1 text-sm font-semibold text-amber-300">
-                              Winner: {showdownResults.winnerId === playerId ? "You!" : memberById.get(showdownResults.winnerId ?? "")?.name ?? showdownResults.winnerId}
-                            </p>
-                            {showdownResults.winningWord ? (
-                              <>
-                                <p className="mb-1 text-xl font-bold text-white">
-                                  {showdownResults.winningWord.toUpperCase()}
-                                </p>
-                                <p className="mb-2 text-2xl font-bold text-amber-400">
-                                  {showdownResults.winningScore} points
-                                </p>
-                                {showdownResults.winningScoreBreakdown && (
-                                  <div className="text-xs text-slate-300">
-                                    <p>Length Points: {showdownResults.winningScoreBreakdown.lengthPoints}</p>
-                                    <p>Speed Bonus: {showdownResults.winningScoreBreakdown.speedBonus}</p>
-                                    <p>Valid Word Bonus: {showdownResults.winningScoreBreakdown.validWordBonus}</p>
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <p className="mt-2 text-sm italic text-slate-300">
-                                Won by default (all other players folded)
-                              </p>
-                            )}
-                          </div>
-
-                          {showdownResults.allSubmissions && showdownResults.allSubmissions.length > 0 && (
-                            <div>
-                              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-300">
-                                All Submissions
-                              </p>
-                              <div className="space-y-2">
-                                {showdownResults.allSubmissions.map((submission) => (
-                                  <div
-                                    key={submission.playerId}
-                                    className={`rounded-md border p-2 text-sm ${
-                                      submission.playerId === showdownResults.winnerId
-                                        ? "border-amber-500 bg-amber-500/5"
-                                        : "border-slate-600 bg-slate-800/50"
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div>
-                                        <span className="font-semibold text-slate-200">
-                                          {submission.playerId === playerId ? "You" : memberById.get(submission.playerId)?.name ?? submission.playerId}
-                                        </span>
-                                        <span className="mx-2 text-slate-400">•</span>
-                                        <span className="font-bold text-white">
-                                          {submission.word.toUpperCase()}
-                                        </span>
-                                      </div>
-                                      <span className="font-bold text-cyan-300">
-                                        {submission.score} pts
-                                      </span>
-                                    </div>
-                                    <div className="mt-1 text-xs text-slate-400">
-                                      Length: {submission.scoreBreakdown.lengthPoints} | Speed: {submission.scoreBreakdown.speedBonus} | Valid: {submission.scoreBreakdown.validWordBonus}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <p className="text-sm text-slate-300">
-                          No winner - no eligible submissions.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {gameMessage && (
-                <p className="mb-3 text-sm text-cyan-300">{gameMessage}</p>
-              )}
-
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleCreateGame()}
-                    disabled={!roomData || !!game || isCreatingGame}
-                    className="rounded-md bg-cyan-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                  >
-                    {isCreatingGame ? "Creating..." : "Create game"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleStartGame()}
-                    disabled={
-                      !game || game.status !== "waiting" || isStartingGame
-                    }
-                    className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                  >
-                    {isStartingGame ? "Starting..." : "Start game"}
-                  </button>
-                </div>
-
-                {game?.status === "active" &&
-                  game.stage !== "final" &&
-                  game.stage !== "showdown" &&
-                  isMyTurn && (
-                  <div className="rounded-lg border border-amber-500 bg-amber-500/5 p-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-300">
-                      Betting Actions
-                    </p>
-                    <p className="mb-2 text-xs text-slate-300">
-                      Next Raise:{" "}
-                      <span className="text-cyan-300">
-                        {effectiveNextRaiseLevel !== undefined
-                          ? `${effectiveNextRaiseLevel} chips`
-                          : "Max level reached"}
-                      </span>
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {canCheck && (
-                        <button
-                          type="button"
-                          onClick={() => void handleCheck()}
-                          disabled={isBetting}
-                          className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                        >
-                          {isBetting ? "Betting..." : "Check"}
-                        </button>
-                      )}
-                      {canCall && (
-                        <button
-                          type="button"
-                          onClick={() => void handleCall()}
-                          disabled={isBetting}
-                          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                        >
-                          {isBetting ? "Betting..." : `Match ${callAmount}`}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => void handleRaise()}
-                        disabled={isBetting || !canRaise}
-                        className="rounded-md bg-amber-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                      >
-                        {isBetting
-                          ? "Betting..."
-                          : effectiveNextRaiseLevel !== undefined
-                            ? `Raise to ${effectiveNextRaiseLevel}`
-                            : "Raise Maxed"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleFold()}
-                        disabled={isBetting}
-                        className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-                      >
-                        {isBetting ? "Betting..." : "Fold"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-      </div>
-    </div>
+    <RoomPageProvider value={roomPageContextValue}>
+      {game && displayHands.length > 0 ? (
+        <RoomGameProvider value={roomGameContextValue}>
+          <RoomHandsBoardV2
+            gameId={game._id}
+            roomCode={code}
+            gameStage={game.stage}
+            communityTiles={game.communityTiles}
+            hands={displayHands}
+            pot={game.pot}
+            getPlayerName={getPlayerName}
+          />
+        </RoomGameProvider>
+      ) : (
+        <RoomLobbyPanel />
+      )}
+    </RoomPageProvider>
   );
 }
-
-

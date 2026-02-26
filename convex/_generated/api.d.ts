@@ -9,11 +9,14 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as clearOldGames from "../clearOldGames.js";
 import type * as constants from "../constants.js";
 import type * as gameState from "../gameState.js";
 import type * as games from "../games.js";
 import type * as http from "../http.js";
+import type * as inspectGame from "../inspectGame.js";
 import type * as rooms from "../rooms.js";
+import type * as testDeck from "../testDeck.js";
 import type * as validateWord from "../validateWord.js";
 
 import type {
@@ -24,11 +27,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  clearOldGames: typeof clearOldGames;
   constants: typeof constants;
   gameState: typeof gameState;
   games: typeof games;
   http: typeof http;
+  inspectGame: typeof inspectGame;
   rooms: typeof rooms;
+  testDeck: typeof testDeck;
   validateWord: typeof validateWord;
 }>;
 

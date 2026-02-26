@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
 import {
   PLAYER_NAME_MAX_LENGTH,
@@ -677,6 +678,7 @@ export const getRoomMembers = query({
         seatIndex: player.seatIndex,
         isHost: player.isHost,
         authUserId: player.authUserId,
+        readyStatus: player.readyStatus ?? false,
       })),
       viewerPlayerId,
     };
@@ -717,6 +719,81 @@ export const getMyActiveRoom = query({
 });
 
 // DEBUG: Clear all data
+export const toggleReady = mutation({
+  args: {
+    code: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const code = normalizeRoomCode(args.code);
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("code", (q) => q.eq("code", code))
+      .unique();
+
+    if (!room) {
+      throw new ConvexError({
+        code: "ROOM_NOT_FOUND",
+        message: "Room not found.",
+      });
+    }
+
+    const player = await ctx.db
+      .query("players")
+      .withIndex("roomId_status", (q) =>
+        q.eq("roomId", room._id).eq("status", "active")
+      )
+      .filter((q) => q.eq(q.field("authUserId"), authUserId))
+      .unique();
+
+    if (!player) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You are not a member of this room.",
+      });
+    }
+
+    const newReadyStatus = !player.readyStatus;
+    await ctx.db.patch(player._id, { readyStatus: newReadyStatus });
+
+    // Check if all players are now ready
+    const allPlayers = await ctx.db
+      .query("players")
+      .withIndex("roomId_status", (q) =>
+        q.eq("roomId", room._id).eq("status", "active")
+      )
+      .collect();
+
+    const allReady = allPlayers.length > 0 && allPlayers.every((p) => p.readyStatus);
+
+    // If all players are ready, auto-start the game
+    if (allReady && newReadyStatus) {
+      const game = await ctx.db
+        .query("games")
+        .withIndex("by_room_status", (q) =>
+          q.eq("roomId", room._id).eq("status", "waiting")
+        )
+        .unique();
+
+      if (game) {
+        // Schedule the game start (use internal mutation to avoid auth checks)
+        await ctx.scheduler.runAfter(0, internal.games.internalStartGame, {
+          gameId: game._id,
+        });
+      }
+    }
+
+    return { readyStatus: newReadyStatus };
+  },
+});
+
 export const clearAllData = mutation({
   args: {},
   handler: async (ctx) => {

@@ -17,24 +17,85 @@ export type GameStatus = (typeof GAME_STATUSES)[number];
 
 export type GameMultiplier = "2L" | "3L";
 
-export type GameTile = {
-  letter: string;
-  baseValue: number;
-  multiplier?: GameMultiplier;
-  revealed: boolean;
-};
+// Community tile type - extends GameDeckTile with reveal and multiplier info
+export type GameTile =
+  | {
+      kind: "single";
+      letter: string;
+      baseValue: number;
+      multiplier?: GameMultiplier;
+      revealed: boolean;
+    }
+  | {
+      kind: "choice";
+      options: string[];
+      baseValues: number[];
+      multiplier?: GameMultiplier;
+      revealed: boolean;
+    };
 
-export type GameDeckTile = {
-  letter: string;
-  baseValue: number;
-};
+// Card types for multi-letter deck
+export type CardKind = "single" | "choice";
+
+export type GameDeckTile =
+  | {
+      kind: "single";
+      letter: string;
+      baseValue: number;
+    }
+  | {
+      kind: "choice";
+      options: string[]; // 2-4 letters
+      baseValues: number[]; // corresponding values for each option
+    };
 
 export const INITIAL_HAND_SIZE = 2;
+
+// Multi-letter deck configuration (MVP defaults)
+export const DECK_SIZE = 60;
+export const CHOICE_2_COUNT = 8;
+export const CHOICE_3_COUNT = 4;
+export const CHOICE_4_COUNT = 2;
+export const CHOICE_TOTAL = CHOICE_2_COUNT + CHOICE_3_COUNT + CHOICE_4_COUNT; // 14
+export const SINGLE_TOTAL = DECK_SIZE - CHOICE_TOTAL; // 46
+
+// Choice card letter options (MVP defaults)
+// High-frequency vowels and consonants for choice cards
+export const CHOICE_2_OPTIONS: Array<[string, string]> = [
+  ["A", "E"], // Common vowels
+  ["A", "E"],
+  ["E", "I"],
+  ["O", "U"],
+  ["S", "T"], // Common consonants
+  ["R", "N"],
+  ["L", "D"],
+  ["C", "H"],
+];
+
+export const CHOICE_3_OPTIONS: Array<[string, string, string]> = [
+  ["A", "E", "I"], // Vowel mix
+  ["S", "T", "R"], // High-frequency consonants
+  ["N", "L", "D"],
+  ["C", "H", "M"],
+];
+
+export const CHOICE_4_OPTIONS: Array<[string, string, string, string]> = [
+  ["A", "E", "I", "O"], // All common vowels
+  ["S", "T", "R", "N"], // Top consonants
+];
 
 // Betting constants
 export const ANTE_AMOUNT = 20;
 export const RAISE_LADDER = [20, 40, 60, 80, 100, 120, 140, 160, 200];
 export const MAX_RAISES_PER_ROUND = 3;
+
+// Showdown timer (1 minute)
+export const SHOWDOWN_TIMER_MS = 60000;
+
+// Speed bonus thresholds (aligned with 1-minute showdown timer)
+export const SPEED_BONUS_TIER_1_SECONDS = 10; // +10 points
+export const SPEED_BONUS_TIER_2_SECONDS = 20; // +5 points
+// After 20 seconds: 0 points
 
 export const gameStageValidator = v.union(
   v.literal("preflop"),
@@ -51,17 +112,35 @@ export const gameStatusValidator = v.union(
   v.literal("completed"),
 );
 
-export const gameTileValidator = v.object({
-  letter: v.string(),
-  baseValue: v.number(),
-  multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
-  revealed: v.boolean(),
-});
+export const gameTileValidator = v.union(
+  v.object({
+    kind: v.literal("single"),
+    letter: v.string(),
+    baseValue: v.number(),
+    multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
+    revealed: v.boolean(),
+  }),
+  v.object({
+    kind: v.literal("choice"),
+    options: v.array(v.string()),
+    baseValues: v.array(v.number()),
+    multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
+    revealed: v.boolean(),
+  }),
+);
 
-export const gameDeckTileValidator = v.object({
-  letter: v.string(),
-  baseValue: v.number(),
-});
+export const gameDeckTileValidator = v.union(
+  v.object({
+    kind: v.literal("single"),
+    letter: v.string(),
+    baseValue: v.number(),
+  }),
+  v.object({
+    kind: v.literal("choice"),
+    options: v.array(v.string()),
+    baseValues: v.array(v.number()),
+  }),
+);
 
 export function createInitialGameDocument(
   roomId: string,
@@ -122,18 +201,152 @@ function randomIndex(maxExclusive: number) {
   return bytes[0] % maxExclusive;
 }
 
-export function createShuffledDeck(): GameDeckTile[] {
+// Helper function to get base value for a letter
+function getLetterBaseValue(letter: string): number {
+  const entry = LETTER_DISTRIBUTION.find((e) => e.letter === letter);
+  return entry?.baseValue ?? 1;
+}
+
+/**
+ * Validates deck configuration
+ * Throws error if configuration is invalid
+ */
+export function validateDeckConfig(config: {
+  deckSize: number;
+  choice2Count: number;
+  choice3Count: number;
+  choice4Count: number;
+}): void {
+  const { deckSize, choice2Count, choice3Count, choice4Count } = config;
+  const choiceTotal = choice2Count + choice3Count + choice4Count;
+  const singleTotal = deckSize - choiceTotal;
+
+  if (deckSize <= 0) {
+    throw new Error("Deck size must be positive");
+  }
+
+  if (choice2Count < 0 || choice3Count < 0 || choice4Count < 0) {
+    throw new Error("Choice card counts cannot be negative");
+  }
+
+  if (choiceTotal > deckSize) {
+    throw new Error(
+      `Choice card total (${choiceTotal}) exceeds deck size (${deckSize})`
+    );
+  }
+
+  if (singleTotal < 0) {
+    throw new Error(
+      `Invalid configuration: single card count would be negative (${singleTotal})`
+    );
+  }
+
+  if (choice2Count > CHOICE_2_OPTIONS.length) {
+    throw new Error(
+      `Choice-2 count (${choice2Count}) exceeds options array length (${CHOICE_2_OPTIONS.length})`
+    );
+  }
+
+  if (choice3Count > CHOICE_3_OPTIONS.length) {
+    throw new Error(
+      `Choice-3 count (${choice3Count}) exceeds options array length (${CHOICE_3_OPTIONS.length})`
+    );
+  }
+
+  if (choice4Count > CHOICE_4_OPTIONS.length) {
+    throw new Error(
+      `Choice-4 count (${choice4Count}) exceeds options array length (${CHOICE_4_OPTIONS.length})`
+    );
+  }
+}
+
+/**
+ * Creates a shuffled deck with configurable single and choice cards
+ * Defaults to MVP configuration (60 cards, 14 choice cards ~23%)
+ */
+export function createShuffledDeck(config?: {
+  deckSize?: number;
+  choice2Count?: number;
+  choice3Count?: number;
+  choice4Count?: number;
+}): GameDeckTile[] {
+  const deckSize = config?.deckSize ?? DECK_SIZE;
+  const choice2Count = config?.choice2Count ?? CHOICE_2_COUNT;
+  const choice3Count = config?.choice3Count ?? CHOICE_3_COUNT;
+  const choice4Count = config?.choice4Count ?? CHOICE_4_COUNT;
+
+  // Validate configuration
+  validateDeckConfig({ deckSize, choice2Count, choice3Count, choice4Count });
+
+  const choiceTotal = choice2Count + choice3Count + choice4Count;
+  const singleTotal = deckSize - choiceTotal;
+
   const deck: GameDeckTile[] = [];
+
+  // Add choice-2 cards
+  for (let i = 0; i < choice2Count; i++) {
+    const options = CHOICE_2_OPTIONS[i];
+    deck.push({
+      kind: "choice",
+      options: [...options],
+      baseValues: options.map(getLetterBaseValue),
+    });
+  }
+
+  // Add choice-3 cards
+  for (let i = 0; i < choice3Count; i++) {
+    const options = CHOICE_3_OPTIONS[i];
+    deck.push({
+      kind: "choice",
+      options: [...options],
+      baseValues: options.map(getLetterBaseValue),
+    });
+  }
+
+  // Add choice-4 cards
+  for (let i = 0; i < choice4Count; i++) {
+    const options = CHOICE_4_OPTIONS[i];
+    deck.push({
+      kind: "choice",
+      options: [...options],
+      baseValues: options.map(getLetterBaseValue),
+    });
+  }
+
+  // Add single-letter cards from the standard distribution
+  // Scale the distribution proportionally to fill remaining slots
+  const distributionTotal = LETTER_DISTRIBUTION.reduce(
+    (sum, entry) => sum + entry.count,
+    0
+  );
+  const scaleFactor = singleTotal / distributionTotal;
+
+  let addedSingleCards = 0;
   for (const { letter, baseValue, count } of LETTER_DISTRIBUTION) {
-    for (let i = 0; i < count; i++) {
-      deck.push({ letter, baseValue });
+    const scaledCount = Math.round(count * scaleFactor);
+    for (let i = 0; i < scaledCount; i++) {
+      if (addedSingleCards >= singleTotal) break;
+      deck.push({ kind: "single", letter, baseValue });
+      addedSingleCards++;
     }
   }
 
+  // If we're still short, add more high-frequency letters
+  while (addedSingleCards < singleTotal) {
+    const highFreqLetters = ["E", "A", "I", "O", "N", "R", "T", "S"];
+    const letter =
+      highFreqLetters[addedSingleCards % highFreqLetters.length] ?? "E";
+    const baseValue = getLetterBaseValue(letter);
+    deck.push({ kind: "single", letter, baseValue });
+    addedSingleCards++;
+  }
+
+  // Shuffle the deck
   for (let i = deck.length - 1; i > 0; i--) {
     const j = randomIndex(i + 1);
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
+
   return deck;
 }
 

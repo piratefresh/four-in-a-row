@@ -8,8 +8,6 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
-import { useEffect, useRef } from "react";
-import { useMutation, useQuery } from "convex/react";
 
 import Header from "../components/Header";
 
@@ -20,7 +18,6 @@ import { getToken } from "@/lib/auth-server";
 import { ConvexQueryClient } from "@convex-dev/react-query";
 import { authClient } from "@/lib/auth-client";
 import { Toaster } from "@/components/ui/sonner";
-import { api } from "../../convex/_generated/api";
 
 // Get auth information for SSR using available cookies
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
