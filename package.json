@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
-    "start": "NODE_ENV=production node server-entry.js",
+    "start": "bunx srvx --prod -s dist/client dist/server/server.js",
     "preview": "vite preview",
     "test": "vitest run",
     "deploy": "npm run build && wrangler deploy",
