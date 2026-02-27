@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
-    "start": "bunx srvx --prod --static dist/client dist/server/server.js",
+    "start": "bunx srvx --prod --static ../client dist/server/server.js",
     "preview": "vite preview",
     "test": "vitest run",
     "deploy": "npm run build && wrangler deploy",
