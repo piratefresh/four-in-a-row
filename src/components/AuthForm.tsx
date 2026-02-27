@@ -19,19 +19,19 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   if (isPending) {
     return (
       <div className="flex items-center justify-center py-10">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-900" />
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#29533a] border-t-[#4caf73]" />
       </div>
     )
   }
 
   if (session?.user) {
     return (
-      <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-800/70 p-6">
+      <div className="w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
         <h1 className="text-xl font-semibold text-white">You are signed in</h1>
         <p className="mt-2 text-sm text-slate-300">{session.user.email}</p>
         <button
           type="button"
-          className="mt-6 w-full rounded-md bg-cyan-500 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-600"
+          className="mt-6 w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636]"
           onClick={() => navigate({ to: '/' })}
         >
           Go to home
@@ -73,7 +73,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   }
 
   return (
-    <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-800/70 p-6">
+    <div className="w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
       <h1 className="text-2xl font-bold text-white">
         {isRegister ? 'Create account' : 'Sign in'}
       </h1>
@@ -95,7 +95,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+              className="w-full rounded-md border border-[#323232] bg-[#141414] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#1e6d3c]"
             />
           </div>
         )}
@@ -110,7 +110,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+            className="w-full rounded-md border border-[#323232] bg-[#141414] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#1e6d3c]"
           />
         </div>
 
@@ -128,7 +128,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
-            className="w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+            className="w-full rounded-md border border-[#323232] bg-[#141414] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#1e6d3c]"
           />
         </div>
 
@@ -141,7 +141,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-cyan-500 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-60"
+          className="w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636] disabled:opacity-60"
         >
           {loading
             ? 'Please wait...'
@@ -155,7 +155,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
         <Link
           to={isRegister ? '/login' : '/register'}
-          className="font-medium text-cyan-300 hover:text-cyan-200"
+          className="font-medium text-[#7ed8a2] hover:text-[#9ee6ba]"
         >
           {isRegister ? 'Sign in' : 'Register'}
         </Link>

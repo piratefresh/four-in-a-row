@@ -7,10 +7,10 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
-      <div className="mx-auto flex max-w-4xl items-center justify-center">
+    <main className="flex min-h-[calc(100vh-72px)] items-center justify-center bg-[#252525] px-8 py-12 text-white">
+      <div className="mx-auto flex w-full max-w-4xl items-center justify-center">
         <AuthForm mode="login" />
       </div>
-    </div>
+    </main>
   )
 }
