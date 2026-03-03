@@ -303,9 +303,16 @@ export function RoomHandsBoardV2({
 
     setBuilderTiles((previous) => {
       const nextById = new Map(nextTiles.map((tile) => [tile.id, tile]));
-      const preserved = previous
-        .map((tile) => nextById.get(tile.id))
-        .filter((tile): tile is BuilderTile => !!tile);
+      const preserved: BuilderTile[] = [];
+
+      for (const prevTile of previous) {
+        const nextTile = nextById.get(prevTile.id);
+        if (nextTile) {
+          // Preserve the disabled state and order from previous state
+          preserved.push({ ...nextTile, disabled: prevTile.disabled });
+        }
+      }
+
       const preservedIds = new Set(preserved.map((tile) => tile.id));
       const missing = nextTiles.filter((tile) => !preservedIds.has(tile.id));
       return sortDisabledToEnd([...preserved, ...missing]);

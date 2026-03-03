@@ -7,7 +7,6 @@ export { BottomPlayerArea } from './BottomPlayerArea'
 export { ActionButton } from './ActionButton'
 
 // Room boards
-export { RoomHandsBoard } from './RoomHandsBoard'
 export { RoomHandsBoardV2 } from './RoomHandsBoardV2'
 export { RoomGameProvider, useRoomGameContext } from './RoomGameContext'
 export { ShowdownResultsPanel } from './ShowdownResultsPanel'
