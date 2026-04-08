@@ -21,7 +21,11 @@
 
 ## Project Overview
 
-This is a Four-in-a-Row word game built with:
+This is **Word Poker** - a strategic word-building poker game that combines letter tiles, betting mechanics, and vocabulary skills.
+
+**Game Rules**: See [WORD_POKER_RULES.md](../WORD_POKER_RULES.md) for complete game specification, scoring system, and mechanics.
+
+### Tech Stack
 - **Frontend**: TanStack Start (React Router + SSR)
 - **Backend**: Convex (realtime database and functions)
 - **Auth**: Better Auth with Convex integration

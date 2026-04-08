@@ -16,6 +16,7 @@ import type * as games from "../games.js";
 import type * as http from "../http.js";
 import type * as inspectGame from "../inspectGame.js";
 import type * as rooms from "../rooms.js";
+import type * as stats from "../stats.js";
 import type * as testDeck from "../testDeck.js";
 import type * as validateWord from "../validateWord.js";
 
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   inspectGame: typeof inspectGame;
   rooms: typeof rooms;
+  stats: typeof stats;
   testDeck: typeof testDeck;
   validateWord: typeof validateWord;
 }>;
