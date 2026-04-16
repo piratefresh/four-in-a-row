@@ -1,5 +1,5 @@
-import { ShowdownResultsPanel } from "@/components/rooms/ShowdownResultsPanel";
-import { useRoomPageContext } from "@/components/rooms/RoomPageContext";
+import { ShowdownResultsPanel } from "./ShowdownResultsPanel";
+import { useRoomPageContext } from "../context/RoomPageContext";
 
 export function RoomLobbyPanel() {
   const { state, actions, meta } = useRoomPageContext();
@@ -22,8 +22,21 @@ export function RoomLobbyPanel() {
     canRaise,
     callAmount,
     effectiveNextRaiseLevel,
+    hasDevTools,
+    isDevRejoining,
+    isDevFillingBots,
   } = state;
-  const { leaveRoom, back, toggleReady, check, call, raise, fold } = actions;
+  const {
+    leaveRoom,
+    back,
+    toggleReady,
+    check,
+    call,
+    raise,
+    fold,
+    devRejoinRoom,
+    devFillRoomWithBots,
+  } = actions;
   const { getPlayerName } = meta;
 
   return (
@@ -94,6 +107,37 @@ export function RoomLobbyPanel() {
                 </div>
               )}
             </section>
+
+            {hasDevTools ? (
+              <section className="rounded-lg border border-cyan-700 bg-cyan-950/20 p-4">
+                <h2 className="mb-3 text-lg font-semibold text-white">Development</h2>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void devRejoinRoom?.();
+                    }}
+                    disabled={isDevRejoining}
+                    className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                  >
+                    {isDevRejoining ? "Rejoining..." : "Rejoin this room"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void devFillRoomWithBots?.();
+                    }}
+                    disabled={isDevFillingBots || !roomData || roomData.members.length >= 3}
+                    className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                  >
+                    {isDevFillingBots ? "Adding AI bots..." : "Add 2 AI bots 🤖"}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-slate-300">
+                  Rejoin reactivates your player in this room. AI bots fill open seats with intelligent betting and word-building.
+                </p>
+              </section>
+            ) : null}
 
             <section className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
               <div className="mb-3 flex items-center justify-between">

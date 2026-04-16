@@ -8,14 +8,26 @@
  * @module
  */
 
+import type * as ai from "../ai.js";
+import type * as aiStrategy from "../aiStrategy.js";
 import type * as auth from "../auth.js";
 import type * as clearOldGames from "../clearOldGames.js";
 import type * as constants from "../constants.js";
+import type * as debugBots from "../debugBots.js";
+import type * as gameRules from "../gameRules.js";
 import type * as gameState from "../gameState.js";
 import type * as games from "../games.js";
+import type * as games_gamesBetting from "../games/gamesBetting.js";
+import type * as games_gamesProgression from "../games/gamesProgression.js";
+import type * as games_gamesRuntime from "../games/gamesRuntime.js";
+import type * as games_gamesScoring from "../games/gamesScoring.js";
+import type * as games_gamesSetup from "../games/gamesSetup.js";
+import type * as games_gamesShared from "../games/gamesShared.js";
+import type * as games_gamesShowdown from "../games/gamesShowdown.js";
 import type * as http from "../http.js";
 import type * as inspectGame from "../inspectGame.js";
 import type * as rooms from "../rooms.js";
+import type * as simpleBots from "../simpleBots.js";
 import type * as stats from "../stats.js";
 import type * as testDeck from "../testDeck.js";
 import type * as validateWord from "../validateWord.js";
@@ -27,14 +39,26 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  ai: typeof ai;
+  aiStrategy: typeof aiStrategy;
   auth: typeof auth;
   clearOldGames: typeof clearOldGames;
   constants: typeof constants;
+  debugBots: typeof debugBots;
+  gameRules: typeof gameRules;
   gameState: typeof gameState;
   games: typeof games;
+  "games/gamesBetting": typeof games_gamesBetting;
+  "games/gamesProgression": typeof games_gamesProgression;
+  "games/gamesRuntime": typeof games_gamesRuntime;
+  "games/gamesScoring": typeof games_gamesScoring;
+  "games/gamesSetup": typeof games_gamesSetup;
+  "games/gamesShared": typeof games_gamesShared;
+  "games/gamesShowdown": typeof games_gamesShowdown;
   http: typeof http;
   inspectGame: typeof inspectGame;
   rooms: typeof rooms;
+  simpleBots: typeof simpleBots;
   stats: typeof stats;
   testDeck: typeof testDeck;
   validateWord: typeof validateWord;

@@ -48,13 +48,13 @@ export function ScrabbleTile({
     community:
       'border-red-800/70 bg-red-600 text-white shadow-[0_8px_16px_rgba(127,29,29,0.45)]',
     hidden:
-      'border-slate-900/80 bg-black text-transparent shadow-[0_8px_16px_rgba(2,6,23,0.5)]',
+      'bg-[#181818] text-transparent shadow-lg',
   }
 
   const insetByVariant: Record<ScrabbleTileVariant, string> = {
     default: 'border-amber-100/50',
     community: 'border-red-300/35',
-    hidden: 'border-slate-700/40',
+    hidden: '',
   }
 
   // Determine if this is a choice card
@@ -64,20 +64,27 @@ export function ScrabbleTile({
 
   return (
     <div
-      className={`relative flex items-center justify-center rounded-[6px] border ${styleByVariant[variant]} ${sizeClasses[size]} ${className ?? ''}`}
+      className={`relative flex items-center justify-center ${variant === 'hidden' ? 'rounded-[12px]' : 'rounded-[6px] border'} ${styleByVariant[variant]} ${sizeClasses[size]} ${className ?? ''}`}
       style={
         variant === 'default'
           ? {
               background:
                 'linear-gradient(145deg, #f7e8c5 0%, #ecd7aa 45%, #d9be85 100%)',
             }
-          : undefined
+          : variant === 'hidden'
+            ? {
+                width: '45px',
+                height: '60px',
+              }
+            : undefined
       }
       {...divProps}
     >
-      <div
-        className={`pointer-events-none absolute inset-0.5 rounded-lg border ${insetByVariant[variant]}`}
-      />
+      {variant !== 'hidden' && (
+        <div
+          className={`pointer-events-none absolute inset-0.5 rounded-lg border ${insetByVariant[variant]}`}
+        />
+      )}
       {isChoiceCard ? (
         <div className="relative flex h-full w-full items-center justify-center">
           {selectedLetter ? (

@@ -1,5 +1,5 @@
 import { createContext, useContext, type ComponentProps, type ReactNode } from "react";
-import { ShowdownResultsPanel } from "@/components/rooms/ShowdownResultsPanel";
+import { ShowdownResultsPanel } from "../lobby/ShowdownResultsPanel";
 
 type Member = {
   _id: string;
@@ -43,6 +43,9 @@ type RoomPageState = {
   canRaise: boolean;
   callAmount: number;
   effectiveNextRaiseLevel: number | undefined;
+  hasDevTools: boolean;
+  isDevRejoining: boolean;
+  isDevFillingBots: boolean;
 };
 
 type RoomPageActions = {
@@ -53,6 +56,8 @@ type RoomPageActions = {
   call: () => Promise<void>;
   raise: () => Promise<void>;
   fold: () => Promise<void>;
+  devRejoinRoom?: () => Promise<void>;
+  devFillRoomWithBots?: () => Promise<void>;
 };
 
 type RoomPageMeta = {

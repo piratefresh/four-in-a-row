@@ -1,0 +1,417 @@
+import { ConvexError } from "convex/values";
+import { api, internal } from "../_generated/api";
+import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
+import type { Doc } from "../_generated/dataModel";
+import type { GameTile } from "../gameState";
+import { calculateScore } from "./gamesScoring";
+
+export type SubmitWordArgs = {
+  gameId: Doc<"games">["_id"];
+  playerId: string;
+  word: string;
+  tiles: Array<{ letter: string; baseValue: number; source: "hand" | "community"; cardIndex?: number; wasChoice?: boolean }>;
+  choiceResolutions?: { hand?: Record<string, string>; community?: Record<string, string> };
+  invalidWord?: boolean;
+};
+
+type ShowdownArgs = { gameId: Doc<"games">["_id"]; playerId: string };
+
+function logBotShowdown(
+  message: string,
+  details: Record<string, unknown>,
+) {
+  console.log(`[bot-showdown] ${message}`, details);
+}
+
+function buildEmergencyBotSubmission(
+  handTiles: Array<
+    | { kind: "single"; letter: string; baseValue: number }
+    | { kind: "choice"; options: string[]; baseValues: number[] }
+  >,
+  communityTiles: Array<
+    | { kind: "single"; letter: string; baseValue: number; revealed: boolean }
+    | { kind: "choice"; options: string[]; baseValues: number[]; revealed: boolean }
+  >,
+) {
+  const availableTiles: SubmitWordArgs["tiles"] = [];
+  const choiceResolutions: NonNullable<SubmitWordArgs["choiceResolutions"]> = {
+    hand: {},
+    community: {},
+  };
+
+  handTiles.forEach((tile, index) => {
+    if (tile.kind === "single") {
+      availableTiles.push({
+        letter: tile.letter,
+        baseValue: tile.baseValue,
+        source: "hand",
+        cardIndex: index,
+        wasChoice: false,
+      });
+      return;
+    }
+
+    availableTiles.push({
+      letter: tile.options[0],
+      baseValue: tile.baseValues[0],
+      source: "hand",
+      cardIndex: index,
+      wasChoice: true,
+    });
+    choiceResolutions.hand![index.toString()] = tile.options[0];
+  });
+
+  communityTiles
+    .filter((tile) => tile.revealed)
+    .forEach((tile, index) => {
+      if (tile.kind === "single") {
+        availableTiles.push({
+          letter: tile.letter,
+          baseValue: tile.baseValue,
+          source: "community",
+          cardIndex: index,
+          wasChoice: false,
+        });
+        return;
+      }
+
+      availableTiles.push({
+        letter: tile.options[0],
+        baseValue: tile.baseValues[0],
+        source: "community",
+        cardIndex: index,
+        wasChoice: true,
+      });
+      choiceResolutions.community![index.toString()] = tile.options[0];
+    });
+
+  const selectedTiles = availableTiles.slice(0, Math.min(2, availableTiles.length));
+  const word = selectedTiles.map((tile) => tile.letter).join("");
+
+  return {
+    word,
+    tiles: selectedTiles,
+    choiceResolutions:
+      Object.keys(choiceResolutions.hand || {}).length > 0 ||
+      Object.keys(choiceResolutions.community || {}).length > 0
+        ? choiceResolutions
+        : undefined,
+  };
+}
+
+async function submitEmergencyBotWord(
+  ctx: ActionCtx,
+  args: ShowdownArgs,
+  emergencySubmission: ReturnType<typeof buildEmergencyBotSubmission>,
+) {
+  return await ctx.runMutation(internal.games.submitWordInternal, {
+    gameId: args.gameId,
+    playerId: args.playerId,
+    word: emergencySubmission.word,
+    tiles: emergencySubmission.tiles,
+    choiceResolutions: emergencySubmission.choiceResolutions,
+    invalidWord: true,
+  });
+}
+
+export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWordArgs) {
+  const { gameId, playerId, word, tiles, choiceResolutions, invalidWord } = args;
+  const normalizedWord = word.toLowerCase().trim();
+  const normalizedPlayerId = playerId.trim();
+  const game = await ctx.db.get(gameId);
+  if (!game) throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Game does not exist." });
+  if (game.status !== "active") throw new ConvexError({ code: "INVALID_GAME_STATUS", message: "Game is not active." });
+  if (game.stage !== "showdown") throw new ConvexError({ code: "INVALID_GAME_STAGE", message: "Word submissions are only allowed during showdown." });
+  const hands = await ctx.db.query("playerHands").withIndex("by_game", (q) => q.eq("gameId", gameId)).collect();
+  if (hands.length === 0) throw new ConvexError({ code: "HANDS_NOT_FOUND", message: "No hands found for this game." });
+  const playerHand = hands.find((hand) => hand.playerId === normalizedPlayerId);
+  if (!playerHand) throw new ConvexError({ code: "PLAYER_NOT_FOUND", message: "Player not found in this game." });
+  if (playerHand.hasFolded) throw new ConvexError({ code: "PLAYER_FOLDED", message: "Cannot submit word after folding." });
+  const existingSubmission = await ctx.db.query("wordSubmissions").withIndex("by_game_player", (q) => q.eq("gameId", gameId).eq("playerId", normalizedPlayerId)).filter((q) => q.eq(q.field("stage"), game.stage)).unique();
+  if (existingSubmission) throw new ConvexError({ code: "ALREADY_SUBMITTED", message: "You have already submitted a word for showdown." });
+
+  const handTileCount = new Map<string, number>();
+  for (const tile of playerHand.tiles) handTileCount.set(tile.kind === "single" ? `${tile.letter}-${tile.baseValue}` : `choice-${playerHand.tiles.indexOf(tile)}`, tile.kind === "single" ? (handTileCount.get(`${tile.letter}-${tile.baseValue}`) || 0) + 1 : 1);
+  const communityTileCount = new Map<string, number>();
+  game.communityTiles.filter((tile: GameTile) => tile.revealed).forEach((tile: GameTile, index: number) => {
+    const key = tile.kind === "single" ? `${tile.letter}-${tile.baseValue}` : `choice-${index}`;
+    communityTileCount.set(key, tile.kind === "single" ? (communityTileCount.get(key) || 0) + 1 : 1);
+  });
+
+  const usedHandTiles = new Map<string, number>();
+  const usedCommunityTiles = new Map<string, number>();
+  for (const tile of tiles) {
+    const key = tile.wasChoice && tile.cardIndex !== undefined ? `choice-${tile.cardIndex}` : `${tile.letter}-${tile.baseValue}`;
+    if (tile.source === "hand") {
+      const used = (usedHandTiles.get(key) || 0) + 1;
+      if (used > (handTileCount.get(key) || 0)) throw new ConvexError({ code: "INVALID_TILE_USAGE", message: `Tile ${tile.letter} not available in hand or used too many times.` });
+      usedHandTiles.set(key, used);
+    } else {
+      const used = (usedCommunityTiles.get(key) || 0) + 1;
+      if (used > (communityTileCount.get(key) || 0)) throw new ConvexError({ code: "INVALID_TILE_USAGE", message: `Community tile ${tile.letter} not available or used too many times.` });
+      usedCommunityTiles.set(key, used);
+    }
+  }
+
+  const wordLetters = normalizedWord.split("");
+  const tileLetters = tiles.map((tile) => tile.letter.toLowerCase());
+  if (wordLetters.length !== tileLetters.length) throw new ConvexError({ code: "WORD_TILE_MISMATCH", message: "Word length does not match number of tiles." });
+  for (let i = 0; i < wordLetters.length; i++) if (wordLetters[i] !== tileLetters[i]) throw new ConvexError({ code: "WORD_TILE_MISMATCH", message: "Word does not match tile letters." });
+
+  const now = Date.now();
+  const showdownStart = game.showdownStartedAt ?? game.updatedAt;
+  const score = invalidWord ? { total: 0, lengthPoints: 0, speedBonus: 0, validWordBonus: 0 } : calculateScore(normalizedWord, now, showdownStart);
+  await ctx.db.insert("wordSubmissions", { gameId, playerId: normalizedPlayerId, stage: game.stage, word: normalizedWord, tiles, choiceResolutions, score: score.total, scoreBreakdown: { lengthPoints: score.lengthPoints, speedBonus: score.speedBonus, validWordBonus: score.validWordBonus }, createdAt: now });
+
+  const eligiblePlayerIds = hands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
+  if (eligiblePlayerIds.length === 0) {
+    await ctx.db.patch(game._id, { status: "completed", updatedAt: now });
+  } else {
+    const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", gameId)).collect();
+    const submissionsByPlayer = new Map<string, (typeof allSubmissions)[number]>();
+    for (const submission of allSubmissions) {
+      if (!eligiblePlayerIds.includes(submission.playerId)) continue;
+      const existing = submissionsByPlayer.get(submission.playerId);
+      if (!existing || submission.createdAt > existing.createdAt) submissionsByPlayer.set(submission.playerId, submission);
+    }
+    if (eligiblePlayerIds.every((id) => submissionsByPlayer.has(id)) && !game.winnerId) {
+      const winningSubmission = [...submissionsByPlayer.values()].sort((a, b) => a.score !== b.score ? b.score - a.score : a.scoreBreakdown.lengthPoints !== b.scoreBreakdown.lengthPoints ? b.scoreBreakdown.lengthPoints - a.scoreBreakdown.lengthPoints : a.createdAt !== b.createdAt ? a.createdAt - b.createdAt : a.playerId.localeCompare(b.playerId))[0];
+      await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
+    }
+  }
+
+  return { ok: !invalidWord, word: normalizedWord, score: score.total, scoreBreakdown: score, submissionTime: now, forfeited: invalidWord, message: invalidWord ? `"${normalizedWord}" is not a valid dictionary word. Submitted with 0 points.` : undefined };
+}
+
+export async function forfeitShowdownHandler(ctx: MutationCtx, args: ShowdownArgs) {
+  const game = await ctx.db.get(args.gameId);
+  if (!game) throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Game does not exist." });
+  if (game.status !== "active" || game.stage !== "showdown") throw new ConvexError({ code: "INVALID_GAME_STAGE", message: "Forfeit is only allowed during active showdown." });
+  const normalizedPlayerId = args.playerId.trim();
+  if (!normalizedPlayerId) throw new ConvexError({ code: "INVALID_PLAYER_ID", message: "Player ID is required." });
+  const hands = await ctx.db.query("playerHands").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const playerHand = hands.find((hand) => hand.playerId === normalizedPlayerId);
+  if (!playerHand) throw new ConvexError({ code: "PLAYER_NOT_FOUND", message: "Player not found in this game." });
+  const now = Date.now();
+  if (!playerHand.hasFolded) await ctx.db.patch(playerHand._id, { hasFolded: true, hasActed: true, updatedAt: now });
+  const latestHands = await ctx.db.query("playerHands").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const eligiblePlayerIds = latestHands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
+  const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const submissionsByPlayer = new Map<string, (typeof allSubmissions)[number]>();
+  for (const submission of allSubmissions) {
+    if (!eligiblePlayerIds.includes(submission.playerId)) continue;
+    const existing = submissionsByPlayer.get(submission.playerId);
+    if (!existing || submission.createdAt > existing.createdAt) submissionsByPlayer.set(submission.playerId, submission);
+  }
+  if (eligiblePlayerIds.length === 0) {
+    await ctx.db.patch(game._id, { status: "completed", updatedAt: now });
+    return { ok: true, forfeited: true, resolved: true, hasWinner: false };
+  }
+  if (eligiblePlayerIds.length === 1) {
+    const winnerId = eligiblePlayerIds[0];
+    const winnerSubmission = submissionsByPlayer.get(winnerId);
+    await ctx.db.patch(game._id, { winnerId, winningWord: winnerSubmission?.word, winningScore: winnerSubmission?.score, winningScoreBreakdown: winnerSubmission?.scoreBreakdown, status: "completed", updatedAt: now });
+    return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId };
+  }
+  if (!eligiblePlayerIds.every((playerId) => submissionsByPlayer.has(playerId))) {
+    return { ok: true, forfeited: true, resolved: false, hasWinner: false };
+  }
+  const winningSubmission = [...submissionsByPlayer.values()].sort((a, b) => a.score !== b.score ? b.score - a.score : a.scoreBreakdown.lengthPoints !== b.scoreBreakdown.lengthPoints ? b.scoreBreakdown.lengthPoints - a.scoreBreakdown.lengthPoints : a.createdAt !== b.createdAt ? a.createdAt - b.createdAt : a.playerId.localeCompare(b.playerId))[0];
+  await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
+  return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId: winningSubmission.playerId };
+}
+
+export async function submitWordHandler(ctx: ActionCtx, args: Omit<SubmitWordArgs, "invalidWord">): Promise<{ ok: boolean; word: string; score: number; scoreBreakdown: any; submissionTime: number; forfeited?: boolean; message?: string }> {
+  const normalizedPlayerId = args.playerId.trim();
+  const normalizedWord = args.word.toLowerCase().trim();
+  if (!normalizedPlayerId) throw new ConvexError({ code: "INVALID_PLAYER_ID", message: "Player ID is required." });
+  if (normalizedWord.length < 2 || normalizedWord.length > 7) throw new ConvexError({ code: "INVALID_WORD_LENGTH", message: "Word must be between 2 and 7 letters." });
+  const validationData = await ctx.runAction(internal.validateWord.validateDictionaryWord, { word: normalizedWord });
+  if (!validationData.valid) {
+    return await ctx.runMutation(internal.games.submitWordInternal, { ...args, playerId: normalizedPlayerId, word: normalizedWord, invalidWord: true });
+  }
+  return await ctx.runMutation(internal.games.submitWordInternal, { ...args, playerId: normalizedPlayerId, word: normalizedWord });
+}
+
+export async function resolveShowdownHandler(ctx: MutationCtx, args: { gameId: Doc<"games">["_id"] }) {
+  const game = await ctx.db.get(args.gameId);
+  if (!game) throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Game does not exist." });
+  if (game.stage !== "showdown") throw new ConvexError({ code: "INVALID_GAME_STAGE", message: "Game must be in showdown stage to resolve winner." });
+  if (game.winnerId) throw new ConvexError({ code: "WINNER_ALREADY_DETERMINED", message: "Winner has already been determined for this game." });
+  const hands = await ctx.db.query("playerHands").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const eligiblePlayerIds = hands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
+  if (eligiblePlayerIds.length === 0) {
+    await ctx.db.patch(game._id, { status: "completed", updatedAt: Date.now() });
+    return { ok: true, hasWinner: false, message: "No eligible players for showdown." };
+  }
+  const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const submissionsByPlayer = new Map<string, (typeof allSubmissions)[number]>();
+  for (const submission of allSubmissions) {
+    if (!eligiblePlayerIds.includes(submission.playerId)) continue;
+    const existing = submissionsByPlayer.get(submission.playerId);
+    if (!existing || submission.createdAt > existing.createdAt) submissionsByPlayer.set(submission.playerId, submission);
+  }
+  const eligibleSubmissions = Array.from(submissionsByPlayer.values());
+  if (eligibleSubmissions.length === 0) {
+    await ctx.db.patch(game._id, { status: "completed", updatedAt: Date.now() });
+    return { ok: true, hasWinner: false, message: "No valid submissions for showdown." };
+  }
+  const sortedSubmissions = [...eligibleSubmissions].sort((a, b) => a.score !== b.score ? b.score - a.score : a.scoreBreakdown.lengthPoints !== b.scoreBreakdown.lengthPoints ? b.scoreBreakdown.lengthPoints - a.scoreBreakdown.lengthPoints : a.createdAt !== b.createdAt ? a.createdAt - b.createdAt : a.playerId.localeCompare(b.playerId));
+  const winningSubmission = sortedSubmissions[0];
+  const now = Date.now();
+  await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
+  return { ok: true, hasWinner: true, winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, allSubmissions: sortedSubmissions.map((submission) => ({ playerId: submission.playerId, word: submission.word, score: submission.score, scoreBreakdown: submission.scoreBreakdown })) };
+}
+
+export async function getWordSubmissionsHandler(ctx: QueryCtx, args: { gameId: Doc<"games">["_id"] }) {
+  const game = await ctx.db.get(args.gameId);
+  if (!game || game.stage !== "showdown") return null;
+  const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const hands = await ctx.db.query("playerHands").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const eligiblePlayerIds = hands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
+  const submissionsByPlayer = new Map<string, (typeof allSubmissions)[number]>();
+  for (const submission of allSubmissions) {
+    if (!eligiblePlayerIds.includes(submission.playerId)) continue;
+    const existing = submissionsByPlayer.get(submission.playerId);
+    if (!existing || submission.createdAt > existing.createdAt) submissionsByPlayer.set(submission.playerId, submission);
+  }
+  return {
+    submissions: [...submissionsByPlayer.values()].sort((a, b) => b.score - a.score).map((submission) => ({ playerId: submission.playerId, word: submission.word, tiles: submission.tiles, choiceResolutions: submission.choiceResolutions, score: submission.score, scoreBreakdown: submission.scoreBreakdown })),
+    isCompleted: game.status === "completed",
+    winnerId: game.winnerId,
+  };
+}
+
+export async function getShowdownResultsHandler(ctx: QueryCtx, args: { gameId: Doc<"games">["_id"] }) {
+  const game = await ctx.db.get(args.gameId);
+  if (!game || game.stage !== "showdown" || game.status !== "completed") return null;
+  const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const hands = await ctx.db.query("playerHands").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
+  const submissionsByPlayer = new Map<string, (typeof allSubmissions)[number]>();
+  for (const submission of allSubmissions) {
+    const existing = submissionsByPlayer.get(submission.playerId);
+    if (!existing || submission.createdAt > existing.createdAt) submissionsByPlayer.set(submission.playerId, submission);
+  }
+  const allPlayerResults = hands.map((hand) => {
+    const submission = submissionsByPlayer.get(hand.playerId);
+    if (hand.hasFolded && !submission) return { playerId: hand.playerId, word: null, score: 0, scoreBreakdown: null, status: "forfeited" as const };
+    if (submission) return { playerId: submission.playerId, word: submission.word, score: submission.score, scoreBreakdown: submission.scoreBreakdown, status: "submitted" as const };
+    return { playerId: hand.playerId, word: null, score: 0, scoreBreakdown: null, status: "no-submission" as const };
+  });
+  return { hasWinner: !!game.winnerId, winnerId: game.winnerId, winningWord: game.winningWord, winningScore: game.winningScore, winningScoreBreakdown: game.winningScoreBreakdown, allSubmissions: allPlayerResults.sort((a, b) => b.score - a.score) };
+}
+
+export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: ShowdownArgs): Promise<{ ok: true; word: string; score: number; reasoning?: string } | { ok: false; reason: string; error?: string }> {
+  logBotShowdown("starting bot showdown submission", {
+    gameId: args.gameId,
+    playerId: args.playerId,
+  });
+  const runtimeState = await ctx.runQuery(internal.games.internalGetGameRuntimeState, { gameId: args.gameId });
+  const game = runtimeState?.game;
+  if (!game || game.status !== "active" || game.stage !== "showdown") {
+    logBotShowdown("aborting bot showdown because game is not in showdown", {
+      gameFound: !!game,
+      gameStatus: game?.status,
+      stage: game?.stage,
+    });
+    return { ok: false, reason: "Game not in showdown stage" };
+  }
+  const botHand = runtimeState.hands.find((hand) => hand.playerId === args.playerId);
+  if (!botHand || botHand.hasFolded) {
+    logBotShowdown("aborting bot showdown because the hand is missing or folded", {
+      playerId: args.playerId,
+      handFound: !!botHand,
+      hasFolded: botHand?.hasFolded,
+    });
+    return { ok: false, reason: "Bot hand not found or already folded" };
+  }
+  try {
+    logBotShowdown("requesting AI showdown word", {
+      playerId: args.playerId,
+      revealedCommunityCount: game.communityTiles.filter((tile) => tile.revealed).length,
+      handTileCount: botHand.tiles.length,
+    });
+    const wordResult = await ctx.runAction(internal.ai.aiSubmitWord, { difficulty: "medium", handTiles: botHand.tiles, communityTiles: game.communityTiles });
+    if (!wordResult.word || wordResult.tiles.length === 0) {
+      const emergencySubmission = buildEmergencyBotSubmission(
+        botHand.tiles,
+        game.communityTiles,
+      );
+      logBotShowdown("AI did not return a usable word, trying emergency submission", {
+        playerId: args.playerId,
+        word: wordResult.word,
+        tileCount: wordResult.tiles.length,
+        reasoning: wordResult.reasoning,
+        emergencyWord: emergencySubmission.word,
+      });
+      if (emergencySubmission.word.length >= 2) {
+        const result = await submitEmergencyBotWord(
+          ctx,
+          args,
+          emergencySubmission,
+        );
+        return {
+          ok: true,
+          word: emergencySubmission.word,
+          score: result.score,
+          reasoning: "Emergency showdown submission",
+        };
+      }
+      await ctx.runMutation(api.games.forfeitShowdown, { gameId: args.gameId, playerId: args.playerId });
+      return { ok: false, reason: "AI failed to generate word" };
+    }
+    logBotShowdown("AI generated showdown word", {
+      playerId: args.playerId,
+      word: wordResult.word,
+      tileCount: wordResult.tiles.length,
+      estimatedScore: wordResult.estimatedScore,
+      reasoning: wordResult.reasoning,
+    });
+    const result = await ctx.runAction(api.games.submitWord, { gameId: args.gameId, playerId: args.playerId, word: wordResult.word, tiles: wordResult.tiles, choiceResolutions: wordResult.choiceResolutions });
+    logBotShowdown("submitted AI showdown word", {
+      playerId: args.playerId,
+      word: wordResult.word,
+      score: result.score,
+      forfeited: result.forfeited,
+    });
+    return { ok: true, word: wordResult.word, score: result.score, reasoning: wordResult.reasoning };
+  } catch (error) {
+    console.error("[bot-showdown] AI showdown submission failed", {
+      gameId: args.gameId,
+      playerId: args.playerId,
+      error: String(error),
+    });
+    try {
+      const emergencySubmission = buildEmergencyBotSubmission(
+        botHand.tiles,
+        game.communityTiles,
+      );
+      logBotShowdown("retrying showdown with emergency submission", {
+        playerId: args.playerId,
+        word: emergencySubmission.word,
+        tileCount: emergencySubmission.tiles.length,
+      });
+      if (emergencySubmission.word.length >= 2) {
+        const result = await submitEmergencyBotWord(
+          ctx,
+          args,
+          emergencySubmission,
+        );
+        return {
+          ok: true,
+          word: emergencySubmission.word,
+          score: result.score,
+          reasoning: "Emergency showdown submission",
+        };
+      }
+    } catch (emergencyError) {
+      console.error("[bot-showdown] Emergency showdown submission failed", {
+        gameId: args.gameId,
+        playerId: args.playerId,
+        error: String(emergencyError),
+      });
+    }
+    await ctx.runMutation(api.games.forfeitShowdown, { gameId: args.gameId, playerId: args.playerId });
+    return { ok: false, reason: "AI submission error", error: String(error) };
+  }
+}

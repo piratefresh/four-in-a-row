@@ -14,6 +14,11 @@ interface RoomDrawerProps {
   onClose: () => void;
   onJoinSeat: (seatIndex: number) => void;
   isJoining: boolean;
+  onDevRejoin?: () => void;
+  onDevAddBots?: () => void;
+  isDevRejoining?: boolean;
+  isDevAddingBots?: boolean;
+  showDevTools?: boolean;
 }
 
 export function RoomDrawer({
@@ -21,6 +26,11 @@ export function RoomDrawer({
   onClose,
   onJoinSeat,
   isJoining,
+  onDevRejoin,
+  onDevAddBots,
+  isDevRejoining = false,
+  isDevAddingBots = false,
+  showDevTools = false,
 }: RoomDrawerProps) {
   const roomData = useQuery(
     api.rooms.getRoomMembers,
@@ -67,6 +77,30 @@ export function RoomDrawer({
               />
             ))}
           </div>
+
+          {showDevTools ? (
+            <div className="mx-auto mt-6 flex max-w-[280px] flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => onDevRejoin?.()}
+                disabled={isDevRejoining}
+                className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+              >
+                {isDevRejoining ? "Rejoining..." : "Rejoin room"}
+              </button>
+              <button
+                type="button"
+                onClick={() => onDevAddBots?.()}
+                disabled={isDevAddingBots || members.length >= 3}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+              >
+                {isDevAddingBots ? "Adding..." : "Add 2 test players"}
+              </button>
+              <p className="text-center text-xs text-slate-400">
+                Development tools for rejoining and filling seats quickly.
+              </p>
+            </div>
+          ) : null}
         </div>
       </DrawerContent>
     </Drawer>

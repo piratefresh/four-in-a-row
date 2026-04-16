@@ -29,10 +29,14 @@ function App() {
   const stats = useQuery(api.stats.getAllTimeStats)
   const ensureSeedRooms = useMutation(api.rooms.ensureSeedRooms)
   const joinRoom = useMutation(api.rooms.joinRoom)
+  const debugRejoinRoom = useMutation(api.rooms.debugRejoinRoom)
+  const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots)
   const seededRef = useRef(false)
   const [joiningRoomCode, setJoiningRoomCode] = useState<string | null>(null)
   const [joinMessage, setJoinMessage] = useState<string | null>(null)
   const [selectedRoomCode, setSelectedRoomCode] = useState<string | null>(null)
+  const [isDevRejoining, setIsDevRejoining] = useState(false)
+  const [isDevAddingBots, setIsDevAddingBots] = useState(false)
 
   useEffect(() => {
     if (seededRef.current) return
@@ -74,6 +78,45 @@ function App() {
       setJoinMessage(message)
     } finally {
       setJoiningRoomCode(null)
+    }
+  }
+
+  const handleDevRejoin = async () => {
+    if (!import.meta.env.DEV || !selectedRoomCode || !session?.user) return
+
+    const displayName = session.user.name?.trim() || session.user.email || 'Dev Player'
+    setIsDevRejoining(true)
+    setJoinMessage(null)
+
+    try {
+      const result = await debugRejoinRoom({ code: selectedRoomCode, name: displayName })
+      await navigate({ to: '/rooms/$code', params: { code: result.code } })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to rejoin room.'
+      setJoinMessage(message)
+    } finally {
+      setIsDevRejoining(false)
+    }
+  }
+
+  const handleDevAddBots = async () => {
+    if (!import.meta.env.DEV || !selectedRoomCode) return
+
+    setIsDevAddingBots(true)
+    setJoinMessage(null)
+
+    try {
+      const result = await debugFillRoomWithBots({ code: selectedRoomCode, count: 2 })
+      setJoinMessage(
+        result.added > 0
+          ? `Added ${result.added} test player${result.added === 1 ? '' : 's'}.`
+          : 'No open seats available for test players.',
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add test players.'
+      setJoinMessage(message)
+    } finally {
+      setIsDevAddingBots(false)
     }
   }
 
@@ -168,6 +211,11 @@ function App() {
         onClose={() => setSelectedRoomCode(null)}
         onJoinSeat={handleJoinSeat}
         isJoining={joiningRoomCode !== null}
+        onDevRejoin={handleDevRejoin}
+        onDevAddBots={handleDevAddBots}
+        isDevRejoining={isDevRejoining}
+        isDevAddingBots={isDevAddingBots}
+        showDevTools={import.meta.env.DEV}
       />
     </main>
   )

@@ -1,0 +1,301 @@
+import { useEffect, useMemo, useState } from "react";
+import { useAction, useQuery } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
+import type { BuilderTile, PlayerHand, Tile } from "../board/RoomHandsBoard.types";
+import type {
+  DragCancelEvent,
+  DragEndEvent,
+  DragStartEvent,
+} from "@dnd-kit/core";
+import { arrayMove } from "@dnd-kit/sortable";
+import type { Id } from "../../../../convex/_generated/dataModel";
+
+function sortDisabledToEnd(tiles: BuilderTile[]) {
+  return [...tiles].sort((a, b) => Number(!!a.disabled) - Number(!!b.disabled));
+}
+
+export function useRoomWordBuilder({
+  gameId,
+  bottomHand,
+  communityTiles,
+}: {
+  gameId: Id<"games">;
+  bottomHand?: PlayerHand;
+  communityTiles: Tile[];
+}) {
+  const submitWord = useAction(api.games.submitWord);
+  const wordSubmissions = useQuery(api.games.getWordSubmissions, { gameId });
+  const [builderTiles, setBuilderTiles] = useState<BuilderTile[]>([]);
+  const [activeTile, setActiveTile] = useState<BuilderTile | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [showReveal, setShowReveal] = useState(false);
+  const [choiceSelections, setChoiceSelections] = useState<
+    Record<string, string>
+  >({});
+
+  useEffect(() => {
+    if (!bottomHand) {
+      setBuilderTiles([]);
+      return;
+    }
+
+    const nextTiles: BuilderTile[] = [
+      ...bottomHand.tiles.map((tile, index) => {
+        if (tile.kind === "choice") {
+          return {
+            id: `hand-${bottomHand._id}-${index}-choice-${tile.options.join("/")}`,
+            letters: tile.options,
+            baseValues: tile.baseValues,
+            source: "hand" as const,
+            disabled: true,
+            isChoice: true,
+            cardIndex: index,
+          };
+        }
+        return {
+          id: `hand-${bottomHand._id}-${index}-${tile.letter}-${tile.baseValue}`,
+          letter: tile.letter,
+          baseValue: tile.baseValue,
+          source: "hand" as const,
+          disabled: true,
+          cardIndex: index,
+        };
+      }),
+      ...communityTiles
+        .filter((tile) => tile.revealed)
+        .map((tile, index) => {
+          if (tile.kind === "choice") {
+            return {
+              id: `community-${index}-choice-${tile.options.join("/")}`,
+              letters: tile.options,
+              baseValues: tile.baseValues,
+              source: "community" as const,
+              disabled: true,
+              isChoice: true,
+              cardIndex: index,
+            };
+          }
+          return {
+            id: `community-${index}-${tile.letter}-${tile.baseValue}`,
+            letter: tile.letter,
+            baseValue: tile.baseValue,
+            source: "community" as const,
+            disabled: true,
+            cardIndex: index,
+          };
+        }),
+    ];
+
+    setBuilderTiles((previous) => {
+      const nextById = new Map(nextTiles.map((tile) => [tile.id, tile]));
+      const preserved: BuilderTile[] = [];
+
+      for (const prevTile of previous) {
+        const nextTile = nextById.get(prevTile.id);
+        if (nextTile) {
+          preserved.push({ ...nextTile, disabled: prevTile.disabled });
+        }
+      }
+
+      const preservedIds = new Set(preserved.map((tile) => tile.id));
+      const missing = nextTiles.filter((tile) => !preservedIds.has(tile.id));
+      return sortDisabledToEnd([...preserved, ...missing]);
+    });
+  }, [bottomHand, communityTiles]);
+
+  const wordPreview = useMemo(
+    () =>
+      builderTiles
+        .filter((tile) => !tile.disabled)
+        .map((tile) => {
+          if (tile.isChoice) {
+            return choiceSelections[tile.id] || `[${tile.letters?.[0]}]`;
+          }
+          return tile.letter ?? "";
+        })
+        .join(""),
+    [builderTiles, choiceSelections],
+  );
+
+  const unresolvedChoices = useMemo(
+    () =>
+      builderTiles
+        .filter((tile) => !tile.disabled && tile.isChoice)
+        .filter((tile) => !choiceSelections[tile.id]),
+    [builderTiles, choiceSelections],
+  );
+
+  const hasUnresolvedChoices = unresolvedChoices.length > 0;
+
+  const mySubmission = useMemo(() => {
+    if (!bottomHand || !wordSubmissions?.submissions) return null;
+    return wordSubmissions.submissions.find(
+      (submission) => submission.playerId === bottomHand.playerId,
+    );
+  }, [bottomHand, wordSubmissions]);
+
+  const otherSubmissions = useMemo(() => {
+    if (!bottomHand || !wordSubmissions?.submissions) return [];
+    return wordSubmissions.submissions.filter(
+      (submission) => submission.playerId !== bottomHand.playerId,
+    );
+  }, [bottomHand, wordSubmissions]);
+
+  const handleToggleDisabled = (id: string) => {
+    setBuilderTiles((previous) => {
+      const tile = previous.find((item) => item.id === id);
+      if (tile && !tile.disabled) {
+        setChoiceSelections((selections) => {
+          const { [id]: _, ...rest } = selections;
+          return rest;
+        });
+      }
+      return sortDisabledToEnd(
+        previous.map((tile) =>
+          tile.id === id ? { ...tile, disabled: !tile.disabled } : tile,
+        ),
+      );
+    });
+  };
+
+  const handleChoiceSelect = (tileId: string, letter: string) => {
+    setChoiceSelections((previous) => ({
+      ...previous,
+      [tileId]: letter,
+    }));
+  };
+
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    const tile =
+      builderTiles.find((item) => item.id === String(active.id)) ?? null;
+    setActiveTile(tile);
+  };
+
+  const handleDragCancel = (_event: DragCancelEvent) => {
+    setActiveTile(null);
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    setActiveTile(null);
+    if (!over || active.id === over.id) return;
+    setBuilderTiles((previous) => {
+      const oldIndex = previous.findIndex((item) => item.id === active.id);
+      const newIndex = previous.findIndex((item) => item.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return previous;
+      return sortDisabledToEnd(arrayMove(previous, oldIndex, newIndex));
+    });
+  };
+
+  const handleSubmitWord = async () => {
+    if (!wordPreview || wordPreview.length < 2) {
+      setValidationError("Word must be at least 2 letters");
+      return;
+    }
+
+    if (hasUnresolvedChoices) {
+      setValidationError("Please select a letter for each choice card");
+      return;
+    }
+
+    if (!bottomHand) {
+      setValidationError("No player hand available");
+      return;
+    }
+
+    setIsValidating(true);
+    setValidationError(null);
+
+    try {
+      const enabledTiles = builderTiles.filter((tile) => !tile.disabled);
+      const tiles = enabledTiles.map((tile) => {
+        if (tile.isChoice) {
+          const selectedLetter = choiceSelections[tile.id];
+          const optionIndex = tile.letters?.indexOf(selectedLetter) ?? 0;
+          const selectedValue = tile.baseValues?.[optionIndex] ?? 1;
+          return {
+            letter: selectedLetter,
+            baseValue: selectedValue,
+            source: tile.source,
+            cardIndex: tile.cardIndex,
+            wasChoice: true,
+          };
+        }
+        return {
+          letter: tile.letter!,
+          baseValue: tile.baseValue!,
+          source: tile.source,
+          cardIndex: tile.cardIndex,
+          wasChoice: false,
+        };
+      });
+
+      const choiceResolutions: {
+        hand?: Record<string, string>;
+        community?: Record<string, string>;
+      } = {};
+
+      enabledTiles.forEach((tile) => {
+        if (tile.isChoice && tile.cardIndex !== undefined) {
+          const selectedLetter = choiceSelections[tile.id];
+          const resolutionKey = tile.source === "hand" ? "hand" : "community";
+          if (!choiceResolutions[resolutionKey]) {
+            choiceResolutions[resolutionKey] = {};
+          }
+          choiceResolutions[resolutionKey]![String(tile.cardIndex)] =
+            selectedLetter;
+        }
+      });
+
+      const result = await submitWord({
+        gameId,
+        playerId: bottomHand.playerId,
+        word: wordPreview.replace(/\[|\]/g, ""),
+        tiles,
+        choiceResolutions:
+          Object.keys(choiceResolutions).length > 0
+            ? choiceResolutions
+            : undefined,
+      });
+
+      if (result?.forfeited) {
+        setValidationError(
+          result.message ?? "Invalid word. Submitted with 0 points.",
+        );
+      }
+
+      setIsValidating(false);
+      setTimeout(() => {
+        setShowReveal(true);
+      }, 500);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error submitting word. Please try again.";
+      setValidationError(message);
+      setIsValidating(false);
+    }
+  };
+
+  return {
+    activeTile,
+    builderTiles,
+    choiceSelections,
+    handleChoiceSelect,
+    handleDragCancel,
+    handleDragEnd,
+    handleDragStart,
+    handleSubmitWord,
+    handleToggleDisabled,
+    hasUnresolvedChoices,
+    isValidating,
+    mySubmission,
+    otherSubmissions,
+    setActiveTile,
+    showReveal,
+    validationError,
+    wordPreview,
+    wordSubmissions,
+  };
+}
