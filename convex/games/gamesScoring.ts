@@ -1,7 +1,7 @@
 const SPEED_BONUS_TIER_1_SECONDS = 5;
 const SPEED_BONUS_TIER_2_SECONDS = 10;
 
-function calculateLengthPoints(wordLength: number): number {
+export function calculateLengthPoints(wordLength: number): number {
   return wordLength * 3;
 }
 
@@ -29,5 +29,16 @@ export function calculateScore(
     speedBonus,
     validWordBonus,
     total: lengthPoints + speedBonus + validWordBonus,
+  };
+}
+
+export function calculateStaticShowdownScore(word: string) {
+  const lengthPoints = calculateLengthPoints(word.length);
+  const validWordBonus = 5;
+
+  return {
+    lengthPoints,
+    validWordBonus,
+    total: lengthPoints + validWordBonus,
   };
 }

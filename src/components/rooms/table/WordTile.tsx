@@ -80,24 +80,8 @@ export function WordTile({
           ? [baseValue]
           : [];
 
-  return (
-    <div
-      className={`relative flex items-center justify-center ${variant === "hidden" ? "rounded-[12px]" : "rounded-[6px] border"} ${styleByVariant[variant]} ${sizeClasses[size]} ${className ?? ""}`}
-      style={
-        variant === "default"
-          ? {
-              background:
-                "linear-gradient(145deg, #f7e8c5 0%, #ecd7aa 45%, #d9be85 100%)",
-            }
-          : variant === "hidden"
-            ? {
-                width: "45px",
-                height: "60px",
-              }
-            : undefined
-      }
-      {...divProps}
-    >
+  const tileContent = (
+    <>
       {variant !== "hidden" && (
         <div
           className={`pointer-events-none absolute inset-0.5 rounded-lg border ${insetByVariant[variant]}`}
@@ -192,6 +176,47 @@ export function WordTile({
           )}
         </>
       )}
+    </>
+  );
+
+  // Wrap choice cards with animated border using Tailwind
+  if (isChoiceCard && !selectedLetter && variant === "default") {
+    return (
+      <div
+        className={`relative rounded-[6px] border border-transparent ${sizeClasses[size]} ${className ?? ""}`}
+        style={{
+          background:
+            "linear-gradient(145deg, #f7e8c5 0%, #ecd7aa 45%, #d9be85 100%) padding-box, conic-gradient(from var(--border-angle), theme(colors.amber.600/.48) 80%, theme(colors.amber.400) 86%, theme(colors.amber.200) 90%, theme(colors.amber.400) 94%, theme(colors.amber.600/.48)) border-box",
+          animation: "border 4s linear infinite",
+        }}
+        {...divProps}
+      >
+        <div className="relative flex h-full w-full items-center justify-center">
+          {tileContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`relative flex items-center justify-center ${variant === "hidden" ? "rounded-2xl" : "rounded-[6px] border"} ${styleByVariant[variant]} ${sizeClasses[size]} ${className ?? ""}`}
+      style={
+        variant === "default"
+          ? {
+              background:
+                "linear-gradient(145deg, #f7e8c5 0%, #ecd7aa 45%, #d9be85 100%)",
+            }
+          : variant === "hidden"
+            ? {
+                width: "45px",
+                height: "60px",
+              }
+            : undefined
+      }
+      {...divProps}
+    >
+      {tileContent}
     </div>
   );
 }

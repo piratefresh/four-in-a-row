@@ -3,13 +3,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { api } from "../../../../convex/_generated/api";
-import { SHOWDOWN_TIMER_MS } from "../../../../convex/gameState";
+import { getBotCharacterForAuthUserId } from "../../../../convex/aiStrategy";
+import { RAISE_LADDER, SHOWDOWN_TIMER_MS } from "../../../../convex/gameState";
 import type { RoomGameContextValue } from "../context/RoomGameContext";
 import type { RoomPageContextValue } from "../context/RoomPageContext";
+import { useRoomPresence } from "./useRoomPresence";
 
 const DEALER_PLAYER_ID = "ai_dealer";
 const ANTE_AMOUNT = 20;
-const RAISE_LADDER = [20, 40, 60, 80, 100, 120, 140, 160, 200];
 const MAX_RAISES_PER_ROUND = 3;
 const INITIAL_CHIPS = 1000;
 
@@ -103,6 +104,9 @@ export function useRoomDetailsController(code: string) {
   const [showdownTimeRemaining, setShowdownTimeRemaining] = useState<
     number | null
   >(null);
+  const [selectedRaiseAmount, setSelectedRaiseAmount] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
     myPlayerRef.current = myPlayer;
@@ -143,14 +147,29 @@ export function useRoomDetailsController(code: string) {
   );
 
   const getPlayerName = useCallback(
-    (targetPlayerId: string, handIndex?: number) =>
-      memberById.get(targetPlayerId)?.name ??
-      (handIndex !== undefined ? `Player ${handIndex + 1}` : targetPlayerId),
+    (targetPlayerId: string, handIndex?: number) => {
+      const member = memberById.get(targetPlayerId);
+      const botCharacter = getBotCharacterForAuthUserId(member?.authUserId);
+      return (
+        botCharacter?.name ??
+        member?.name ??
+        (handIndex !== undefined ? `Player ${handIndex + 1}` : targetPlayerId)
+      );
+    },
     [memberById],
   );
 
   const getPlayerAvatar = useCallback(
     (targetPlayerId: string) => memberById.get(targetPlayerId)?.image ?? null,
+    [memberById],
+  );
+
+  const getPlayerPersonality = useCallback(
+    (targetPlayerId: string): string | null => {
+      const member = memberById.get(targetPlayerId);
+      const botCharacter = getBotCharacterForAuthUserId(member?.authUserId);
+      return botCharacter?.title ?? null;
+    },
     [memberById],
   );
 
@@ -201,6 +220,13 @@ export function useRoomDetailsController(code: string) {
         : null,
     [game, turnOrderedHands],
   );
+  const currentTurnPlayerName = useMemo(
+    () =>
+      currentTurnPlayerId
+        ? getPlayerName(currentTurnPlayerId)
+        : null,
+    [currentTurnPlayerId, getPlayerName],
+  );
 
   const myHand = useMemo(
     () =>
@@ -245,17 +271,36 @@ export function useRoomDetailsController(code: string) {
   const isMyTurn =
     currentTurnPlayerId === playerId && game?.status === "active";
   const raisesThisRound = game?.raisesThisRound ?? 0;
-  const nextRaiseLevel = useMemo(
-    () => RAISE_LADDER.find((amount) => amount > (game?.currentBet ?? 0)),
-    [game?.currentBet],
-  );
-  const effectiveNextRaiseLevel =
-    raisesThisRound >= MAX_RAISES_PER_ROUND ? undefined : nextRaiseLevel;
-  const canRaise =
-    Boolean(game && myHand && effectiveNextRaiseLevel !== undefined) &&
-    isMyTurn &&
-    raisesThisRound < MAX_RAISES_PER_ROUND &&
-    myHand!.chips >= effectiveNextRaiseLevel! - myHand!.betThisRound;
+  const availableRaiseOptions = useMemo(() => {
+    if (
+      !game ||
+      !myHand ||
+      !isMyTurn ||
+      game.status !== "active" ||
+      raisesThisRound >= MAX_RAISES_PER_ROUND
+    ) {
+      return [];
+    }
+
+    return RAISE_LADDER.filter(
+      (amount) =>
+        amount > game.currentBet && amount - myHand.betThisRound <= myHand.chips,
+    );
+  }, [game, isMyTurn, myHand, raisesThisRound]);
+  const canRaise = availableRaiseOptions.length > 0;
+
+  useEffect(() => {
+    if (availableRaiseOptions.length === 0) {
+      setSelectedRaiseAmount(null);
+      return;
+    }
+
+    setSelectedRaiseAmount((current) =>
+      current !== null && availableRaiseOptions.includes(current)
+        ? current
+        : availableRaiseOptions[0],
+    );
+  }, [availableRaiseOptions]);
 
   const displayHands = useMemo(() => {
     if (game?.status === "waiting" && roomData?.members) {
@@ -271,15 +316,7 @@ export function useRoomDetailsController(code: string) {
     return rotatedHands;
   }, [game?.status, roomData?.members, rotatedHands]);
 
-  useEffect(() => {
-    const onPageHide = () => {
-      void leaveCurrentRoom(true);
-    };
-    window.addEventListener("pagehide", onPageHide);
-    return () => {
-      window.removeEventListener("pagehide", onPageHide);
-    };
-  }, [leaveCurrentRoom]);
+  useRoomPresence(code, Boolean(session?.user && roomData?.room && myPlayer));
 
   useEffect(() => {
     if (isAuthPending) return;
@@ -294,7 +331,7 @@ export function useRoomDetailsController(code: string) {
   }, [game?.currentBet, game?.currentPlayerIndex, game?.stage, gameMessage]);
 
   useEffect(() => {
-    if (!roomData?.room._id || game !== undefined || isCreatingGame) return;
+    if (!roomData?.room._id || game !== null || isCreatingGame) return;
 
     const autoCreateGame = async () => {
       setIsCreatingGame(true);
@@ -429,7 +466,7 @@ export function useRoomDetailsController(code: string) {
   }, [call, game?._id, playerId]);
 
   const handleRaise = useCallback(async () => {
-    if (!game?._id || !playerId || effectiveNextRaiseLevel === undefined) {
+    if (!game?._id || !playerId || selectedRaiseAmount === null) {
       return;
     }
     if (raisesThisRound >= MAX_RAISES_PER_ROUND) {
@@ -444,9 +481,9 @@ export function useRoomDetailsController(code: string) {
       await raise({
         gameId: game._id,
         playerId,
-        raiseToAmount: effectiveNextRaiseLevel,
+        raiseToAmount: selectedRaiseAmount,
       });
-      setGameMessage(`Raised to ${effectiveNextRaiseLevel} chips.`);
+      setGameMessage(`Raised to ${selectedRaiseAmount} chips.`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to raise.";
@@ -454,7 +491,7 @@ export function useRoomDetailsController(code: string) {
     } finally {
       setIsBetting(false);
     }
-  }, [effectiveNextRaiseLevel, game?._id, playerId, raise, raisesThisRound]);
+  }, [game?._id, playerId, raise, raisesThisRound, selectedRaiseAmount]);
 
   const handleFold = useCallback(async () => {
     if (!game?._id || !playerId) return;
@@ -551,28 +588,35 @@ export function useRoomDetailsController(code: string) {
         (roomData?.members?.length ?? 0) > 0 &&
         (roomData?.members?.every((member) => member.readyStatus) ?? false),
       isBetting,
+      isMyTurn,
       canCheck,
       canCall,
       canRaise,
       canFold: isMyTurn,
+      currentTurnPlayerName,
       onCheck: canCheck ? handleCheck : undefined,
       onCall: canCall ? handleCall : undefined,
       onRaise: isMyTurn ? handleRaise : undefined,
       onFold: isMyTurn ? handleFold : undefined,
+      onRaiseAmountChange: canRaise ? setSelectedRaiseAmount : undefined,
       onLeaveRoom: handleBack,
       callLabel: callAmount > 0 ? `Call ${callAmount}` : "Call",
+      callAmount,
       raiseLabel:
-        effectiveNextRaiseLevel !== undefined
-          ? `Raise to ${effectiveNextRaiseLevel}`
+        selectedRaiseAmount !== null
+          ? `Raise to ${selectedRaiseAmount}`
           : "Raise Maxed",
+      raiseAmount: selectedRaiseAmount,
+      raiseOptions: availableRaiseOptions,
       showdownTimeRemaining,
     }),
     [
+      availableRaiseOptions,
       callAmount,
       canCall,
       canCheck,
       canRaise,
-      effectiveNextRaiseLevel,
+      currentTurnPlayerName,
       game?.stage,
       game?.status,
       gameMessage,
@@ -588,6 +632,7 @@ export function useRoomDetailsController(code: string) {
       myPlayer?.readyStatus,
       raisesThisRound,
       roomData?.members,
+      selectedRaiseAmount,
       showdownTimeRemaining,
     ],
   );
@@ -612,7 +657,7 @@ export function useRoomDetailsController(code: string) {
         canCall,
         canRaise,
         callAmount,
-        effectiveNextRaiseLevel,
+        effectiveNextRaiseLevel: selectedRaiseAmount ?? undefined,
         hasDevTools: import.meta.env.DEV,
         isDevRejoining,
         isDevFillingBots,
@@ -632,6 +677,7 @@ export function useRoomDetailsController(code: string) {
       },
       meta: {
         getPlayerName,
+        getPlayerPersonality,
       },
     }),
     [
@@ -640,10 +686,10 @@ export function useRoomDetailsController(code: string) {
       canCheck,
       canRaise,
       code,
-      effectiveNextRaiseLevel,
       game,
       gameMessage,
       getPlayerName,
+      getPlayerPersonality,
       handleBack,
       handleCall,
       handleCheck,
@@ -664,6 +710,7 @@ export function useRoomDetailsController(code: string) {
       playerHands,
       playerId,
       roomData,
+      selectedRaiseAmount,
       showdownResults,
     ],
   );
@@ -674,10 +721,12 @@ export function useRoomDetailsController(code: string) {
     roomData,
     game,
     myPlayer,
+    currentTurnPlayerId,
     displayHands,
     bottomPlayerId,
     getPlayerName,
     getPlayerAvatar,
+    getPlayerPersonality,
     roomGameContextValue,
     roomPageContextValue,
     isDevRejoining,

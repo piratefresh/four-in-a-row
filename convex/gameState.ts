@@ -45,47 +45,46 @@ export type GameDeckTile =
     }
   | {
       kind: "choice";
-      options: string[]; // 2-4 letters
+      options: string[]; // exactly 2 letters
       baseValues: number[]; // corresponding values for each option
     };
 
 export const INITIAL_HAND_SIZE = 2;
+export const COMMUNITY_TILE_COUNT = 5;
+export const MIN_CHOICE_TILES_PER_PLAYER_ROUND = 2;
+export const MAX_CHOICE_TILES_PER_PLAYER_ROUND = 3;
+export const PREFERRED_PRIVATE_CHOICE_TILE_COUNT = 1;
+export const MIN_COMMUNITY_CHOICE_TILE_COUNT = 1;
+export const MAX_COMMUNITY_CHOICE_TILE_COUNT = 2;
 
 // Multi-letter deck configuration (MVP defaults)
 export const DECK_SIZE = 60;
-export const CHOICE_2_COUNT = 8;
-export const CHOICE_3_COUNT = 4;
-export const CHOICE_4_COUNT = 2;
-export const CHOICE_TOTAL = CHOICE_2_COUNT + CHOICE_3_COUNT + CHOICE_4_COUNT; // 14
+export const CHOICE_TILE_COUNT = 14;
+export const CHOICE_TOTAL = CHOICE_TILE_COUNT;
 export const SINGLE_TOTAL = DECK_SIZE - CHOICE_TOTAL; // 46
 
-// Choice card letter options (MVP defaults)
-// High-frequency vowels and consonants for choice cards
-export const CHOICE_2_OPTIONS: Array<[string, string]> = [
+// Two-letter choice tile options aligned with the current rules.
+export const CHOICE_TILE_OPTIONS: Array<[string, string]> = [
   ["A", "E"], // Common vowels
   ["A", "E"],
   ["E", "I"],
   ["O", "U"],
+  ["A", "I"],
   ["S", "T"], // Common consonants
   ["R", "N"],
+  ["D", "T"],
+  ["S", "L"],
+  ["Q", "K"], // High value pairs
+  ["Z", "X"],
+  ["J", "H"],
   ["L", "D"],
   ["C", "H"],
 ];
 
-export const CHOICE_3_OPTIONS: Array<[string, string, string]> = [
-  ["A", "E", "I"], // Vowel mix
-  ["S", "T", "R"], // High-frequency consonants
-  ["N", "L", "D"],
-  ["C", "H", "M"],
-];
-
-export const CHOICE_4_OPTIONS: Array<[string, string, string, string]> = [
-  ["A", "E", "I", "O"], // All common vowels
-  ["S", "T", "R", "N"], // Top consonants
-];
-
 // Betting constants
-export const ANTE_AMOUNT = 20;
+export const SMALL_BLIND = 10;
+export const BIG_BLIND = 20;
+export const ANTE_AMOUNT = 20; // Kept for backwards compatibility
 export const RAISE_LADDER = [20, 40, 60, 80, 100, 120, 140, 160, 200];
 export const MAX_RAISES_PER_ROUND = 3;
 
@@ -155,6 +154,9 @@ export function createInitialGameDocument(
     pot: 0,
     currentBet: 0,
     currentPlayerIndex: 0,
+    dealerButtonIndex: 0,
+    smallBlindIndex: 1,
+    bigBlindIndex: 2,
     raisesThisRound: 0,
     status: "waiting" as const,
     createdAt: now,
@@ -213,20 +215,18 @@ function getLetterBaseValue(letter: string): number {
  */
 export function validateDeckConfig(config: {
   deckSize: number;
-  choice2Count: number;
-  choice3Count: number;
-  choice4Count: number;
+  choiceTileCount: number;
 }): void {
-  const { deckSize, choice2Count, choice3Count, choice4Count } = config;
-  const choiceTotal = choice2Count + choice3Count + choice4Count;
+  const { deckSize, choiceTileCount } = config;
+  const choiceTotal = choiceTileCount;
   const singleTotal = deckSize - choiceTotal;
 
   if (deckSize <= 0) {
     throw new Error("Deck size must be positive");
   }
 
-  if (choice2Count < 0 || choice3Count < 0 || choice4Count < 0) {
-    throw new Error("Choice card counts cannot be negative");
+  if (choiceTileCount < 0) {
+    throw new Error("Choice tile count cannot be negative");
   }
 
   if (choiceTotal > deckSize) {
@@ -241,21 +241,9 @@ export function validateDeckConfig(config: {
     );
   }
 
-  if (choice2Count > CHOICE_2_OPTIONS.length) {
+  if (choiceTileCount > CHOICE_TILE_OPTIONS.length) {
     throw new Error(
-      `Choice-2 count (${choice2Count}) exceeds options array length (${CHOICE_2_OPTIONS.length})`
-    );
-  }
-
-  if (choice3Count > CHOICE_3_OPTIONS.length) {
-    throw new Error(
-      `Choice-3 count (${choice3Count}) exceeds options array length (${CHOICE_3_OPTIONS.length})`
-    );
-  }
-
-  if (choice4Count > CHOICE_4_OPTIONS.length) {
-    throw new Error(
-      `Choice-4 count (${choice4Count}) exceeds options array length (${CHOICE_4_OPTIONS.length})`
+      `Choice tile count (${choiceTileCount}) exceeds options array length (${CHOICE_TILE_OPTIONS.length})`
     );
   }
 }
@@ -266,46 +254,21 @@ export function validateDeckConfig(config: {
  */
 export function createShuffledDeck(config?: {
   deckSize?: number;
-  choice2Count?: number;
-  choice3Count?: number;
-  choice4Count?: number;
+  choiceTileCount?: number;
 }): GameDeckTile[] {
   const deckSize = config?.deckSize ?? DECK_SIZE;
-  const choice2Count = config?.choice2Count ?? CHOICE_2_COUNT;
-  const choice3Count = config?.choice3Count ?? CHOICE_3_COUNT;
-  const choice4Count = config?.choice4Count ?? CHOICE_4_COUNT;
+  const choiceTileCount = config?.choiceTileCount ?? CHOICE_TILE_COUNT;
 
   // Validate configuration
-  validateDeckConfig({ deckSize, choice2Count, choice3Count, choice4Count });
+  validateDeckConfig({ deckSize, choiceTileCount });
 
-  const choiceTotal = choice2Count + choice3Count + choice4Count;
+  const choiceTotal = choiceTileCount;
   const singleTotal = deckSize - choiceTotal;
 
   const deck: GameDeckTile[] = [];
 
-  // Add choice-2 cards
-  for (let i = 0; i < choice2Count; i++) {
-    const options = CHOICE_2_OPTIONS[i];
-    deck.push({
-      kind: "choice",
-      options: [...options],
-      baseValues: options.map(getLetterBaseValue),
-    });
-  }
-
-  // Add choice-3 cards
-  for (let i = 0; i < choice3Count; i++) {
-    const options = CHOICE_3_OPTIONS[i];
-    deck.push({
-      kind: "choice",
-      options: [...options],
-      baseValues: options.map(getLetterBaseValue),
-    });
-  }
-
-  // Add choice-4 cards
-  for (let i = 0; i < choice4Count; i++) {
-    const options = CHOICE_4_OPTIONS[i];
+  for (let i = 0; i < choiceTileCount; i++) {
+    const options = CHOICE_TILE_OPTIONS[i];
     deck.push({
       kind: "choice",
       options: [...options],

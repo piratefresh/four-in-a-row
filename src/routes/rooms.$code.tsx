@@ -3,7 +3,6 @@ import {
   RoomDevTools,
   RoomGameProvider,
   RoomHandsBoardV2,
-  RoomLobbyPanel,
   RoomPageProvider,
   useRoomDetailsController,
 } from "@/components/rooms";
@@ -29,10 +28,12 @@ function RoomDetailsPage() {
     roomData,
     game,
     myPlayer,
+    currentTurnPlayerId,
     displayHands,
     bottomPlayerId,
     getPlayerName,
     getPlayerAvatar,
+    getPlayerPersonality,
     roomGameContextValue,
     roomPageContextValue,
     isDevRejoining,
@@ -54,26 +55,35 @@ function RoomDetailsPage() {
     return <StatusScreen message="Joining room..." />;
   }
 
+  if (roomData === null) {
+    return <StatusScreen message="Room not found." />;
+  }
+
+  if (!game || displayHands.length === 0) {
+    return <StatusScreen message="Preparing table..." />;
+  }
+
   return (
     <RoomPageProvider value={roomPageContextValue}>
       <>
-        {game && displayHands.length > 0 ? (
-          <RoomGameProvider value={roomGameContextValue}>
-            <RoomHandsBoardV2
-              gameId={game._id}
-              roomCode={code}
-              gameStage={game.stage}
-              communityTiles={game.communityTiles}
-              hands={displayHands}
-              bottomPlayerId={bottomPlayerId}
-              pot={game.pot}
-              getPlayerName={getPlayerName}
-              getPlayerAvatar={getPlayerAvatar}
-            />
-          </RoomGameProvider>
-        ) : (
-          <RoomLobbyPanel />
-        )}
+        <RoomGameProvider value={roomGameContextValue}>
+          <RoomHandsBoardV2
+            gameId={game._id}
+            roomCode={code}
+            currentTurnPlayerId={currentTurnPlayerId}
+            gameStage={game.stage}
+            communityTiles={game.communityTiles}
+            hands={displayHands}
+            bottomPlayerId={bottomPlayerId}
+            pot={game.pot}
+            dealerButtonIndex={game.dealerButtonIndex}
+            smallBlindIndex={game.smallBlindIndex}
+            bigBlindIndex={game.bigBlindIndex}
+            getPlayerName={getPlayerName}
+            getPlayerAvatar={getPlayerAvatar}
+            getPlayerPersonality={getPlayerPersonality}
+          />
+        </RoomGameProvider>
 
         {import.meta.env.DEV && !myPlayer && roomData ? (
           <RoomDevTools

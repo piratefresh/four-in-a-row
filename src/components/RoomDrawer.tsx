@@ -1,23 +1,26 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
+import { ANTE_AMOUNT } from "../../convex/gameState";
+import { INITIAL_CHIPS } from "../../convex/games/gamesShared";
+import {
+  PokerTable,
+  formatStackLabel,
+} from "@/components/rooms/table/PokerTable";
 import {
   Drawer,
-  DrawerClose,
   DrawerContent,
   DrawerHeader,
+  DrawerDescription,
   DrawerTitle,
 } from "@/components/ui/drawer";
 
 interface RoomDrawerProps {
   roomCode: string | null;
   onClose: () => void;
-  onJoinSeat: (seatIndex: number) => void;
+  onJoinSeat: () => void;
   isJoining: boolean;
   onDevRejoin?: () => void;
-  onDevAddBots?: () => void;
   isDevRejoining?: boolean;
-  isDevAddingBots?: boolean;
   showDevTools?: boolean;
 }
 
@@ -27,9 +30,7 @@ export function RoomDrawer({
   onJoinSeat,
   isJoining,
   onDevRejoin,
-  onDevAddBots,
   isDevRejoining = false,
-  isDevAddingBots = false,
   showDevTools = false,
 }: RoomDrawerProps) {
   const roomData = useQuery(
@@ -39,47 +40,60 @@ export function RoomDrawer({
 
   const maxPlayers = roomData?.room.maxPlayers ?? 4;
   const members = roomData?.members ?? [];
-
-  // Map members to seats
-  const seats = Array.from({ length: maxPlayers }, (_, index) => {
-    const member = members.find((m) => m.seatIndex === index);
-    return {
-      seatIndex: index,
-      player: member || null,
-    };
-  });
+  const hasOpenSeat = members.length < maxPlayers;
+  const previewPlayers = [
+    ...members.map((member) => ({
+      seatIndex: member.seatIndex,
+      name: member.name,
+      meta: formatStackLabel(INITIAL_CHIPS),
+    })),
+    ...(roomData?.viewerSeatPreview
+      ? [
+          {
+            seatIndex: roomData.viewerSeatPreview.seatIndex,
+            name: roomData.viewerSeatPreview.name,
+            meta: "Rejoin",
+          },
+        ]
+      : []),
+  ];
+  const joinButtonLabel = isJoining
+    ? "Taking seat..."
+    : hasOpenSeat
+      ? `Take a seat • Ante $${ANTE_AMOUNT}`
+      : "Room full";
 
   return (
     <Drawer open={!!roomCode} onOpenChange={(open) => !open && onClose()}>
-      <DrawerContent className="bg-[#252525] border-slate-700">
-        <DrawerHeader className="pb-2">
-          <DrawerTitle className="text-center text-white">
-            Poker game {roomCode}
+      <DrawerContent className="border-white/10 bg-[#050505] text-white">
+        <DrawerHeader className="px-5 pb-0 pt-5 text-left">
+          <DrawerTitle className="font-serif text-[2.25rem] tracking-tight text-white">
+            Room {roomCode}
           </DrawerTitle>
+          <DrawerDescription className="text-sm text-white/60">
+            Ante ${ANTE_AMOUNT} • {maxPlayers} seats • Tap an open seat to join
+          </DrawerDescription>
         </DrawerHeader>
 
-        {/* Content */}
-        <div className="px-6 pb-8 pt-6">
-          {/* Poker Table */}
-          <div className="relative mx-auto flex h-[261px] w-[177px] items-center justify-center">
-            {/* Table surface */}
-            <div className="absolute inset-0 rounded-[90px] border-[6px] border-[#1D1D1D] bg-[#114D28] shadow-[inset_0_0_30px_rgba(0,0,0,0.3)]" />
+        <div className="px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-6">
+          <PokerTable
+            players={previewPlayers}
+            maxPlayers={maxPlayers}
+            onOpenSeatClick={() => onJoinSeat()}
+            isJoining={isJoining || !hasOpenSeat}
+          />
 
-            {/* Seats positioned around the table */}
-            {seats.map((seat, index) => (
-              <Seat
-                key={seat.seatIndex}
-                seatIndex={seat.seatIndex}
-                player={seat.player}
-                position={getSeatPosition(index, maxPlayers)}
-                onJoin={() => onJoinSeat(seat.seatIndex)}
-                isJoining={isJoining}
-              />
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={onJoinSeat}
+            disabled={isJoining || !hasOpenSeat}
+            className="mt-6 w-full rounded-2xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-5 py-4 text-center text-lg font-semibold text-[#1f1402] shadow-[0_10px_24px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {joinButtonLabel}
+          </button>
 
           {showDevTools ? (
-            <div className="mx-auto mt-6 flex max-w-[280px] flex-col gap-3">
+            <div className="mx-auto mt-6 flex max-w-[320px] flex-col gap-3">
               <button
                 type="button"
                 onClick={() => onDevRejoin?.()}
@@ -88,16 +102,8 @@ export function RoomDrawer({
               >
                 {isDevRejoining ? "Rejoining..." : "Rejoin room"}
               </button>
-              <button
-                type="button"
-                onClick={() => onDevAddBots?.()}
-                disabled={isDevAddingBots || members.length >= 3}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-              >
-                {isDevAddingBots ? "Adding..." : "Add 2 test players"}
-              </button>
               <p className="text-center text-xs text-slate-400">
-                Development tools for rejoining and filling seats quickly.
+                Development tool for reclaiming your seat quickly.
               </p>
             </div>
           ) : null}
@@ -105,79 +111,4 @@ export function RoomDrawer({
       </DrawerContent>
     </Drawer>
   );
-}
-
-interface SeatProps {
-  seatIndex: number;
-  player: { name: string; _id: Id<"players"> } | null;
-  position: { top?: string; bottom?: string; left?: string; right?: string };
-  onJoin: () => void;
-  isJoining: boolean;
-}
-
-function Seat({ seatIndex, player, position, onJoin, isJoining }: SeatProps) {
-  const isEmpty = !player;
-
-  return (
-    <div className="absolute" style={position}>
-      {isEmpty ? (
-        <button
-          onClick={onJoin}
-          disabled={isJoining}
-          className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-slate-600 text-white shadow-lg ring-2 ring-slate-500/50 transition-all hover:scale-110 hover:bg-green-600 hover:ring-green-400 active:bg-green-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:ring-0"
-        >
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-        </button>
-      ) : (
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 shadow-lg">
-          <div className="text-center">
-            <div className="text-xs font-medium text-white">
-              {player.name.substring(0, 2).toUpperCase()}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Position seats around the table
-function getSeatPosition(
-  index: number,
-  totalSeats: number,
-): { top?: string; bottom?: string; left?: string; right?: string } {
-  if (totalSeats === 4) {
-    const positions = [
-      { top: "0%", left: "50%", transform: "translate(-50%, -50%)" }, // Top
-      { top: "50%", right: "0%", transform: "translate(50%, -50%)" }, // Right
-      { bottom: "0%", left: "50%", transform: "translate(-50%, 50%)" }, // Bottom
-      { top: "50%", left: "0%", transform: "translate(-50%, -50%)" }, // Left
-    ];
-    return positions[index] || positions[0];
-  }
-
-  // For other seat counts, distribute evenly around the ellipse
-  const angle = (index / totalSeats) * 2 * Math.PI - Math.PI / 2;
-  const radiusX = 45; // Horizontal radius percentage
-  const radiusY = 38; // Vertical radius percentage
-  const x = 50 + radiusX * Math.cos(angle);
-  const y = 50 + radiusY * Math.sin(angle);
-
-  return {
-    top: `${y}%`,
-    left: `${x}%`,
-    transform: "translate(-50%, -50%)",
-  };
 }

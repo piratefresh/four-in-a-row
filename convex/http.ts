@@ -17,34 +17,6 @@ function corsHeaders(origin = allowedOrigin) {
 }
 
 http.route({
-  path: "/wikiSummary",
-  method: "GET",
-  handler: httpAction(async (ctx, request) => {
-    const allowedOrigin = process.env.CLIENT_ORIGIN ?? "*";
-    const url = new URL(request.url);
-    const topic = url.searchParams.get("topic");
-    if (!topic) {
-      return new Response("Missing topic", { status: 400 });
-    }
-
-    const summary = await ctx.runAction(
-      internal.validateWord.getWikipediaSummary,
-      {
-        topic,
-      },
-    );
-
-    return new Response(summary, {
-      status: 200,
-      headers: new Headers({
-        ...corsHeaders(),
-        "Content-Type": "text/plain",
-      }),
-    });
-  }),
-});
-
-http.route({
   path: "/validateWord",
   method: "OPTIONS",
   handler: httpAction(async () => {

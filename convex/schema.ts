@@ -49,6 +49,9 @@ export const appTables = {
     pot: v.number(),
     currentBet: v.number(),
     currentPlayerIndex: v.number(),
+    dealerButtonIndex: v.number(),
+    smallBlindIndex: v.number(),
+    bigBlindIndex: v.number(),
     raisesThisRound: v.optional(v.number()),
     status: gameStatusValidator,
     winnerId: v.optional(v.string()),
@@ -76,6 +79,14 @@ export const appTables = {
     totalBet: v.number(),
     hasActed: v.boolean(),
     hasFolded: v.boolean(),
+    lastAction: v.optional(
+      v.union(
+        v.literal("check"),
+        v.literal("call"),
+        v.literal("raise"),
+        v.literal("fold"),
+      ),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

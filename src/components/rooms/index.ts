@@ -25,10 +25,11 @@ export { PhasePlayerBadge } from './phases/PhasePlayerBadge'
 export { RoomGameProvider, useRoomGameContext } from './context/RoomGameContext'
 export { RoomPageProvider, useRoomPageContext } from './context/RoomPageContext'
 export { useRoomDetailsController } from './hooks/useRoomDetailsController'
+export { useRoomPresence } from './hooks/useRoomPresence'
 export { useRoomWordBuilder } from './hooks/useRoomWordBuilder'
 
 // Lobby
-export { RoomLobbyPanel } from './lobby/RoomLobbyPanel'
+export { RoomList } from './lobby/RoomList'
 export { ShowdownResultsPanel } from './lobby/ShowdownResultsPanel'
 export { RoomDevTools } from './lobby/RoomDevTools'
 

@@ -3,10 +3,17 @@ import { WordTile } from "../table/WordTile";
 import type { PlayerHand } from "./RoomHandsBoard.types";
 
 const OPPONENT_POSITION_CLASS: Record<"top" | "left" | "right", string> = {
-  top: "left-1/2 top-0 -translate-x-1/2 -translate-y-1/2",
-  left: "left-0 top-1/2 -translate-x-1/2 -translate-y-1/2",
-  right: "right-0 top-1/2 translate-x-1/2 -translate-y-1/2",
+  top: "left-1/2 top-[10%] -translate-x-1/2 -translate-y-1/2",
+  left: "left-[12%] top-1/2 -translate-x-1/2 -translate-y-1/2",
+  right: "left-[88%] top-1/2 -translate-x-1/2 -translate-y-1/2",
 };
+
+function formatPlayerActionLabel(
+  lastAction?: "check" | "call" | "raise" | "fold",
+) {
+  if (!lastAction) return undefined;
+  return lastAction.toUpperCase();
+}
 
 export function getOpponentPosition(
   index: number,
@@ -40,18 +47,28 @@ export function getPhase1OpponentPosition(
 
 type RoomOpponentLayerProps = {
   opponents: PlayerHand[];
+  currentTurnPlayerId?: string | null;
   getPlayerName: (playerId: string) => string;
   getPlayerAvatar: (playerId: string) => string | null;
+  getPlayerPersonality: (playerId: string) => string | null;
+  getBlindPosition?: (playerId: string) => "dealer" | "small" | "big" | undefined;
   otherSubmissions: any[];
   wordSubmissions?: { isCompleted?: boolean } | null;
+  gameStage?: string;
+  currentPlayerHasSubmitted?: boolean;
 };
 
 export function RoomOpponentLayer({
   opponents,
+  currentTurnPlayerId,
   getPlayerName,
   getPlayerAvatar,
+  getPlayerPersonality,
+  getBlindPosition,
   otherSubmissions,
   wordSubmissions,
+  gameStage,
+  currentPlayerHasSubmitted,
 }: RoomOpponentLayerProps) {
   return opponents.map((hand, opponentIndex) => {
     const position = getOpponentPosition(opponentIndex, opponents.length);
@@ -69,13 +86,16 @@ export function RoomOpponentLayer({
           name={opponentName}
           avatarUrl={getPlayerAvatar(hand.playerId)}
           chips={hand.chips ?? 0}
-          bet={hand.betThisRound ?? 0}
+          actionLabel={formatPlayerActionLabel(hand.lastAction)}
+          isActiveTurn={currentTurnPlayerId === hand.playerId}
+          personality={getPlayerPersonality(hand.playerId)}
+          blindPosition={getBlindPosition?.(hand.playerId)}
           avatarSizeClass="h-12 w-12 sm:h-14 sm:w-14"
           initialsClass="text-[10px] sm:text-[12px]"
           infoCardClassName="min-w-[102px] px-2.5 py-1 sm:min-w-[118px] sm:px-3 sm:py-1.5"
         />
 
-        {wordSubmissions?.isCompleted && opponentSubmission?.word && (
+        {gameStage === "showdown" && wordSubmissions?.isCompleted && currentPlayerHasSubmitted && opponentSubmission?.word && (
           <div className="mt-3 flex flex-col items-center justify-center gap-2">
             <div className="flex items-center gap-2">
               {opponentSubmission.tiles.map((tile: any, index: number) => (

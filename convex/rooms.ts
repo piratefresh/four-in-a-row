@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import { buildDevBotAuthUserId, getBotCharacterForSeatIndex } from "./aiStrategy";
 import { authComponent, createAuth } from "./auth";
 import {
   PLAYER_NAME_MAX_LENGTH,
@@ -11,6 +12,8 @@ import {
   ROOM_CODE_MAX_ATTEMPTS,
   ROOM_MAX_PLAYERS,
 } from "./constants";
+
+const STALE_SCOREBOARD_ROOM_MS = 30 * 60 * 1000;
 
 function normalizeName(name: string) {
   return name.trim().replace(/\s+/g, " ");
@@ -83,6 +86,53 @@ async function createOpenRoom(ctx: MutationCtx) {
     lastActiveAt: now,
   });
   return { roomId, code, now };
+}
+
+async function closeStaleScoreboardRooms(ctx: MutationCtx) {
+  const now = Date.now();
+  const staleBefore = now - STALE_SCOREBOARD_ROOM_MS;
+  const openRooms = await ctx.db
+    .query("rooms")
+    .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
+    .collect();
+
+  let closed = 0;
+  for (const room of openRooms) {
+    const latestCompletedGame = await ctx.db
+      .query("games")
+      .withIndex("by_room_status", (q) =>
+        q.eq("roomId", String(room._id)).eq("status", "completed"),
+      )
+      .order("desc")
+      .first();
+
+    if (!latestCompletedGame) continue;
+    if (latestCompletedGame.updatedAt > staleBefore) continue;
+
+    const activePlayers = await ctx.db
+      .query("players")
+      .withIndex("roomId_status", (q) =>
+        q.eq("roomId", room._id).eq("status", "active"),
+      )
+      .collect();
+
+    for (const player of activePlayers) {
+      await ctx.db.patch(player._id, {
+        status: "left",
+        isHost: false,
+        lastSeenAt: now,
+      });
+    }
+
+    await ctx.db.patch(room._id, {
+      status: "closed",
+      hostPlayerId: undefined,
+      lastActiveAt: now,
+    });
+    closed += 1;
+  }
+
+  return closed;
 }
 
 async function getAuthenticatedUserId(
@@ -228,14 +278,7 @@ async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
       lastActiveAt: now,
     });
 
-    const remainingOpenRooms = await ctx.db
-      .query("rooms")
-      .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
-      .take(1);
-
-    if (remainingOpenRooms.length === 0) {
-      await createOpenRoom(ctx);
-    }
+    await createOpenRoom(ctx);
 
     return {
       ok: true,
@@ -540,11 +583,11 @@ export const debugFillRoomWithBots = mutation({
       if (seatIndex === null) break;
 
       occupiedSeats.add(seatIndex);
-      const botNumber = seatIndex + 1;
+      const character = getBotCharacterForSeatIndex(seatIndex);
       await ctx.db.insert("players", {
         roomId: room._id,
-        authUserId: `dev-bot:${room._id}:${seatIndex}`,
-        name: `Dev Bot ${botNumber}`,
+        authUserId: buildDevBotAuthUserId(String(room._id), seatIndex),
+        name: character.name,
         seatIndex,
         isHost: false,
         status: "active",
@@ -741,6 +784,7 @@ export const heartbeatByCode = mutation({
 export const ensureSeedRooms = mutation({
   args: {},
   handler: async (ctx) => {
+    const staleClosed = await closeStaleScoreboardRooms(ctx);
     const openRooms = await ctx.db
       .query("rooms")
       .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
@@ -795,7 +839,57 @@ export const ensureSeedRooms = mutation({
       await createOpenRoom(ctx);
     }
 
-    return { created: roomsToCreate };
+    return { created: roomsToCreate, staleClosed };
+  },
+});
+
+export const refreshOpenRooms = mutation({
+  args: {
+    count: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const staleClosed = await closeStaleScoreboardRooms(ctx);
+    const now = Date.now();
+    const openRooms = await ctx.db
+      .query("rooms")
+      .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
+      .collect();
+
+    let closed = 0;
+    for (const room of openRooms) {
+      const activePlayers = await ctx.db
+        .query("players")
+        .withIndex("roomId_status", (q) =>
+          q.eq("roomId", room._id).eq("status", "active"),
+        )
+        .collect();
+
+      if (activePlayers.length > 0) continue;
+
+      await ctx.db.patch(room._id, {
+        status: "closed",
+        hostPlayerId: undefined,
+        lastActiveAt: now,
+      });
+      closed += 1;
+    }
+
+    const requestedCount = Math.max(1, Math.floor(args.count ?? 1));
+    const roomsToCreate = requestedCount;
+    for (let i = 0; i < roomsToCreate; i++) {
+      await createOpenRoom(ctx);
+    }
+
+    const remainingOpenRooms = await ctx.db
+      .query("rooms")
+      .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
+      .collect();
+
+    return {
+      closed: closed + staleClosed,
+      created: roomsToCreate,
+      openRooms: remainingOpenRooms.length,
+    };
   },
 });
 
@@ -861,12 +955,41 @@ export const getRoomMembers = query({
     activePlayers.sort((a, b) => a.seatIndex - b.seatIndex);
 
     let viewerPlayerId: Id<"players"> | null = null;
+    let viewerSeatPreview:
+      | {
+          seatIndex: number;
+          name: string;
+        }
+      | null = null;
     const authUserId = await getAuthenticatedUserId(ctx);
     if (authUserId) {
       const viewerPlayer =
         activePlayers.find((player) => player.authUserId === authUserId) ??
         null;
       viewerPlayerId = viewerPlayer?._id ?? null;
+
+      if (!viewerPlayerId) {
+        const historicalViewerPlayers = await ctx.db
+          .query("players")
+          .withIndex("roomId", (q) => q.eq("roomId", room._id))
+          .filter((q) => q.eq(q.field("authUserId"), authUserId))
+          .collect();
+
+        const occupiedSeats = new Set(activePlayers.map((player) => player.seatIndex));
+        const latestViewerPlayer =
+          [...historicalViewerPlayers].sort((a, b) => b.lastSeenAt - a.lastSeenAt)[0] ??
+          null;
+
+        if (
+          latestViewerPlayer &&
+          !occupiedSeats.has(latestViewerPlayer.seatIndex)
+        ) {
+          viewerSeatPreview = {
+            seatIndex: latestViewerPlayer.seatIndex,
+            name: latestViewerPlayer.name,
+          };
+        }
+      }
     }
 
     const members = await Promise.all(
@@ -898,6 +1021,7 @@ export const getRoomMembers = query({
       },
       members,
       viewerPlayerId,
+      viewerSeatPreview,
     };
   },
 });

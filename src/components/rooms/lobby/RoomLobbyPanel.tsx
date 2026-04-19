@@ -4,14 +4,12 @@ import { useRoomPageContext } from "../context/RoomPageContext";
 export function RoomLobbyPanel() {
   const { state, actions, meta } = useRoomPageContext();
   const {
-    code,
     roomData,
     game,
     playerHands,
     showdownResults,
     playerId,
     myPlayerReady,
-    isLeavingRoom,
     leaveMessage,
     gameMessage,
     isTogglingReady,
@@ -27,8 +25,6 @@ export function RoomLobbyPanel() {
     isDevFillingBots,
   } = state;
   const {
-    leaveRoom,
-    back,
     toggleReady,
     check,
     call,
@@ -42,35 +38,13 @@ export function RoomLobbyPanel() {
   return (
     <div className="min-h-[calc(100dvh-4rem)] bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
       <div className="mx-auto rounded-xl border border-slate-700 bg-slate-800/50 p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">Room {code}</h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void leaveRoom();
-              }}
-              disabled={!playerId || isLeavingRoom}
-              className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-            >
-              {isLeavingRoom ? "Leaving..." : "Leave room"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void back();
-              }}
-              disabled={isLeavingRoom}
-              className="rounded-md bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-600"
-            >
-              Back
-            </button>
-          </div>
-        </div>
+        {leaveMessage ? (
+          <p className="mb-4 text-sm text-rose-300">{leaveMessage}</p>
+        ) : null}
 
-        {leaveMessage ? <p className="mb-4 text-sm text-rose-300">{leaveMessage}</p> : null}
-
-        {roomData === null ? <p className="text-sm text-rose-300">Room not found.</p> : null}
+        {roomData === null ? (
+          <p className="text-sm text-rose-300">Room not found.</p>
+        ) : null}
 
         {roomData ? (
           <div className="space-y-6">
@@ -110,7 +84,9 @@ export function RoomLobbyPanel() {
 
             {hasDevTools ? (
               <section className="rounded-lg border border-cyan-700 bg-cyan-950/20 p-4">
-                <h2 className="mb-3 text-lg font-semibold text-white">Development</h2>
+                <h2 className="mb-3 text-lg font-semibold text-white">
+                  Development
+                </h2>
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
@@ -127,14 +103,21 @@ export function RoomLobbyPanel() {
                     onClick={() => {
                       void devFillRoomWithBots?.();
                     }}
-                    disabled={isDevFillingBots || !roomData || roomData.members.length >= 3}
+                    disabled={
+                      isDevFillingBots ||
+                      !roomData ||
+                      roomData.members.length >= 3
+                    }
                     className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-600"
                   >
-                    {isDevFillingBots ? "Adding AI bots..." : "Add 2 AI bots 🤖"}
+                    {isDevFillingBots
+                      ? "Adding AI bots..."
+                      : "Add 2 AI bots 🤖"}
                   </button>
                 </div>
                 <p className="mt-2 text-xs text-slate-300">
-                  Rejoin reactivates your player in this room. AI bots fill open seats with intelligent betting and word-building.
+                  Rejoin reactivates your player in this room. AI bots fill open
+                  seats with intelligent betting and word-building.
                 </p>
               </section>
             ) : null}
@@ -142,16 +125,22 @@ export function RoomLobbyPanel() {
             <section className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-white">Game (MVP)</h2>
-                <span className="text-xs text-slate-400">Room ID: {roomData.room._id}</span>
+                <span className="text-xs text-slate-400">
+                  Room ID: {roomData.room._id}
+                </span>
               </div>
 
               {!game ? (
-                <p className="mb-3 text-sm text-slate-300">No game has been created for this room.</p>
+                <p className="mb-3 text-sm text-slate-300">
+                  No game has been created for this room.
+                </p>
               ) : null}
 
               {game ? (
                 <>
-                  {!playerHands ? <p className="text-sm text-slate-400">Loading hands...</p> : null}
+                  {!playerHands ? (
+                    <p className="text-sm text-slate-400">Loading hands...</p>
+                  ) : null}
                   {playerHands && playerHands.length === 0 ? (
                     <p className="text-sm text-slate-400">
                       No hands dealt yet. Start the game to distribute letters.
@@ -168,31 +157,62 @@ export function RoomLobbyPanel() {
                 </>
               ) : null}
 
-              {gameMessage ? <p className="mb-3 text-sm text-cyan-300">{gameMessage}</p> : null}
+              {gameMessage ? (
+                <p className="mb-3 text-sm text-cyan-300">{gameMessage}</p>
+              ) : null}
 
               <div className="space-y-3">
                 {game?.status === "waiting" && roomData.members ? (
-                  <div className="rounded-lg border border-emerald-500 bg-emerald-500/5 p-3">
-                    <p className="mb-2 text-sm text-slate-300">
-                      {roomData.members.every((member) => member.readyStatus)
-                        ? "All players ready! Starting..."
-                        : `Waiting for players... (${roomData.members.filter((member) => member.readyStatus).length}/${roomData.members.length} ready)`}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void toggleReady();
+                  roomData.members.every((member) => member.readyStatus) ? (
+                    <div
+                      className="rounded-lg border border-transparent"
+                      style={{
+                        background:
+                          "linear-gradient(145deg,rgba(16,185,129,0.15),rgba(5,150,105,0.25)) padding-box, conic-gradient(from var(--border-angle), theme(colors.emerald.600/.48) 80%, theme(colors.emerald.500) 86%, theme(colors.emerald.300) 90%, theme(colors.emerald.500) 94%, theme(colors.emerald.600/.48)) border-box",
+                        animation: "border 4s linear infinite",
                       }}
-                      disabled={isTogglingReady}
-                      className={`rounded-md px-4 py-2 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:bg-slate-600 ${
-                        myPlayerReady
-                          ? "bg-slate-600 hover:bg-slate-700"
-                          : "bg-emerald-600 hover:bg-emerald-700"
-                      }`}
                     >
-                      {isTogglingReady ? "..." : myPlayerReady ? "Not Ready" : "I'm Ready!"}
-                    </button>
-                  </div>
+                      <div className="rounded-lg bg-emerald-500/5 p-3">
+                        <p className="mb-2 text-sm font-semibold text-emerald-300">
+                          All players ready! Starting...
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void toggleReady();
+                          }}
+                          disabled={isTogglingReady}
+                          className="rounded-md bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-600"
+                        >
+                          {isTogglingReady ? "..." : "Not Ready"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-emerald-500 bg-emerald-500/5 p-3">
+                      <p className="mb-2 text-sm text-slate-300">
+                        {`Waiting for players... (${roomData.members.filter((member) => member.readyStatus).length}/${roomData.members.length} ready)`}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void toggleReady();
+                        }}
+                        disabled={isTogglingReady}
+                        className={`rounded-md px-4 py-2 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:bg-slate-600 ${
+                          myPlayerReady
+                            ? "bg-slate-600 hover:bg-slate-700"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        }`}
+                      >
+                        {isTogglingReady
+                          ? "..."
+                          : myPlayerReady
+                            ? "Not Ready"
+                            : "I'm Ready!"}
+                      </button>
+                    </div>
+                  )
                 ) : null}
 
                 {game?.status === "active" &&

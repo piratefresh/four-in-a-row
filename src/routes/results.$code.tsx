@@ -2,7 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
-import { useMemo } from "react";
+import { ShowdownResultsScreen } from "@/components/rooms/results/ShowdownResultsScreen";
+import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/results/$code")({
   component: ResultsPage,
@@ -13,6 +14,9 @@ function ResultsPage() {
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
   const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
+  const redealGameForRoom = useMutation(api.games.redealGameForRoom);
+  const [isStartingNextHand, setIsStartingNextHand] = useState(false);
+  const [nextHandError, setNextHandError] = useState<string | null>(null);
 
   const roomData = useQuery(api.rooms.getRoomMembers, { code });
   const game = useQuery(api.games.getGameByRoom, {
@@ -34,6 +38,34 @@ function ResultsPage() {
       console.error("Error leaving room:", error);
     }
     await navigate({ to: "/" });
+  };
+
+  const handleNextHand = async () => {
+    if (!roomData?.room?._id || isStartingNextHand) {
+      return;
+    }
+
+    setIsStartingNextHand(true);
+    setNextHandError(null);
+
+    try {
+      const result = await redealGameForRoom({ roomId: roomData.room._id });
+      if (!result.ok) {
+        setNextHandError(
+          result.reason === "Not enough players"
+            ? "Not enough active players to start the next hand."
+            : "Failed to start the next hand.",
+        );
+        return;
+      }
+
+      await navigate({ to: "/rooms/$code", params: { code } });
+    } catch (error) {
+      console.error("Error starting next hand:", error);
+      setNextHandError("Failed to start the next hand.");
+    } finally {
+      setIsStartingNextHand(false);
+    }
   };
 
   // Find current player
@@ -61,6 +93,22 @@ function ResultsPage() {
       </div>
     );
   }
+
+  const currentPlayerId = myPlayer ? String(myPlayer._id) : null;
+  const getPlayerName = (id: string) => memberById.get(id)?.name ?? "Player";
+
+  return (
+    <ShowdownResultsScreen
+      roomCode={code}
+      pot={game?.pot ?? 0}
+      playerId={currentPlayerId}
+      showdownResults={showdownResults}
+      getPlayerName={getPlayerName}
+      onNextHand={handleNextHand}
+      isStartingNextHand={isStartingNextHand}
+      nextHandError={nextHandError}
+    />
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1a1a1a] via-[#2d2d2d] to-[#1a1a1a] font-serif text-white">

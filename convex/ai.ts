@@ -1,13 +1,12 @@
 /**
  * AI Decision-Making Actions for Word Poker
  *
- * Integrates with OpenRouter API to make intelligent betting and word-building decisions
+ * Betting decisions use NVIDIA NIM. Showdown word generation is deterministic.
  */
 
 import { v } from "convex/values";
-import { action, internalAction } from "./_generated/server";
-import { internal } from "./_generated/api";
-import type { GameStage, GameDeckTile, GameTile } from "./gameState";
+import { internalAction } from "./_generated/server";
+import type { GameStage } from "./gameState";
 import {
   getGameRulesForAI,
   getStageStrategy,
@@ -15,12 +14,24 @@ import {
   getQuickRecommendation,
 } from "./gameRules";
 import {
+  type AIPersonality,
   type AIDifficulty,
   AI_DIFFICULTY,
+  AI_PERSONALITIES,
   getModelForDifficulty,
-  getBettingProfile,
   shouldBluff,
 } from "./aiStrategy";
+import {
+  callNvidiaNimChat,
+  isNvidiaNimConfigured,
+} from "./aiClient";
+import {
+  buildAvailableShowdownTiles,
+  type SolveShowdownCommunityTile,
+  type SolveShowdownHandTile,
+  serializeAvailableShowdownTiles,
+  solveDeterministicShowdownWord,
+} from "./showdownSolver";
 
 /**
  * AI Betting Decision Result
@@ -52,123 +63,10 @@ export type AIWordResult = {
   estimatedScore: number;
 };
 
-function normalizeParsedWordTiles(
-  word: string,
-  tiles: AIWordResult["tiles"],
-  choiceResolutions?: AIWordResult["choiceResolutions"],
-): {
-  word: string;
-  tiles: AIWordResult["tiles"];
-  choiceResolutions?: AIWordResult["choiceResolutions"];
-} {
-  const normalizedWord = word.trim().toUpperCase();
-  if (!normalizedWord) {
-    return { word: "", tiles: [], choiceResolutions: undefined };
-  }
+const DEFAULT_AI_REQUEST_TIMEOUT_MS = 15_000;
 
-  let normalizedTiles = [...tiles];
-
-  if (normalizedTiles.length > normalizedWord.length) {
-    normalizedTiles = normalizedTiles.slice(0, normalizedWord.length);
-  }
-
-  if (normalizedTiles.length !== normalizedWord.length) {
-    return {
-      word: normalizedWord,
-      tiles: [],
-      choiceResolutions: undefined,
-    };
-  }
-
-  const wordLetters = normalizedWord.split("");
-  const tileLetters = normalizedTiles.map((tile) => tile.letter.toUpperCase());
-  if (wordLetters.some((letter, index) => tileLetters[index] !== letter)) {
-    return {
-      word: normalizedWord,
-      tiles: [],
-      choiceResolutions: undefined,
-    };
-  }
-
-  if (!choiceResolutions) {
-    return {
-      word: normalizedWord,
-      tiles: normalizedTiles,
-      choiceResolutions: undefined,
-    };
-  }
-
-  const usedHandChoiceIndexes = new Set(
-    normalizedTiles
-      .filter((tile) => tile.source === "hand" && tile.wasChoice && tile.cardIndex !== undefined)
-      .map((tile) => String(tile.cardIndex)),
-  );
-  const usedCommunityChoiceIndexes = new Set(
-    normalizedTiles
-      .filter((tile) => tile.source === "community" && tile.wasChoice && tile.cardIndex !== undefined)
-      .map((tile) => String(tile.cardIndex)),
-  );
-
-  const filteredChoiceResolutions = {
-    hand: Object.fromEntries(
-      Object.entries(choiceResolutions.hand ?? {}).filter(([index]) =>
-        usedHandChoiceIndexes.has(index),
-      ),
-    ),
-    community: Object.fromEntries(
-      Object.entries(choiceResolutions.community ?? {}).filter(([index]) =>
-        usedCommunityChoiceIndexes.has(index),
-      ),
-    ),
-  };
-
-  return {
-    word: normalizedWord,
-    tiles: normalizedTiles,
-    choiceResolutions:
-      Object.keys(filteredChoiceResolutions.hand).length > 0 ||
-      Object.keys(filteredChoiceResolutions.community).length > 0
-        ? filteredChoiceResolutions
-        : undefined,
-  };
-}
-
-/**
- * Call OpenRouter API for text generation
- */
-async function callOpenRouter(
-  model: string,
-  prompt: string,
-  apiKey: string
-): Promise<string> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://word-poker.com",
-      "X-Title": "Word Poker AI",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 500,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenRouter API error: ${response.status} ${error}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0]?.message?.content || "";
+function normalizeAiTimeoutMs(timeoutMs?: number): number {
+  return Math.max(1_000, Math.floor(timeoutMs ?? DEFAULT_AI_REQUEST_TIMEOUT_MS));
 }
 
 function logAIDebug(
@@ -222,28 +120,28 @@ export const aiDecideBet = internalAction({
     raiseLadder: v.array(v.number()),
     maxRaises: v.number(),
     currentRaises: v.number(),
+    timeoutMs: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<AIBettingDecision> => {
+  handler: async (_ctx, args): Promise<AIBettingDecision> => {
     const difficulty = (args.difficulty as AIDifficulty) || AI_DIFFICULTY.MEDIUM;
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const timeoutMs = normalizeAiTimeoutMs(args.timeoutMs);
 
-    if (!apiKey) {
-      console.warn("OPENROUTER_API_KEY not set, using fallback strategy");
-      logAIDebug("betting", "OPENROUTER_API_KEY missing, using fallback strategy", {
+    if (!isNvidiaNimConfigured()) {
+      console.warn("NVIDIA_NIM_API_KEY not set, using fallback strategy");
+      logAIDebug("betting", "NVIDIA_NIM_API_KEY missing, using fallback strategy", {
         difficulty,
         stage: args.stage,
         currentBet: args.currentBet,
         chips: args.chips,
         pot: args.pot,
         currentRaises: args.currentRaises,
+        timeoutMs,
       });
       return fallbackBettingDecision(args);
     }
 
     try {
       const model = getModelForDifficulty(difficulty);
-      const bettingProfile = getBettingProfile(difficulty);
-
       // Filter revealed community tiles
       const revealedCommunity = args.communityTiles
         .filter((t) => t.revealed)
@@ -293,6 +191,7 @@ export const aiDecideBet = internalAction({
         chips: args.chips,
         pot: args.pot,
         currentRaises: args.currentRaises,
+        timeoutMs,
       });
 
       // Build prompt for AI
@@ -357,9 +256,14 @@ ACTION: CALL
 CONFIDENCE: 0.7
 REASONING: I have E and A in hand with T and R in community, can likely form RATE or TEAR. Pot odds are good.`;
 
-      const response = await callOpenRouter(model, prompt, apiKey);
+      const response = await callNvidiaNimChat({
+        model,
+        prompt,
+        timeoutMs,
+      });
       logAIDebug("betting", "received raw betting response", {
         model,
+        timeoutMs,
         response,
       });
 
@@ -456,6 +360,7 @@ function fallbackBettingDecision(args: any): AIBettingDecision {
 export const aiSubmitWord = internalAction({
   args: {
     difficulty: v.optional(v.string()),
+    personality: v.optional(v.string()),
     handTiles: v.array(
       v.union(
         v.object({
@@ -486,289 +391,66 @@ export const aiSubmitWord = internalAction({
         })
       )
     ),
+    timeoutMs: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<AIWordResult> => {
+  handler: async (_ctx, args): Promise<AIWordResult> => {
     const difficulty = (args.difficulty as AIDifficulty) || AI_DIFFICULTY.MEDIUM;
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    const personality =
+      (args.personality as AIPersonality | undefined) || AI_PERSONALITIES.BALANCED;
+    const timeoutMs = normalizeAiTimeoutMs(args.timeoutMs);
+    const availableShowdownTiles = buildAvailableShowdownTiles(
+      args.handTiles as SolveShowdownHandTile[],
+      args.communityTiles as SolveShowdownCommunityTile[],
+    );
 
-    if (!apiKey) {
-      console.warn("OPENROUTER_API_KEY not set, using fallback word generation");
-      logAIDebug("showdown", "OPENROUTER_API_KEY missing, using fallback word generation", {
+    logAIDebug("showdown", "prepared showdown solver inputs", {
+      difficulty,
+      personality,
+      handTileCount: args.handTiles.length,
+      revealedCommunityCount: args.communityTiles.filter((tile) => tile.revealed).length,
+      timeoutMs,
+      availableTiles: serializeAvailableShowdownTiles(availableShowdownTiles),
+    });
+
+    const selection = solveDeterministicShowdownWord({
+      difficulty,
+      personality,
+      handTiles: args.handTiles as SolveShowdownHandTile[],
+      communityTiles: args.communityTiles as SolveShowdownCommunityTile[],
+    });
+
+    if (!selection) {
+      logAIDebug("showdown", "deterministic showdown solver found no valid candidates", {
         difficulty,
-        handTileCount: args.handTiles.length,
-        revealedCommunityCount: args.communityTiles.filter((tile) => tile.revealed).length,
-      });
-      return fallbackWordGeneration(args);
-    }
-
-    try {
-      const model = getModelForDifficulty(difficulty);
-      logAIDebug("showdown", "prepared showdown prompt inputs", {
-        difficulty,
-        model,
-        handTileCount: args.handTiles.length,
-        revealedCommunityCount: args.communityTiles.filter((tile) => tile.revealed).length,
-      });
-
-      // Build available tiles description
-      const handDescription = args.handTiles
-        .map((t, idx) => {
-          if (t.kind === "single") {
-            return `H${idx}: ${t.letter}(${t.baseValue})`;
-          } else {
-            return `H${idx}: [${t.options.join("/")}](${t.baseValues.join("/")}) - choice tile`;
-          }
-        })
-        .join(", ");
-
-      const communityDescription = args.communityTiles
-        .filter((t) => t.revealed)
-        .map((t, idx) => {
-          if (t.kind === "single") {
-            return `C${idx}: ${t.letter}(${t.baseValue})`;
-          } else {
-            return `C${idx}: [${t.options.join("/")}](${t.baseValues.join("/")}) - choice tile`;
-          }
-        })
-        .join(", ");
-
-      const prompt = `You are playing Word Poker. Build the highest-scoring valid English word.
-
-## Available Tiles
-Hand tiles: ${handDescription}
-Community tiles: ${communityDescription}
-
-## Scoring
-- Base score: Sum of letter values
-- Full rack bonus: +10 if you use all 7 tiles
-- Valid word bonus: +5
-- Speed bonus: +10 (submit within 10s) or +5 (within 20s)
-
-## Rules
-- Word must be 2-7 letters
-- Must be valid English dictionary word
-- Each tile can only be used once
-- For choice tiles, you pick which letter to use
-
-## Strategy
-1. Prioritize longer words (more points + chance for full rack bonus)
-2. Use high-value letters strategically
-3. Verify word is valid (invalid = 0 points!)
-
-Respond in this EXACT format:
-WORD: [your word in UPPERCASE]
-TILES_USED: [comma-separated list like: H0,C1,H1,C3]
-CHOICE_SELECTIONS: [if using choice tiles, specify like: H0=A,C2=T]
-ESTIMATED_SCORE: [number]
-REASONING: [brief explanation]
-
-Example:
-WORD: MASTER
-TILES_USED: H0,C1,C2,H1,C3,C4
-CHOICE_SELECTIONS: C1=A,C2=S
-ESTIMATED_SCORE: 24
-REASONING: 6-letter word using high-value M and common letters, scores 19 base + 5 valid word bonus`;
-
-      const response = await callOpenRouter(model, prompt, apiKey);
-      logAIDebug("showdown", "received raw showdown response", {
-        model,
-        response,
-      });
-
-      // Parse AI response
-      const wordMatch = response.match(/WORD:\s*([A-Z]+)/i);
-      const tilesMatch = response.match(/TILES_USED:\s*([^\n]+)/i);
-      const choiceMatch = response.match(/CHOICE_SELECTIONS:\s*([^\n]+)/i);
-      const scoreMatch = response.match(/ESTIMATED_SCORE:\s*(\d+)/i);
-      const reasoningMatch = response.match(/REASONING:\s*(.+)/i);
-
-      const word = wordMatch?.[1]?.toUpperCase() || "";
-      const tilesUsedStr = tilesMatch?.[1]?.trim() || "";
-      const choiceStr = choiceMatch?.[1]?.trim() || "";
-      const estimatedScore = parseInt(scoreMatch?.[1] || "0", 10);
-      const reasoning = reasoningMatch?.[1]?.trim() || "AI word generation";
-
-      // Parse tiles used (e.g., "H0,C1,H1,C2")
-      const tiles: AIWordResult["tiles"] = [];
-      const choiceResolutions: AIWordResult["choiceResolutions"] = { hand: {}, community: {} };
-
-      if (tilesUsedStr) {
-        const tileRefs = tilesUsedStr.split(",").map((s) => s.trim());
-
-        for (const ref of tileRefs) {
-          const match = ref.match(/([HC])(\d+)/);
-          if (!match) continue;
-
-          const source = match[1] === "H" ? "hand" : "community";
-          const index = parseInt(match[2], 10);
-
-          const sourceTiles = source === "hand" ? args.handTiles : args.communityTiles.filter(t => t.revealed);
-          const tile = sourceTiles[index];
-
-          if (!tile) continue;
-
-          if (tile.kind === "single") {
-            tiles.push({
-              letter: tile.letter,
-              baseValue: tile.baseValue,
-              source,
-              cardIndex: index,
-              wasChoice: false,
-            });
-          } else {
-            // Choice tile - need to determine which letter was chosen
-            const choicePattern = new RegExp(`${ref}=([A-Z])`, "i");
-            const choiceMatch = choiceStr.match(choicePattern);
-            const selectedLetter = choiceMatch?.[1]?.toUpperCase() || tile.options[0];
-            const selectedIndex = tile.options.indexOf(selectedLetter);
-            const selectedValue = selectedIndex >= 0 ? tile.baseValues[selectedIndex] : tile.baseValues[0];
-
-            tiles.push({
-              letter: selectedLetter,
-              baseValue: selectedValue,
-              source,
-              cardIndex: index,
-              wasChoice: true,
-            });
-
-            if (source === "hand") {
-              choiceResolutions.hand![index.toString()] = selectedLetter;
-            } else {
-              choiceResolutions.community![index.toString()] = selectedLetter;
-            }
-          }
-        }
-      }
-
-      const normalizedResult = normalizeParsedWordTiles(
-        word,
-        tiles,
-        Object.keys(choiceResolutions.hand || {}).length > 0 ||
-          Object.keys(choiceResolutions.community || {}).length > 0
-          ? choiceResolutions
-          : undefined,
-      );
-
-      logAIDebug("showdown", "parsed showdown response", {
-        word: normalizedResult.word,
-        tileCount: normalizedResult.tiles.length,
-        estimatedScore,
-        reasoning,
-        hasChoiceResolutions:
-          !!normalizedResult.choiceResolutions,
+        personality,
+        availableTiles: serializeAvailableShowdownTiles(availableShowdownTiles),
       });
 
       return {
-        word: normalizedResult.word,
-        tiles: normalizedResult.tiles,
-        choiceResolutions: normalizedResult.choiceResolutions,
-        reasoning,
-        estimatedScore,
+        word: "",
+        tiles: [],
+        choiceResolutions: undefined,
+        reasoning: "No valid deterministic showdown candidates found",
+        estimatedScore: 0,
       };
-    } catch (error) {
-      console.error("AI word generation error:", error);
-      return fallbackWordGeneration(args);
     }
-  },
-});
 
-/**
- * Fallback word generation (simple greedy approach)
- */
-function fallbackWordGeneration(args: any): AIWordResult {
-  // Simple fallback: pick first 5 single-letter tiles and form a word
-  const allTiles: Array<{
-    letter: string;
-    baseValue: number;
-    source: "hand" | "community";
-    index: number;
-    wasChoice: boolean;
-  }> = [];
-
-  args.handTiles.forEach((t: any, idx: number) => {
-    if (t.kind === "single") {
-      allTiles.push({
-        letter: t.letter,
-        baseValue: t.baseValue,
-        source: "hand",
-        index: idx,
-        wasChoice: false,
-      });
-    } else {
-      // Pick first option from choice tile
-      allTiles.push({
-        letter: t.options[0],
-        baseValue: t.baseValues[0],
-        source: "hand",
-        index: idx,
-        wasChoice: true,
-      });
-    }
-  });
-
-  args.communityTiles
-    .filter((t: any) => t.revealed)
-    .forEach((t: any, idx: number) => {
-      if (t.kind === "single") {
-        allTiles.push({
-          letter: t.letter,
-          baseValue: t.baseValue,
-          source: "community",
-          index: idx,
-          wasChoice: false,
-        });
-      } else {
-        allTiles.push({
-          letter: t.options[0],
-          baseValue: t.baseValues[0],
-          source: "community",
-          index: idx,
-          wasChoice: true,
-        });
-      }
+    logAIDebug("showdown", "deterministic showdown solver selected word", {
+      difficulty,
+      personality: selection.personality,
+      word: selection.word,
+      tileCount: selection.tiles.length,
+      estimatedScore: selection.estimatedScore,
+      candidateCount: selection.evaluation.candidateCount,
+      topCandidates: selection.evaluation.topCandidates,
     });
 
-  // Sort by value descending and take up to 5 letters
-  allTiles.sort((a, b) => b.baseValue - a.baseValue);
-  const selectedTiles = allTiles.slice(0, Math.min(5, allTiles.length));
-  const choiceResolutions: {
-    hand: Record<string, string>;
-    community: Record<string, string>;
-  } = {
-    hand: {},
-    community: {},
-  };
-
-  const word = selectedTiles.map((t) => t.letter).join("");
-  const tiles = selectedTiles.map((t) => {
-    if (t.wasChoice) {
-      if (t.source === "hand") {
-        choiceResolutions.hand[t.index.toString()] = t.letter;
-      } else {
-        choiceResolutions.community[t.index.toString()] = t.letter;
-      }
-    }
-
     return {
-      letter: t.letter,
-      baseValue: t.baseValue,
-      source: t.source,
-      cardIndex: t.index,
-      wasChoice: t.wasChoice,
+      word: selection.word,
+      tiles: selection.tiles,
+      choiceResolutions: selection.choiceResolutions,
+      reasoning: selection.reasoning,
+      estimatedScore: selection.estimatedScore,
     };
-  });
-
-  const estimatedScore = selectedTiles.reduce((sum, t) => sum + t.baseValue, 0) + 5; // +5 for valid word
-
-  return {
-    word,
-    tiles,
-    choiceResolutions:
-      Object.keys(choiceResolutions.hand).length > 0 ||
-      Object.keys(choiceResolutions.community).length > 0
-        ? choiceResolutions
-        : undefined,
-    reasoning: "Fallback: greedy high-value selection",
-    estimatedScore,
-  };
-}
+  },
+});

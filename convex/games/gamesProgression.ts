@@ -73,6 +73,7 @@ async function advanceStage(
       await ctx.db.patch(hand._id, {
         hasActed: skipBetting ? true : false,
         betThisRound: 0,
+        lastAction: undefined,
         updatedAt: now,
       });
     }

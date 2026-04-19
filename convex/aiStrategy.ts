@@ -1,8 +1,11 @@
 /**
  * AI Strategy Configuration for Word Poker
  *
- * Defines AI difficulty levels, model selection, and strategic behavior
+ * Defines deterministic bot difficulty, personalities, named bot characters,
+ * and betting behavior.
  */
+
+import { DEV_BOT_AUTH_PREFIX } from "./games/gamesShared";
 
 // AI Difficulty Levels
 export const AI_DIFFICULTY = {
@@ -13,11 +16,17 @@ export const AI_DIFFICULTY = {
 
 export type AIDifficulty = (typeof AI_DIFFICULTY)[keyof typeof AI_DIFFICULTY];
 
-// Model selection per difficulty level
+// Model selection remains for betting AI only.
 export const AI_MODELS = {
-  [AI_DIFFICULTY.EASY]: "google/gemma-4-31b-it:free",
-  [AI_DIFFICULTY.MEDIUM]: "google/gemma-4-31b-it:free",
-  [AI_DIFFICULTY.HARD]: "google/gemma-4-31b-it:free",
+  [AI_DIFFICULTY.EASY]: "google/gemma-3-27b-it",
+  [AI_DIFFICULTY.MEDIUM]: "google/gemma-3-27b-it",
+  [AI_DIFFICULTY.HARD]: "google/gemma-3-27b-it",
+} as const;
+
+export const SHOWDOWN_SELECTION_WINDOWS = {
+  [AI_DIFFICULTY.EASY]: 12,
+  [AI_DIFFICULTY.MEDIUM]: 5,
+  [AI_DIFFICULTY.HARD]: 2,
 } as const;
 
 // Betting strategy profiles
@@ -87,6 +96,10 @@ export function getBettingProfile(difficulty: AIDifficulty) {
   return BETTING_PROFILES[difficulty];
 }
 
+export function getShowdownSelectionWindow(difficulty: AIDifficulty): number {
+  return SHOWDOWN_SELECTION_WINDOWS[difficulty];
+}
+
 /**
  * Determine if AI should bluff based on difficulty
  */
@@ -102,10 +115,155 @@ export const AI_PERSONALITIES = {
   CAUTIOUS: "cautious",
   BALANCED: "balanced",
   AGGRESSIVE: "aggressive",
-  UNPREDICTABLE: "unpredictable",
+  CREATIVE: "creative",
 } as const;
 
 export type AIPersonality = (typeof AI_PERSONALITIES)[keyof typeof AI_PERSONALITIES];
+
+export type BotCharacterProfile = {
+  id: string;
+  name: string;
+  title: string;
+  personality: AIPersonality;
+  notes: string;
+};
+
+export const BOT_CHARACTERS = [
+  {
+    id: "nora",
+    name: "Nora Vale",
+    title: "The Anchor",
+    personality: AI_PERSONALITIES.CAUTIOUS,
+    notes: "Prefers safer, clearer showdown words.",
+  },
+  {
+    id: "ellis",
+    name: "Ellis March",
+    title: "The Ledger",
+    personality: AI_PERSONALITIES.BALANCED,
+    notes: "Sticks close to the board's highest-ranked candidates.",
+  },
+  {
+    id: "jax",
+    name: "Jax Rook",
+    title: "The Blade",
+    personality: AI_PERSONALITIES.AGGRESSIVE,
+    notes: "Pushes toward the strongest scoring words available.",
+  },
+  {
+    id: "mira",
+    name: "Mira Quill",
+    title: "The Wildcard",
+    personality: AI_PERSONALITIES.CREATIVE,
+    notes: "Likes stranger valid words when they stay competitive.",
+  },
+] as const satisfies readonly BotCharacterProfile[];
+
+export type BotCharacterId = (typeof BOT_CHARACTERS)[number]["id"];
+
+export const SHOWDOWN_PERSONALITY_PROFILES = {
+  [AI_PERSONALITIES.CAUTIOUS]: {
+    shortlistBias: "reliable",
+  },
+  [AI_PERSONALITIES.BALANCED]: {
+    shortlistBias: "rank",
+  },
+  [AI_PERSONALITIES.AGGRESSIVE]: {
+    shortlistBias: "high-score",
+  },
+  [AI_PERSONALITIES.CREATIVE]: {
+    shortlistBias: "unusual",
+  },
+} as const;
+
+export type DeterministicBettingPersonalityProfile = {
+  aggression: number;
+  bluffRate: number;
+  foldThreshold: number;
+  tiltChance: number;
+  readsPotOdds: boolean;
+};
+
+export const FUTURE_BETTING_PERSONALITY_PROFILES: Record<
+  AIPersonality,
+  DeterministicBettingPersonalityProfile
+> = {
+  [AI_PERSONALITIES.CAUTIOUS]: {
+    aggression: 0.3,
+    bluffRate: 0.08,
+    foldThreshold: 0.4,
+    tiltChance: 0.02,
+    readsPotOdds: true,
+  },
+  [AI_PERSONALITIES.BALANCED]: {
+    aggression: 0.45,
+    bluffRate: 0.15,
+    foldThreshold: 0.3,
+    tiltChance: 0.05,
+    readsPotOdds: true,
+  },
+  [AI_PERSONALITIES.AGGRESSIVE]: {
+    aggression: 0.6,
+    bluffRate: 0.2,
+    foldThreshold: 0.22,
+    tiltChance: 0.04,
+    readsPotOdds: true,
+  },
+  [AI_PERSONALITIES.CREATIVE]: {
+    aggression: 0.5,
+    bluffRate: 0.18,
+    foldThreshold: 0.28,
+    tiltChance: 0.06,
+    readsPotOdds: false,
+  },
+};
+
+const BOT_CHARACTER_BY_ID: Record<BotCharacterId, BotCharacterProfile> =
+  Object.fromEntries(BOT_CHARACTERS.map((character) => [character.id, character])) as Record<
+    BotCharacterId,
+    BotCharacterProfile
+  >;
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+export function getBotCharacterForSeatIndex(seatIndex: number): BotCharacterProfile {
+  return BOT_CHARACTERS[((seatIndex % BOT_CHARACTERS.length) + BOT_CHARACTERS.length) % BOT_CHARACTERS.length]!;
+}
+
+export function getBotCharacterForSeed(seed: string): BotCharacterProfile {
+  return BOT_CHARACTERS[hashString(seed) % BOT_CHARACTERS.length]!;
+}
+
+export function buildDevBotAuthUserId(roomId: string, seatIndex: number): string {
+  const character = getBotCharacterForSeatIndex(seatIndex);
+  return `${DEV_BOT_AUTH_PREFIX}${character.id}:${roomId}:${seatIndex}`;
+}
+
+export function getBotCharacterForAuthUserId(
+  authUserId: string | null | undefined,
+): BotCharacterProfile | null {
+  if (!authUserId?.startsWith(DEV_BOT_AUTH_PREFIX)) {
+    return null;
+  }
+
+  const encoded = authUserId.slice(DEV_BOT_AUTH_PREFIX.length);
+  const [characterId] = encoded.split(":");
+  if (characterId && characterId in BOT_CHARACTER_BY_ID) {
+    return BOT_CHARACTER_BY_ID[characterId as BotCharacterId];
+  }
+
+  return getBotCharacterForSeed(authUserId);
+}
+
+export function getPersonalityForSeed(seed: string): AIPersonality {
+  return getBotCharacterForSeed(seed).personality;
+}
 
 /**
  * Default AI configuration for bots

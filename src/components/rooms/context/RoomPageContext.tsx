@@ -62,6 +62,7 @@ type RoomPageActions = {
 
 type RoomPageMeta = {
   getPlayerName: (playerId: string) => string;
+  getPlayerPersonality: (playerId: string) => string | null;
 };
 
 type RoomPageContextValue = {

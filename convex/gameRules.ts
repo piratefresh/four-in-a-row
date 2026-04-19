@@ -28,9 +28,10 @@ Players receive private letter tiles and share community tiles, betting on their
 ## Tile System
 - **Private tiles**: 2 tiles only visible to you
 - **Community tiles**: 5 tiles shared by all players (revealed progressively)
-- **Choice tiles**: Some tiles show 2-4 letter options (e.g., "A/E" or "S/T/R")
+- **Choice tiles**: Some tiles show exactly 2 letter options (e.g., "A/E" or "T/S")
   - You choose which letter to use when building your word
-  - Maximum 2-3 choice tiles per round across all tiles
+  - Each player's 2 private + 5 community tiles should include 2-3 choice tiles total
+  - Preferred distribution: 1 private choice tile and 1-2 community choice tiles
 
 ## Letter Values (Point System)
 - **1 point**: A, E, I, O, U (vowels), R, S, T, L, N

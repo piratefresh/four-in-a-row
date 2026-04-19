@@ -1,222 +1,244 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from 'convex/react'
-import { api } from '../../convex/_generated/api'
-import { authClient } from '@/lib/auth-client'
-import { RoomDrawer } from '@/components/RoomDrawer'
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { startTransition, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { authClient } from "@/lib/auth-client";
+import { HomeModeMenu } from "@/components/home/HomeModeMenu";
+import { OnlineRooms } from "@/components/home/OnlineRooms";
+import { RoomDrawer } from "@/components/RoomDrawer";
 
-export const Route = createFileRoute('/')({ component: App })
+type HomeSearch = {
+  view?: "online";
+};
 
-interface StatCardProps {
-  title: string
-  subtitle: string
-}
-
-function StatCard({ title, subtitle }: StatCardProps) {
-  return (
-    <div className="rounded-lg bg-[#252525] p-4">
-      <div className="text-sm font-medium text-white">{title}</div>
-      <div className="mt-1 text-xs text-slate-400">{subtitle}</div>
-    </div>
-  )
-}
+export const Route = createFileRoute("/")({
+  validateSearch: (search: Record<string, unknown>): HomeSearch => ({
+    view: search.view === "online" ? "online" : undefined,
+  }),
+  component: App,
+});
 
 function App() {
-  const navigate = useNavigate()
-  const { data: session, isPending: isSessionPending } = authClient.useSession()
-  const convexAuthUser = useQuery(api.auth.getCurrentUser)
-  const rooms = useQuery(api.rooms.listRooms)
-  const stats = useQuery(api.stats.getAllTimeStats)
-  const ensureSeedRooms = useMutation(api.rooms.ensureSeedRooms)
-  const joinRoom = useMutation(api.rooms.joinRoom)
-  const debugRejoinRoom = useMutation(api.rooms.debugRejoinRoom)
-  const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots)
-  const seededRef = useRef(false)
-  const [joiningRoomCode, setJoiningRoomCode] = useState<string | null>(null)
-  const [joinMessage, setJoinMessage] = useState<string | null>(null)
-  const [selectedRoomCode, setSelectedRoomCode] = useState<string | null>(null)
-  const [isDevRejoining, setIsDevRejoining] = useState(false)
-  const [isDevAddingBots, setIsDevAddingBots] = useState(false)
+  const navigate = useNavigate();
+  const search = Route.useSearch();
+  const { data: session } = authClient.useSession();
+  const convexAuthUser = useQuery(api.auth.getCurrentUser);
+  const activeRoom = useQuery(api.rooms.getMyActiveRoom);
+  const rooms = useQuery(api.rooms.listRooms);
+  const stats = useQuery(api.stats.getAllTimeStats);
+  const ensureSeedRooms = useMutation(api.rooms.ensureSeedRooms);
+  const refreshOpenRooms = useMutation(api.rooms.refreshOpenRooms);
+  const createRoom = useMutation(api.rooms.createRoom);
+  const joinRoom = useMutation(api.rooms.joinRoom);
+  const toggleReady = useMutation(api.rooms.toggleReady);
+  const createGameForRoom = useMutation(api.games.createGameForRoom);
+  const debugRejoinRoom = useMutation(api.rooms.debugRejoinRoom);
+  const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
+  const seededRef = useRef(false);
+  const [joiningRoomCode, setJoiningRoomCode] = useState<string | null>(null);
+  const [joinMessage, setJoinMessage] = useState<string | null>(null);
+  const [selectedRoomCode, setSelectedRoomCode] = useState<string | null>(null);
+  const [isDevRejoining, setIsDevRejoining] = useState(false);
+  const [isRefreshingRooms, setIsRefreshingRooms] = useState(false);
+  const [isStartingOffline, setIsStartingOffline] = useState(false);
+  const homeView = search.view === "online" ? "online" : "menu";
 
   useEffect(() => {
-    if (seededRef.current) return
-    seededRef.current = true
-    void ensureSeedRooms({})
-  }, [ensureSeedRooms])
+    if (seededRef.current) return;
+    seededRef.current = true;
+    void ensureSeedRooms({});
+  }, [ensureSeedRooms]);
 
-  const handleOpenDrawer = (roomCode: string) => {
+  useEffect(() => {
+    if (homeView !== "menu") return;
+    setSelectedRoomCode(null);
+    setJoinMessage(null);
+  }, [homeView]);
+
+  const getDisplayName = () => {
     if (!session?.user) {
-      void navigate({ to: '/login' })
-      return
+      void navigate({ to: "/login" });
+      return null;
     }
 
     if (convexAuthUser === undefined) {
-      setJoinMessage('Checking authentication, please try again in a moment.')
-      return
+      setJoinMessage("Checking authentication, please try again in a moment.");
+      return null;
     }
 
     if (!convexAuthUser) {
-      setJoinMessage('Convex auth is not ready. Please sign out and sign back in.')
-      return
+      setJoinMessage(
+        "Convex auth is not ready. Please sign out and sign back in.",
+      );
+      return null;
     }
 
-    setSelectedRoomCode(roomCode)
-  }
+    return session.user.name?.trim() || session.user.email || "Player";
+  };
 
-  const handleJoinSeat = async (seatIndex: number) => {
-    if (!selectedRoomCode || !session?.user) return
+  const handleOpenDrawer = (roomCode: string) => {
+    if (!getDisplayName()) {
+      return;
+    }
 
-    const displayName = session.user.name?.trim() || session.user.email || 'Player'
-    setJoiningRoomCode(selectedRoomCode)
-    setJoinMessage(null)
+    setSelectedRoomCode(roomCode);
+  };
+
+  const handleJoinSeat = async () => {
+    if (!selectedRoomCode) return;
+
+    const displayName = getDisplayName();
+    if (!displayName) return;
+    setJoiningRoomCode(selectedRoomCode);
+    setJoinMessage(null);
 
     try {
-      const result = await joinRoom({ code: selectedRoomCode, name: displayName })
-      await navigate({ to: '/rooms/$code', params: { code: result.code } })
+      const result = await joinRoom({
+        code: selectedRoomCode,
+        name: displayName,
+      });
+      await navigate({ to: "/rooms/$code", params: { code: result.code } });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to join room.'
-      setJoinMessage(message)
+      const message =
+        error instanceof Error ? error.message : "Failed to join room.";
+      setJoinMessage(message);
     } finally {
-      setJoiningRoomCode(null)
+      setJoiningRoomCode(null);
     }
-  }
+  };
 
   const handleDevRejoin = async () => {
-    if (!import.meta.env.DEV || !selectedRoomCode || !session?.user) return
+    if (!import.meta.env.DEV || !selectedRoomCode) return;
 
-    const displayName = session.user.name?.trim() || session.user.email || 'Dev Player'
-    setIsDevRejoining(true)
-    setJoinMessage(null)
+    const displayName = getDisplayName();
+    if (!displayName) return;
+    setIsDevRejoining(true);
+    setJoinMessage(null);
 
     try {
-      const result = await debugRejoinRoom({ code: selectedRoomCode, name: displayName })
-      await navigate({ to: '/rooms/$code', params: { code: result.code } })
+      const result = await debugRejoinRoom({
+        code: selectedRoomCode,
+        name: displayName,
+      });
+      await navigate({ to: "/rooms/$code", params: { code: result.code } });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to rejoin room.'
-      setJoinMessage(message)
+      const message =
+        error instanceof Error ? error.message : "Failed to rejoin room.";
+      setJoinMessage(message);
     } finally {
-      setIsDevRejoining(false)
+      setIsDevRejoining(false);
     }
-  }
+  };
 
-  const handleDevAddBots = async () => {
-    if (!import.meta.env.DEV || !selectedRoomCode) return
+  const handleStartOffline = async () => {
+    const displayName = getDisplayName();
+    if (!displayName) return;
 
-    setIsDevAddingBots(true)
-    setJoinMessage(null)
+    if (activeRoom === undefined) {
+      setJoinMessage("Checking for an active room, please try again in a moment.");
+      return;
+    }
+
+    if (activeRoom?.code) {
+      await navigate({ to: "/rooms/$code", params: { code: activeRoom.code } });
+      return;
+    }
+
+    setIsStartingOffline(true);
+    setJoinMessage(null);
 
     try {
-      const result = await debugFillRoomWithBots({ code: selectedRoomCode, count: 2 })
+      const room = await createRoom({ name: displayName });
+      await debugFillRoomWithBots({ code: room.code, count: 3 });
+      await createGameForRoom({ roomId: room.roomId });
+      await toggleReady({ code: room.code });
+      await navigate({ to: "/rooms/$code", params: { code: room.code } });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to start an offline table.";
+      setJoinMessage(message);
+    } finally {
+      setIsStartingOffline(false);
+    }
+  };
+
+  const handleRefreshRooms = async () => {
+    setIsRefreshingRooms(true);
+    setJoinMessage(null);
+
+    try {
+      const result = await refreshOpenRooms({ count: 1 });
       setJoinMessage(
-        result.added > 0
-          ? `Added ${result.added} test player${result.added === 1 ? '' : 's'}.`
-          : 'No open seats available for test players.',
-      )
+        `Created ${result.created} fresh room code${result.created === 1 ? "" : "s"}${result.closed > 0 ? ` and retired ${result.closed} empty room${result.closed === 1 ? "" : "s"}` : ""}.`,
+      );
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to add test players.'
-      setJoinMessage(message)
+      const message =
+        error instanceof Error ? error.message : "Failed to refresh rooms.";
+      setJoinMessage(message);
     } finally {
-      setIsDevAddingBots(false)
+      setIsRefreshingRooms(false);
     }
-  }
+  };
+
+  const handleSelectOnline = () => {
+    setJoinMessage(null);
+    startTransition(() => {
+      void navigate({
+        to: "/",
+        search: { view: "online" },
+      });
+    });
+  };
+
+  const handleResumeRoom = async () => {
+    if (!activeRoom?.code) return;
+    await navigate({ to: "/rooms/$code", params: { code: activeRoom.code } });
+  };
 
   return (
-    <main className="min-h-screen bg-[#1a1a1a] px-4 py-6 text-white">
-      {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-2 gap-3">
-        <StatCard
-          title={stats?.longestWord || 'Loading...'}
-          subtitle="Longest word"
+    <>
+      {homeView === "menu" ? (
+        <HomeModeMenu
+          activeRoomCode={activeRoom?.code}
+          isStartingOffline={isStartingOffline}
+          statusMessage={joinMessage}
+          onSelectOnline={handleSelectOnline}
+          onStartOffline={() => {
+            void handleStartOffline();
+          }}
+          onResumeRoom={() => {
+            void handleResumeRoom();
+          }}
         />
-        <StatCard
-          title={stats?.biggestWinner || 'Loading...'}
-          subtitle="Biggest winner"
-        />
-        <StatCard
-          title={stats?.highestScoringWord || 'Loading...'}
-          subtitle={`Most valuable (${stats?.highestWordScore || 0} pts)`}
-        />
-      </div>
-
-      {/* Error/Info Message */}
-      {joinMessage && (
-        <div className="mb-4 rounded-lg bg-cyan-900/30 p-3 text-center text-sm text-cyan-300">
-          {joinMessage}
-        </div>
-      )}
-
-      {/* Games List Header */}
-      <div className="mb-3 text-lg font-semibold">Active Games</div>
-
-      {/* Games Table */}
-      {rooms === undefined ? (
-        <div className="py-8 text-center text-sm text-slate-400">Loading rooms...</div>
-      ) : rooms.length === 0 ? (
-        <div className="py-8 text-center text-sm text-slate-400">No active games yet.</div>
       ) : (
-        <div className="overflow-hidden rounded-lg bg-[#252525]">
-          {/* Table Header */}
-          <div className="grid grid-cols-[1fr_auto] gap-4 border-b border-slate-700 px-4 py-3 text-sm font-medium text-slate-300">
-            <div>Game</div>
-            <div className="text-right">Players</div>
-          </div>
-
-          {/* Table Body */}
-          <div className="divide-y divide-slate-800">
-            {rooms.map((room) => {
-              const disabled =
-                joiningRoomCode === room.code ||
-                isSessionPending ||
-                !session?.user ||
-                convexAuthUser === undefined ||
-                !convexAuthUser ||
-                room.activePlayers >= room.maxPlayers
-
-              const isJoining = joiningRoomCode === room.code
-              const isFull = room.activePlayers >= room.maxPlayers
-
-              return (
-                <button
-                  key={room._id}
-                  onClick={() => handleOpenDrawer(room.code)}
-                  disabled={disabled}
-                  className="grid w-full grid-cols-[1fr_auto] gap-4 px-4 py-4 text-left transition-colors hover:bg-slate-800/50 active:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <div>
-                    <div className="font-medium text-white">
-                      {isJoining && joiningRoomCode === room.code ? 'Joining...' : `Poker game ${room.code}`}
-                    </div>
-                    <div className="mt-0.5 text-xs text-slate-400">
-                      {isFull ? 'Room full' : 'Tap to join'}
-                    </div>
-                  </div>
-                  <div className="flex items-center">
-                    <div className="rounded-full bg-slate-700 px-3 py-1 text-sm font-medium">
-                      {room.activePlayers}/{room.maxPlayers}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        <OnlineRooms
+          activeRoomCode={activeRoom?.code}
+          joinMessage={joinMessage}
+          joiningRoomCode={joiningRoomCode}
+          isRefreshingRooms={isRefreshingRooms}
+          rooms={rooms}
+          stats={stats}
+          onOpenRoom={handleOpenDrawer}
+          onRefreshRooms={() => {
+            void handleRefreshRooms();
+          }}
+          onResumeRoom={() => {
+            void handleResumeRoom();
+          }}
+        />
       )}
 
-      {/* Footer spacer */}
-      <div className="h-8" />
-
-      {/* Room Drawer */}
       <RoomDrawer
         roomCode={selectedRoomCode}
         onClose={() => setSelectedRoomCode(null)}
         onJoinSeat={handleJoinSeat}
         isJoining={joiningRoomCode !== null}
         onDevRejoin={handleDevRejoin}
-        onDevAddBots={handleDevAddBots}
         isDevRejoining={isDevRejoining}
-        isDevAddingBots={isDevAddingBots}
         showDevTools={import.meta.env.DEV}
       />
-    </main>
-  )
+    </>
+  );
 }

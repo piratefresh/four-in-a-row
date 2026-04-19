@@ -79,8 +79,8 @@ export function PokerTable({
           className={joinClasses(GAME_TABLE_CLASS, contentClassName)}
           style={{
             width: 'clamp(600px, 70vw, 880px)',
-            height: 'clamp(400px, 60vh, 565px)',
-            borderRadius: '176px',
+            height: 'clamp(500px, 75vh, 700px)',
+            borderRadius: '50% / 40%',
             border: '40px solid #1D1D1D',
             boxShadow: 'inset 0 0 40px rgba(0,0,0,0.3)',
           }}

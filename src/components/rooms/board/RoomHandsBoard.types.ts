@@ -24,17 +24,25 @@ export type PlayerHand = {
   chips?: number;
   betThisRound?: number;
   totalBet?: number;
+  hasFolded?: boolean;
+  hasActed?: boolean;
+  lastAction?: "check" | "call" | "raise" | "fold";
 };
 
 export type RoomHandsBoardProps = {
   gameId: Id<"games">;
   roomCode?: string;
+  currentTurnPlayerId?: string | null;
   gameStage: "preflop" | "flop" | "turn" | "river" | "final" | "showdown";
   communityTiles: Tile[];
   hands: PlayerHand[];
   bottomPlayerId?: string;
   getPlayerName: (playerId: string) => string;
   getPlayerAvatar: (playerId: string) => string | null;
+  getPlayerPersonality: (playerId: string) => string | null;
+  dealerButtonIndex?: number;
+  smallBlindIndex?: number;
+  bigBlindIndex?: number;
   pot?: number;
 };
 

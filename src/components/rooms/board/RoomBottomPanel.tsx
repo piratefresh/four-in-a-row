@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import {
   SortableContext,
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { motion, useAnimationControls } from "motion/react";
 import { ActionButton } from "../controls/ActionButton";
 import { WordTile } from "../table/WordTile";
 import type { BuilderTile } from "./RoomHandsBoard.types";
@@ -22,10 +23,85 @@ type RoomBottomPanelProps = {
   hasUnresolvedChoices: boolean;
   validationError: string | null;
   wordPreview: string;
+  shuffleTick: number;
   gameStage: "preflop" | "flop" | "turn" | "river" | "final" | "showdown";
   handleSubmitWord: () => void;
   renderBuilderTile: (tile: BuilderTile) => ReactNode;
+  hasFolded?: boolean;
 };
+
+type AnimatedBuilderTileProps = {
+  tile: BuilderTile;
+  index: number;
+  choiceSelections: Record<string, string>;
+  handleChoiceSelect: (tileId: string, letter: string) => void;
+  isValidating: boolean;
+  renderBuilderTile: (tile: BuilderTile) => ReactNode;
+  shuffleTick: number;
+};
+
+function getShuffleTilt(index: number) {
+  const direction = index % 2 === 0 ? 1 : -1;
+  return direction * (4 + (index % 3) * 1.5);
+}
+
+function AnimatedBuilderTile({
+  tile,
+  index,
+  choiceSelections,
+  handleChoiceSelect,
+  isValidating,
+  renderBuilderTile,
+  shuffleTick,
+}: AnimatedBuilderTileProps) {
+  const controls = useAnimationControls();
+
+  useEffect(() => {
+    if (shuffleTick === 0) return;
+
+    void controls.start({
+      y: [0, -16, 0],
+      rotate: [0, getShuffleTilt(index), 0],
+      scale: [1, 1.05, 1],
+      transition: {
+        duration: 0.44,
+        ease: "easeInOut",
+        delay: index * 0.025,
+      },
+    });
+  }, [controls, index, shuffleTick]);
+
+  return (
+    <motion.div
+      layout
+      initial={false}
+      animate={controls}
+      transition={{ layout: { duration: 0.34, ease: "easeInOut" } }}
+      className={`flex flex-col items-center gap-2 transition-opacity duration-300 ${
+        isValidating && tile.disabled ? "opacity-30" : "opacity-100"
+      }`}
+    >
+      {!tile.disabled &&
+        tile.isChoice &&
+        tile.letters &&
+        !choiceSelections[tile.id] && (
+          <div className="flex gap-1.5 rounded-lg border-2 border-[#3b82f6] bg-[#0a0a0a]/90 px-2 py-1.5 shadow-md backdrop-blur-sm sm:px-3 sm:py-2">
+            {tile.letters.map((letter, optionIndex) => (
+              <button
+                key={letter}
+                onClick={() => handleChoiceSelect(tile.id, letter)}
+                className="min-h-[36px] rounded-lg bg-slate-700 px-2 py-1 text-sm font-bold text-white transition-all hover:bg-[#3b82f6] sm:px-3 sm:py-1.5 sm:text-base"
+                title={`Select ${letter} (value: ${getLetterValue(letter) ?? tile.baseValues?.[optionIndex] ?? 1})`}
+              >
+                {letter}
+              </button>
+            ))}
+          </div>
+        )}
+      {renderBuilderTile(tile)}
+    </motion.div>
+  );
+}
 
 function getHiddenTileCount(
   gameStage: RoomBottomPanelProps["gameStage"],
@@ -55,9 +131,11 @@ export function RoomBottomPanel({
   hasUnresolvedChoices,
   validationError,
   wordPreview,
+  shuffleTick,
   gameStage,
   handleSubmitWord,
   renderBuilderTile,
+  hasFolded,
 }: RoomBottomPanelProps) {
   const hiddenTileCount = getHiddenTileCount(gameStage);
 
@@ -79,6 +157,15 @@ export function RoomBottomPanel({
                 variant="hidden"
               />
             ))}
+          </div>
+        ) : hasFolded ? (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <div className="text-lg font-bold text-red-400 sm:text-2xl">
+              You Folded
+            </div>
+            <div className="text-sm text-gray-400 sm:text-base">
+              You are no longer eligible to submit a word
+            </div>
           </div>
         ) : mySubmission ? (
           <div className="flex flex-col items-center gap-4">
@@ -147,36 +234,17 @@ export function RoomBottomPanel({
               strategy={horizontalListSortingStrategy}
             >
               <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-6 [@media(max-height:460px)]:gap-1.5">
-                {builderTiles.map((tile) => (
-                  <div
+                {builderTiles.map((tile, index) => (
+                  <AnimatedBuilderTile
                     key={tile.id}
-                    className={`flex flex-col items-center gap-2 transition-opacity duration-300 ${
-                      isValidating && tile.disabled
-                        ? "opacity-30"
-                        : "opacity-100"
-                    }`}
-                  >
-                    {!tile.disabled &&
-                      tile.isChoice &&
-                      tile.letters &&
-                      !choiceSelections[tile.id] && (
-                        <div className="flex gap-1.5 rounded-lg border-2 border-[#3b82f6] bg-[#0a0a0a]/90 px-2 py-1.5 shadow-md backdrop-blur-sm sm:px-3 sm:py-2">
-                          {tile.letters.map((letter, idx) => (
-                            <button
-                              key={letter}
-                              onClick={() =>
-                                handleChoiceSelect(tile.id, letter)
-                              }
-                              className="min-h-[36px] rounded-lg bg-slate-700 px-2 py-1 text-sm font-bold text-white transition-all hover:bg-[#3b82f6] sm:px-3 sm:py-1.5 sm:text-base"
-                              title={`Select ${letter} (value: ${getLetterValue(letter) ?? tile.baseValues?.[idx] ?? 1})`}
-                            >
-                              {letter}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    {renderBuilderTile(tile)}
-                  </div>
+                    tile={tile}
+                    index={index}
+                    choiceSelections={choiceSelections}
+                    handleChoiceSelect={handleChoiceSelect}
+                    isValidating={isValidating}
+                    renderBuilderTile={renderBuilderTile}
+                    shuffleTick={shuffleTick}
+                  />
                 ))}
                 {Array.from({ length: hiddenTileCount }).map((_, index) => (
                   <WordTile

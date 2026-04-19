@@ -2,26 +2,198 @@ import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
-  ANTE_AMOUNT,
+  SMALL_BLIND,
+  BIG_BLIND,
   INITIAL_HAND_SIZE,
+  COMMUNITY_TILE_COUNT,
+  MIN_COMMUNITY_CHOICE_TILE_COUNT,
+  MAX_COMMUNITY_CHOICE_TILE_COUNT,
+  PREFERRED_PRIVATE_CHOICE_TILE_COUNT,
   createInitialGameDocument,
   createShuffledDeck,
+  type GameDeckTile,
+  type GameTile,
 } from "../gameState";
 import { scheduleBotTurnIfNeeded, setRoomUsersActiveGameId } from "./gamesProgression";
 import { AI_DEALER_PLAYER_ID, INITIAL_CHIPS } from "./gamesShared";
 
-function buildCommunityTiles(deck: ReturnType<typeof createShuffledDeck>) {
-  const communityTiles = [];
-  for (let i = 0; i < 5; i++) {
-    const card = deck.splice(0, 1)[0];
-    if (!card) return null;
-    communityTiles.push(
-      card.kind === "single"
-        ? { kind: "single" as const, letter: card.letter, baseValue: card.baseValue, revealed: false }
-        : { kind: "choice" as const, options: card.options, baseValues: card.baseValues, revealed: false },
-    );
+function randomIndex(maxExclusive: number) {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return bytes[0] % maxExclusive;
+}
+
+function drawMatchingTiles(
+  deck: GameDeckTile[],
+  count: number,
+  predicate: (tile: GameDeckTile) => boolean,
+) {
+  const drawn: GameDeckTile[] = [];
+  let index = 0;
+
+  while (index < deck.length && drawn.length < count) {
+    const tile = deck[index];
+    if (!tile) {
+      break;
+    }
+    if (predicate(tile)) {
+      drawn.push(tile);
+      deck.splice(index, 1);
+      continue;
+    }
+    index += 1;
   }
-  return communityTiles;
+
+  return drawn;
+}
+
+function shuffleTiles<T>(tiles: T[]) {
+  const shuffled = [...tiles];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const swapIndex = randomIndex(i + 1);
+    [shuffled[i], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function toCommunityTile(tile: GameDeckTile): GameTile {
+  return tile.kind === "single"
+    ? {
+        kind: "single",
+        letter: tile.letter,
+        baseValue: tile.baseValue,
+        revealed: false,
+      }
+    : {
+        kind: "choice",
+        options: tile.options,
+        baseValues: tile.baseValues,
+        revealed: false,
+      };
+}
+
+export function createChoiceTileDeal(
+  sourceDeck: GameDeckTile[],
+  participantCount: number,
+) {
+  if (participantCount <= 0) {
+    throw new ConvexError({
+      code: "NOT_ENOUGH_PLAYERS",
+      message: "At least one participant is required to deal a round.",
+    });
+  }
+
+  const deck = [...sourceDeck];
+  const totalTilesNeeded =
+    participantCount * INITIAL_HAND_SIZE + COMMUNITY_TILE_COUNT;
+  if (deck.length < totalTilesNeeded) {
+    throw new ConvexError({
+      code: "DECK_EXHAUSTED",
+      message: "Not enough tiles in deck for initial distribution.",
+    });
+  }
+
+  const availableChoiceTiles = deck.filter((tile) => tile.kind === "choice").length;
+  const availableSingleTiles = deck.length - availableChoiceTiles;
+  const minChoiceTilesNeeded =
+    participantCount * PREFERRED_PRIVATE_CHOICE_TILE_COUNT +
+    MIN_COMMUNITY_CHOICE_TILE_COUNT;
+
+  if (availableChoiceTiles < minChoiceTilesNeeded) {
+    throw new ConvexError({
+      code: "DECK_CHOICE_TILE_SHORTAGE",
+      message: "Not enough two-letter choice tiles to build a valid round.",
+    });
+  }
+
+  const maxCommunityChoiceTiles = Math.min(
+    MAX_COMMUNITY_CHOICE_TILE_COUNT,
+    availableChoiceTiles -
+      participantCount * PREFERRED_PRIVATE_CHOICE_TILE_COUNT,
+  );
+  const communityChoiceTileCount =
+    maxCommunityChoiceTiles <= MIN_COMMUNITY_CHOICE_TILE_COUNT
+      ? MIN_COMMUNITY_CHOICE_TILE_COUNT
+      : MIN_COMMUNITY_CHOICE_TILE_COUNT +
+        randomIndex(
+          maxCommunityChoiceTiles -
+            MIN_COMMUNITY_CHOICE_TILE_COUNT +
+            1,
+        );
+  const totalChoiceTilesNeeded =
+    participantCount * PREFERRED_PRIVATE_CHOICE_TILE_COUNT +
+    communityChoiceTileCount;
+  const totalSingleTilesNeeded = totalTilesNeeded - totalChoiceTilesNeeded;
+
+  if (availableSingleTiles < totalSingleTilesNeeded) {
+    throw new ConvexError({
+      code: "DECK_SINGLE_TILE_SHORTAGE",
+      message: "Not enough single-letter tiles to satisfy the round distribution.",
+    });
+  }
+
+  const hands: GameDeckTile[][] = Array.from(
+    { length: participantCount },
+    () => [],
+  );
+
+  for (let participantIndex = 0; participantIndex < participantCount; participantIndex += 1) {
+    hands[participantIndex]!.push(
+      ...drawMatchingTiles(
+        deck,
+        PREFERRED_PRIVATE_CHOICE_TILE_COUNT,
+        (tile) => tile.kind === "choice",
+      ),
+    );
+    hands[participantIndex]!.push(
+      ...drawMatchingTiles(
+        deck,
+        INITIAL_HAND_SIZE - PREFERRED_PRIVATE_CHOICE_TILE_COUNT,
+        (tile) => tile.kind === "single",
+      ),
+    );
+
+    if (hands[participantIndex]!.length !== INITIAL_HAND_SIZE) {
+      throw new ConvexError({
+        code: "INVALID_HAND_DEAL",
+        message: "Player hand could not be dealt correctly.",
+      });
+    }
+
+    hands[participantIndex] = shuffleTiles(hands[participantIndex]!);
+  }
+
+  const communityChoiceTiles = drawMatchingTiles(
+    deck,
+    communityChoiceTileCount,
+    (tile) => tile.kind === "choice",
+  );
+  const communitySingleTiles = drawMatchingTiles(
+    deck,
+    COMMUNITY_TILE_COUNT - communityChoiceTileCount,
+    (tile) => tile.kind === "single",
+  );
+  const communityTiles = shuffleTiles([
+    ...communityChoiceTiles,
+    ...communitySingleTiles,
+  ]).map(toCommunityTile);
+
+  if (communityTiles.length !== COMMUNITY_TILE_COUNT) {
+    throw new ConvexError({
+      code: "INVALID_COMMUNITY_DEAL",
+      message: "Community tiles could not be dealt correctly.",
+    });
+  }
+
+  return {
+    hands,
+    communityTiles,
+    deck,
+    communityChoiceTileCount,
+    handChoiceTileCounts: hands.map(
+      (hand) => hand.filter((tile) => tile.kind === "choice").length,
+    ),
+  };
 }
 
 async function getParticipantIds(ctx: MutationCtx, roomId: Id<"rooms">) {
@@ -46,31 +218,65 @@ async function clearHands(ctx: MutationCtx, gameId: Id<"games">) {
   for (const hand of existingHands) await ctx.db.delete(hand._id);
 }
 
+function calculateBlindPositions(dealerButtonIndex: number, playerCount: number) {
+  if (playerCount === 2) {
+    // Heads-up: dealer is small blind, other player is big blind
+    return {
+      smallBlindIndex: dealerButtonIndex,
+      bigBlindIndex: (dealerButtonIndex + 1) % playerCount,
+    };
+  }
+  // 3+ players: small blind is left of dealer, big blind is left of small blind
+  return {
+    smallBlindIndex: (dealerButtonIndex + 1) % playerCount,
+    bigBlindIndex: (dealerButtonIndex + 2) % playerCount,
+  };
+}
+
 async function dealHands(
   ctx: MutationCtx,
   gameId: Id<"games">,
   participantIds: string[],
-  deck: ReturnType<typeof createShuffledDeck>,
+  hands: GameDeckTile[][],
+  smallBlindIndex: number,
+  bigBlindIndex: number,
   now: number,
 ) {
   for (const [participantIndex, participantId] of participantIds.entries()) {
-    const tiles = deck.splice(0, INITIAL_HAND_SIZE);
-    if (INITIAL_CHIPS < ANTE_AMOUNT) {
+    const tiles = hands[participantIndex];
+    if (!tiles || tiles.length !== INITIAL_HAND_SIZE) {
       throw new ConvexError({
-        code: "INSUFFICIENT_CHIPS_FOR_ANTE",
-        message: `Players must have at least ${ANTE_AMOUNT} chips to play.`,
+        code: "INVALID_HAND_DEAL",
+        message: "Player hand could not be dealt correctly.",
       });
     }
+
+    // Determine blind amount for this player
+    let blindAmount = 0;
+    if (participantIndex === smallBlindIndex) {
+      blindAmount = SMALL_BLIND;
+    } else if (participantIndex === bigBlindIndex) {
+      blindAmount = BIG_BLIND;
+    }
+
+    if (INITIAL_CHIPS < blindAmount) {
+      throw new ConvexError({
+        code: "INSUFFICIENT_CHIPS_FOR_BLIND",
+        message: `Players must have at least ${blindAmount} chips to post blinds.`,
+      });
+    }
+
     const handCreatedAt = now + participantIndex;
     await ctx.db.insert("playerHands", {
       gameId,
       playerId: participantId,
       tiles,
-      chips: INITIAL_CHIPS - ANTE_AMOUNT,
+      chips: INITIAL_CHIPS - blindAmount,
       betThisRound: 0,
-      totalBet: ANTE_AMOUNT,
-      hasActed: false,
+      totalBet: blindAmount,
+      hasActed: participantIndex !== smallBlindIndex && participantIndex !== bigBlindIndex,
       hasFolded: false,
+      lastAction: undefined,
       createdAt: handCreatedAt,
       updatedAt: handCreatedAt,
     });
@@ -133,35 +339,43 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
   }
 
   const deck = createShuffledDeck();
-  const requiredTiles = participantIds.length * INITIAL_HAND_SIZE + 5;
   const choiceCards = deck.filter((card) => card.kind === "choice");
   console.log(`Deck generated: ${deck.length} total cards, ${choiceCards.length} choice cards`);
-  if (deck.length < requiredTiles) {
-    throw new ConvexError({
-      code: "DECK_EXHAUSTED",
-      message: "Not enough tiles in deck for initial distribution.",
-    });
-  }
 
   await clearHands(ctx, game._id);
-  const communityTiles = buildCommunityTiles(deck);
-  if (!communityTiles) {
-    throw new ConvexError({
-      code: "DECK_EXHAUSTED",
-      message: "Deck ran out of cards during community tile creation.",
-    });
-  }
+  const roundDeal = createChoiceTileDeal(deck, participantIds.length);
 
   const now = Date.now();
-  const totalAnte = ANTE_AMOUNT * participantIds.length;
-  await dealHands(ctx, game._id, participantIds, deck, now);
+
+  // Calculate blind positions
+  const dealerButtonIndex = 0; // Start with first player as dealer
+  const { smallBlindIndex, bigBlindIndex } = calculateBlindPositions(
+    dealerButtonIndex,
+    participantIds.length
+  );
+
+  const totalBlinds = SMALL_BLIND + BIG_BLIND;
+  const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
+
+  await dealHands(
+    ctx,
+    game._id,
+    participantIds,
+    roundDeal.hands,
+    smallBlindIndex,
+    bigBlindIndex,
+    now,
+  );
   await ctx.db.patch(game._id, {
     status: "active",
-    communityTiles,
-    deck,
-    pot: totalAnte,
-    currentBet: 0,
-    currentPlayerIndex: 0,
+    communityTiles: roundDeal.communityTiles,
+    deck: roundDeal.deck,
+    pot: totalBlinds,
+    currentBet: BIG_BLIND,
+    currentPlayerIndex: firstActionIndex,
+    dealerButtonIndex,
+    smallBlindIndex,
+    bigBlindIndex,
     raisesThisRound: 0,
     updatedAt: now,
   });
@@ -195,25 +409,41 @@ export async function internalStartGameHandler(
   if (!participantIds) return { ok: false, reason: "Not enough players" };
 
   const deck = createShuffledDeck();
-  const requiredTiles = participantIds.length * INITIAL_HAND_SIZE + 5;
-  if (deck.length < requiredTiles) return { ok: false, reason: "Deck exhausted" };
 
   await clearHands(ctx, game._id);
-  const communityTiles = buildCommunityTiles(deck);
-  if (!communityTiles) {
-    return { ok: false, reason: "Deck exhausted during community tile creation" };
-  }
+  const roundDeal = createChoiceTileDeal(deck, participantIds.length);
 
   const now = Date.now();
-  const totalAnte = ANTE_AMOUNT * participantIds.length;
-  await dealHands(ctx, game._id, participantIds, deck, now);
+
+  // Calculate blind positions
+  const dealerButtonIndex = 0;
+  const { smallBlindIndex, bigBlindIndex } = calculateBlindPositions(
+    dealerButtonIndex,
+    participantIds.length
+  );
+
+  const totalBlinds = SMALL_BLIND + BIG_BLIND;
+  const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
+
+  await dealHands(
+    ctx,
+    game._id,
+    participantIds,
+    roundDeal.hands,
+    smallBlindIndex,
+    bigBlindIndex,
+    now,
+  );
   await ctx.db.patch(game._id, {
     status: "active",
-    communityTiles,
-    deck,
-    pot: totalAnte,
-    currentBet: 0,
-    currentPlayerIndex: 0,
+    communityTiles: roundDeal.communityTiles,
+    deck: roundDeal.deck,
+    pot: totalBlinds,
+    currentBet: BIG_BLIND,
+    currentPlayerIndex: firstActionIndex,
+    dealerButtonIndex,
+    smallBlindIndex,
+    bigBlindIndex,
     raisesThisRound: 0,
     updatedAt: now,
   });
@@ -242,15 +472,19 @@ export async function internalRedealGameForRoomHandler(
       q.eq("roomId", String(room._id)).eq("status", "waiting"),
     )
     .unique();
-  const game = activeGame ?? waitingGame;
+  const completedGame = await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(room._id)).eq("status", "completed"),
+    )
+    .unique();
+  const game = activeGame ?? waitingGame ?? completedGame;
   if (!game) return { ok: false, reason: "No game found for room" };
 
   const participantIds = await getParticipantIds(ctx, room._id);
   if (!participantIds) return { ok: false, reason: "Not enough players" };
 
   const deck = createShuffledDeck();
-  const requiredTiles = participantIds.length * INITIAL_HAND_SIZE + 5;
-  if (deck.length < requiredTiles) return { ok: false, reason: "Deck exhausted" };
 
   await clearHands(ctx, game._id);
   const existingSubmissions = await ctx.db
@@ -259,22 +493,41 @@ export async function internalRedealGameForRoomHandler(
     .collect();
   for (const submission of existingSubmissions) await ctx.db.delete(submission._id);
 
-  const communityTiles = buildCommunityTiles(deck);
-  if (!communityTiles) {
-    return { ok: false, reason: "Deck exhausted during community tile creation" };
-  }
+  const roundDeal = createChoiceTileDeal(deck, participantIds.length);
 
   const now = Date.now();
-  const totalAnte = ANTE_AMOUNT * participantIds.length;
-  await dealHands(ctx, game._id, participantIds, deck, now);
+
+  // Rotate blinds for next round - advance dealer button
+  const previousDealerIndex = game.dealerButtonIndex ?? 0;
+  const dealerButtonIndex = (previousDealerIndex + 1) % participantIds.length;
+  const { smallBlindIndex, bigBlindIndex } = calculateBlindPositions(
+    dealerButtonIndex,
+    participantIds.length
+  );
+
+  const totalBlinds = SMALL_BLIND + BIG_BLIND;
+  const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
+
+  await dealHands(
+    ctx,
+    game._id,
+    participantIds,
+    roundDeal.hands,
+    smallBlindIndex,
+    bigBlindIndex,
+    now,
+  );
   await ctx.db.patch(game._id, {
     stage: "preflop",
     status: "active",
-    communityTiles,
-    deck,
-    pot: totalAnte,
-    currentBet: 0,
-    currentPlayerIndex: 0,
+    communityTiles: roundDeal.communityTiles,
+    deck: roundDeal.deck,
+    pot: totalBlinds,
+    currentBet: BIG_BLIND,
+    currentPlayerIndex: firstActionIndex,
+    dealerButtonIndex,
+    smallBlindIndex,
+    bigBlindIndex,
     raisesThisRound: 0,
     winnerId: undefined,
     winningWord: undefined,
@@ -292,4 +545,19 @@ export async function internalRedealGameForRoomHandler(
     playersDealt: participantIds.length,
     includesAiDealer: participantIds.includes(AI_DEALER_PLAYER_ID),
   };
+}
+
+export async function redealGameForRoomHandler(
+  ctx: MutationCtx,
+  args: { roomId: string },
+) {
+  const roomId = args.roomId.trim() as Id<"rooms">;
+  if (!roomId) {
+    throw new ConvexError({
+      code: "INVALID_ROOM_ID",
+      message: "Room ID is required.",
+    });
+  }
+
+  return await internalRedealGameForRoomHandler(ctx, { roomId });
 }

@@ -14,17 +14,23 @@ type RoomGameContextValue = {
   totalPlayers: number;
   allPlayersReady: boolean;
   isBetting: boolean;
+  isMyTurn: boolean;
   canCheck: boolean;
   canCall: boolean;
   canRaise: boolean;
   canFold: boolean;
+  currentTurnPlayerName: string | null;
   onCheck?: () => void;
   onCall?: () => void;
   onRaise?: () => void;
   onFold?: () => void;
+  onRaiseAmountChange?: (amount: number) => void;
   onLeaveRoom?: () => void;
   callLabel: string;
+  callAmount: number;
   raiseLabel: string;
+  raiseAmount: number | null;
+  raiseOptions: number[];
   showdownTimeRemaining: number | null;
 };
 

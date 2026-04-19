@@ -3,12 +3,15 @@ import { api, internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../_generated/server";
 import { MAX_RAISES_PER_ROUND, RAISE_LADDER } from "../gameState";
+import { isNvidiaNimConfigured } from "../aiClient";
 import {
   advanceTurn,
   handlePostActionProgression,
   scheduleBotTurnIfNeeded,
 } from "./gamesProgression";
 import { sortHandsByTurnOrder } from "./gamesShared";
+
+const BOT_AI_TIMEOUT_MS = 15_000;
 
 type PlayerActionArgs = { gameId: Doc<"games">["_id"]; playerId: string };
 
@@ -50,7 +53,11 @@ export async function checkHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     throw new ConvexError({ code: "CANNOT_CHECK", message: `You must call ${game.currentBet} or fold.` });
   }
   const now = Date.now();
-  await ctx.db.patch(currentTurnHand._id, { hasActed: true, updatedAt: now });
+  await ctx.db.patch(currentTurnHand._id, {
+    hasActed: true,
+    lastAction: "check",
+    updatedAt: now,
+  });
   const updatedHands = orderedHands.map((hand) => ({
     _id: hand._id, playerId: hand.playerId, hasFolded: hand.hasFolded,
     hasActed: hand._id === currentTurnHand._id ? true : hand.hasActed,
@@ -73,6 +80,7 @@ export async function callHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     betThisRound: currentTurnHand.betThisRound + amountToCall,
     totalBet: currentTurnHand.totalBet + amountToCall,
     hasActed: true,
+    lastAction: "call",
     updatedAt: now,
   });
   await ctx.db.patch(game._id, { pot: game.pot + amountToCall, updatedAt: now });
@@ -97,14 +105,14 @@ export async function raiseHandler(
   if (raisesThisRound >= MAX_RAISES_PER_ROUND) throw new ConvexError({ code: "RAISE_CAP_REACHED", message: `Maximum ${MAX_RAISES_PER_ROUND} raises per betting round reached.` });
   const raiseToAmount = Math.floor(args.raiseToAmount);
   if (!Number.isFinite(raiseToAmount) || raiseToAmount <= game.currentBet) throw new ConvexError({ code: "INVALID_RAISE_AMOUNT", message: `Raise amount must be greater than current bet of ${game.currentBet}.` });
-  const nextRaiseLevel = RAISE_LADDER.find((amount) => amount > game.currentBet);
-  if (nextRaiseLevel === undefined) throw new ConvexError({ code: "RAISE_CAP_REACHED", message: "Maximum raise level reached." });
-  if (raiseToAmount !== nextRaiseLevel) throw new ConvexError({ code: "INVALID_RAISE_AMOUNT", message: `Raise amount must be the next ladder level: ${nextRaiseLevel}.` });
+  const validRaiseOptions = RAISE_LADDER.filter((amount) => amount > game.currentBet);
+  if (validRaiseOptions.length === 0) throw new ConvexError({ code: "RAISE_CAP_REACHED", message: "Maximum raise level reached." });
+  if (!validRaiseOptions.includes(raiseToAmount)) throw new ConvexError({ code: "INVALID_RAISE_AMOUNT", message: `Raise amount must match a valid ladder level above ${game.currentBet}: ${validRaiseOptions.join(", ")}.` });
   const { orderedHands, currentTurnHand } = await getCurrentTurnHand(ctx, game, playerId);
   const additionalChipsNeeded = raiseToAmount - currentTurnHand.betThisRound;
   if (currentTurnHand.chips < additionalChipsNeeded) throw new ConvexError({ code: "INSUFFICIENT_CHIPS", message: `You need ${additionalChipsNeeded} chips to raise to ${raiseToAmount}, but only have ${currentTurnHand.chips}.` });
   const now = Date.now();
-  await ctx.db.patch(currentTurnHand._id, { chips: currentTurnHand.chips - additionalChipsNeeded, betThisRound: raiseToAmount, totalBet: currentTurnHand.totalBet + additionalChipsNeeded, hasActed: true, updatedAt: now });
+  await ctx.db.patch(currentTurnHand._id, { chips: currentTurnHand.chips - additionalChipsNeeded, betThisRound: raiseToAmount, totalBet: currentTurnHand.totalBet + additionalChipsNeeded, hasActed: true, lastAction: "raise", updatedAt: now });
   for (const hand of orderedHands) if (hand._id !== currentTurnHand._id && !hand.hasFolded) await ctx.db.patch(hand._id, { hasActed: false, updatedAt: now });
   await ctx.db.patch(game._id, { pot: game.pot + additionalChipsNeeded, currentBet: raiseToAmount, raisesThisRound: raisesThisRound + 1, updatedAt: now });
   const updatedHands = orderedHands.map((hand) => ({
@@ -124,7 +132,7 @@ export async function foldHandler(ctx: MutationCtx, args: PlayerActionArgs) {
   const playerId = args.playerId.trim();
   const { orderedHands, currentTurnHand } = await getCurrentTurnHand(ctx, game, playerId);
   const now = Date.now();
-  await ctx.db.patch(currentTurnHand._id, { hasFolded: true, hasActed: true, updatedAt: now });
+  await ctx.db.patch(currentTurnHand._id, { hasFolded: true, hasActed: true, lastAction: "fold", updatedAt: now });
   const updatedHands = orderedHands.map((hand) => ({
     _id: hand._id, playerId: hand.playerId,
     hasFolded: hand._id === currentTurnHand._id ? true : hand.hasFolded,
@@ -192,8 +200,8 @@ export async function internalProcessBotTurnHandler(
   const runCheck = () => ctx.runMutation(api.games.check, { gameId: args.gameId, playerId: args.playerId });
   const runCall = () => ctx.runMutation(api.games.call, { gameId: args.gameId, playerId: args.playerId });
   const runFold = () => ctx.runMutation(api.games.fold, { gameId: args.gameId, playerId: args.playerId });
-  if (!process.env.OPENROUTER_API_KEY) {
-    logBotTurn("OPENROUTER_API_KEY missing, using betting fallback", {
+  if (!isNvidiaNimConfigured()) {
+    logBotTurn("NVIDIA_NIM_API_KEY missing, using betting fallback", {
       gameId: args.gameId,
       playerId: args.playerId,
       stage: game.stage,
@@ -227,7 +235,19 @@ export async function internalProcessBotTurnHandler(
       pot: game.pot,
       raisesThisRound: game.raisesThisRound ?? 0,
     });
-    const decision = await ctx.runAction(internal.ai.aiDecideBet, { difficulty: "medium", handTiles: currentTurnHand.tiles, communityTiles: game.communityTiles, stage: game.stage, currentBet: game.currentBet, chips: currentTurnHand.chips, pot: game.pot, raiseLadder: RAISE_LADDER, maxRaises: MAX_RAISES_PER_ROUND, currentRaises: game.raisesThisRound ?? 0 });
+    const decision = await ctx.runAction(internal.ai.aiDecideBet, {
+      difficulty: "medium",
+      handTiles: currentTurnHand.tiles,
+      communityTiles: game.communityTiles,
+      stage: game.stage,
+      currentBet: game.currentBet,
+      chips: currentTurnHand.chips,
+      pot: game.pot,
+      raiseLadder: RAISE_LADDER,
+      maxRaises: MAX_RAISES_PER_ROUND,
+      currentRaises: game.raisesThisRound ?? 0,
+      timeoutMs: BOT_AI_TIMEOUT_MS,
+    });
     logBotTurn("received AI betting decision", {
       playerId: currentTurnHand.playerId,
       action: decision.action,

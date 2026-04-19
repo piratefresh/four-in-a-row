@@ -14,6 +14,18 @@ function sortDisabledToEnd(tiles: BuilderTile[]) {
   return [...tiles].sort((a, b) => Number(!!a.disabled) - Number(!!b.disabled));
 }
 
+function shuffleTiles(tiles: BuilderTile[]) {
+  const shuffled = [...tiles];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex],
+      shuffled[index],
+    ];
+  }
+  return shuffled;
+}
+
 export function useRoomWordBuilder({
   gameId,
   bottomHand,
@@ -30,6 +42,7 @@ export function useRoomWordBuilder({
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showReveal, setShowReveal] = useState(false);
+  const [shuffleTick, setShuffleTick] = useState(0);
   const [choiceSelections, setChoiceSelections] = useState<
     Record<string, string>
   >({});
@@ -37,6 +50,7 @@ export function useRoomWordBuilder({
   useEffect(() => {
     if (!bottomHand) {
       setBuilderTiles([]);
+      setShuffleTick(0);
       return;
     }
 
@@ -187,6 +201,15 @@ export function useRoomWordBuilder({
     });
   };
 
+  const handleShuffleTiles = () => {
+    setBuilderTiles((previous) => {
+      const enabledTiles = previous.filter((tile) => !tile.disabled);
+      const disabledTiles = previous.filter((tile) => tile.disabled);
+      return [...shuffleTiles(enabledTiles), ...shuffleTiles(disabledTiles)];
+    });
+    setShuffleTick((previous) => previous + 1);
+  };
+
   const handleSubmitWord = async () => {
     if (!wordPreview || wordPreview.length < 2) {
       setValidationError("Word must be at least 2 letters");
@@ -286,6 +309,7 @@ export function useRoomWordBuilder({
     handleDragCancel,
     handleDragEnd,
     handleDragStart,
+    handleShuffleTiles,
     handleSubmitWord,
     handleToggleDisabled,
     hasUnresolvedChoices,
@@ -293,6 +317,7 @@ export function useRoomWordBuilder({
     mySubmission,
     otherSubmissions,
     setActiveTile,
+    shuffleTick,
     showReveal,
     validationError,
     wordPreview,

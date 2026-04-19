@@ -97,23 +97,45 @@ function SortableBuilderTile({
 
 const BET_POSITION_CLASS: Record<"top" | "left" | "right" | "bottom", string> =
   {
-    top: "left-1/2 top-[12%] -translate-x-1/2",
-    left: "left-[12%] top-1/2 -translate-y-1/2",
-    right: "right-[12%] top-1/2 -translate-y-1/2",
-    bottom: "left-1/2 bottom-[12%] -translate-x-1/2",
+    top: "left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2",
+    left: "left-[32%] top-[50%] -translate-x-1/2 -translate-y-1/2",
+    right: "left-[68%] top-[50%] -translate-x-1/2 -translate-y-1/2",
+    bottom: "left-1/2 top-[62%] -translate-x-1/2 -translate-y-1/2",
   };
+
+function formatPlayerActionLabel(
+  lastAction?: "check" | "call" | "raise" | "fold",
+) {
+  if (!lastAction) return undefined;
+  return lastAction.toUpperCase();
+}
 
 export function RoomHandsBoardV2({
   gameId,
   roomCode,
+  currentTurnPlayerId,
   gameStage,
   communityTiles,
   hands,
   bottomPlayerId,
   getPlayerName,
   getPlayerAvatar,
+  getPlayerPersonality,
+  dealerButtonIndex,
+  smallBlindIndex,
+  bigBlindIndex,
   pot = 0,
 }: RoomHandsBoardProps) {
+  // Helper function to determine blind position for a player
+  const getBlindPosition = (playerId: string): "dealer" | "small" | "big" | undefined => {
+    const playerIndex = hands.findIndex((h) => h.playerId === playerId);
+    if (playerIndex === -1) return undefined;
+
+    if (playerIndex === dealerButtonIndex) return "dealer";
+    if (playerIndex === smallBlindIndex) return "small";
+    if (playerIndex === bigBlindIndex) return "big";
+    return undefined;
+  };
   const {
     anteAmount,
     raisesThisRound,
@@ -128,17 +150,23 @@ export function RoomHandsBoardV2({
     totalPlayers,
     allPlayersReady,
     isBetting,
+    isMyTurn,
     canCheck,
     canCall,
     canRaise,
     canFold,
+    currentTurnPlayerName,
     onCheck,
     onCall,
     onRaise,
     onFold,
+    onRaiseAmountChange,
     onLeaveRoom,
     callLabel,
+    callAmount,
     raiseLabel,
+    raiseAmount,
+    raiseOptions,
     showdownTimeRemaining,
   } = useRoomGameContext();
 
@@ -176,12 +204,14 @@ export function RoomHandsBoardV2({
     handleDragCancel,
     handleDragEnd,
     handleDragStart,
+    handleShuffleTiles,
     handleSubmitWord,
     handleToggleDisabled,
     hasUnresolvedChoices,
     isValidating,
     mySubmission,
     otherSubmissions,
+    shuffleTick,
     showReveal,
     validationError,
     wordPreview,
@@ -201,6 +231,8 @@ export function RoomHandsBoardV2({
     showReadyButton ? "phase0" : gameStage;
   const isPhase0 = boardPhase === "phase0";
   const isPhase1 = boardPhase === "preflop";
+  const showShuffleControl =
+    !isPhase0 && !isPhase1 && !mySubmission && !bottomHand?.hasFolded && builderTiles.length > 1;
   const opponentBets = useMemo(
     () =>
       opponents
@@ -233,7 +265,7 @@ export function RoomHandsBoardV2({
           onLeaveRoom={onLeaveRoom}
         />
 
-        <main className="flex min-h-0 flex-1 flex-col pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <main className="flex min-h-0 flex-1 flex-col pt-3 sm:pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <RoomCommunityStrip
             tiles={communityTiles}
             hidden={isPhase0 || isPhase1}
@@ -265,7 +297,7 @@ export function RoomHandsBoardV2({
             {!isPhase0 && (
               <div className="relative z-10 flex items-center justify-center px-4">
                 {/* Wrapper with actual size including avatar overflow - responsive to match table size */}
-                <div className="relative flex items-center justify-center min-h-[360px] min-w-[240px] sm:min-h-[440px] sm:min-w-[300px]">
+                <div className="relative flex items-center justify-center min-h-[520px] min-w-[360px]">
                   <RoomTable
                     isPhase1={isPhase1}
                     pot={pot}
@@ -276,17 +308,25 @@ export function RoomHandsBoardV2({
                   />
                   <RoomOpponentLayer
                     opponents={opponents}
+                    currentTurnPlayerId={currentTurnPlayerId}
                     getPlayerName={getPlayerName}
                     getPlayerAvatar={getPlayerAvatar}
+                    getPlayerPersonality={getPlayerPersonality}
+                    getBlindPosition={getBlindPosition}
                     otherSubmissions={otherSubmissions}
                     wordSubmissions={wordSubmissions}
+                    gameStage={gameStage}
+                    currentPlayerHasSubmitted={!!mySubmission}
                   />
-                  <div className="absolute bottom-[4%] left-1/2 z-20 -translate-x-1/2 translate-y-1/3 sm:bottom-[5%]">
+                  <div className="absolute bottom-[11%] left-1/2 z-20 -translate-x-1/2 translate-y-1/4 sm:bottom-[12%]">
                     <PhasePlayerBadge
                       name={myName}
                       avatarUrl={getPlayerAvatar(bottomHand.playerId)}
                       chips={bottomHand.chips ?? 0}
-                      bet={bottomHand.betThisRound ?? 0}
+                      actionLabel={formatPlayerActionLabel(bottomHand.lastAction)}
+                      isActiveTurn={currentTurnPlayerId === bottomHand.playerId}
+                      isCurrentPlayer
+                      blindPosition={getBlindPosition(bottomHand.playerId)}
                       avatarSizeClass="h-20 w-20 sm:h-24 sm:w-24"
                       initialsClass="text-[16px] sm:text-[18px]"
                       infoCardClassName="min-w-[112px] px-3 py-1.5 sm:min-w-[132px] sm:px-4 sm:py-2"
@@ -323,6 +363,7 @@ export function RoomHandsBoardV2({
                 hasUnresolvedChoices={hasUnresolvedChoices}
                 validationError={validationError}
                 wordPreview={wordPreview}
+                shuffleTick={shuffleTick}
                 gameStage={gameStage}
                 handleSubmitWord={handleSubmitWord}
                 renderBuilderTile={(tile) => (
@@ -332,6 +373,7 @@ export function RoomHandsBoardV2({
                     selectedLetter={choiceSelections[tile.id]}
                   />
                 )}
+                hasFolded={bottomHand?.hasFolded}
               />
             )}
 
@@ -348,21 +390,39 @@ export function RoomHandsBoardV2({
               />
             )}
 
-            {showBettingControls && (
+            {(showBettingControls || showShuffleControl) && (
               <RoomActionControls
-                betting={{
-                  isBetting,
-                  canCheck,
-                  canCall,
-                  canRaise,
-                  canFold,
-                  onCheck,
-                  onCall,
-                  onRaise,
-                  onFold,
-                  callLabel,
-                  raiseLabel,
-                }}
+                betting={
+                  showBettingControls
+                    ? {
+                        isBetting,
+                        isMyTurn,
+                        canCheck,
+                        canCall,
+                        canRaise,
+                        canFold,
+                        currentTurnPlayerName,
+                        onCheck,
+                        onCall,
+                        onRaise,
+                        onFold,
+                        onRaiseAmountChange,
+                        callLabel,
+                        callAmount,
+                        raiseLabel,
+                        raiseAmount,
+                        raiseOptions,
+                      }
+                    : undefined
+                }
+                utility={
+                  showShuffleControl
+                    ? {
+                        onShuffleTiles: handleShuffleTiles,
+                        disableShuffle: isValidating,
+                      }
+                    : undefined
+                }
               />
             )}
           </div>

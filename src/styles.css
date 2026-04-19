@@ -1,3 +1,5 @@
+@import "@fontsource/noto-serif/400.css";
+@import "@fontsource/noto-serif/700.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -19,6 +21,8 @@ code {
 }
 
 @theme inline {
+  --font-serif: "Noto Serif", ui-serif, Georgia, Cambria, "Times New Roman",
+    Times, serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -57,6 +61,14 @@ code {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  --animate-border: border 4s linear infinite;
+
+  @keyframes border {
+    to {
+      --border-angle: 360deg;
+    }
+  }
 }
 
 :root {
@@ -126,6 +138,12 @@ code {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+@property --border-angle {
+  inherits: false;
+  initial-value: 0deg;
+  syntax: '<angle>';
 }
 
 @layer base {

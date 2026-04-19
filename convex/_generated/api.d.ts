@@ -9,10 +9,12 @@
  */
 
 import type * as ai from "../ai.js";
+import type * as aiClient from "../aiClient.js";
 import type * as aiStrategy from "../aiStrategy.js";
 import type * as auth from "../auth.js";
 import type * as clearOldGames from "../clearOldGames.js";
 import type * as constants from "../constants.js";
+import type * as csw24 from "../csw24.js";
 import type * as debugBots from "../debugBots.js";
 import type * as gameRules from "../gameRules.js";
 import type * as gameState from "../gameState.js";
@@ -27,6 +29,7 @@ import type * as games_gamesShowdown from "../games/gamesShowdown.js";
 import type * as http from "../http.js";
 import type * as inspectGame from "../inspectGame.js";
 import type * as rooms from "../rooms.js";
+import type * as showdownSolver from "../showdownSolver.js";
 import type * as simpleBots from "../simpleBots.js";
 import type * as stats from "../stats.js";
 import type * as testDeck from "../testDeck.js";
@@ -40,10 +43,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  aiClient: typeof aiClient;
   aiStrategy: typeof aiStrategy;
   auth: typeof auth;
   clearOldGames: typeof clearOldGames;
   constants: typeof constants;
+  csw24: typeof csw24;
   debugBots: typeof debugBots;
   gameRules: typeof gameRules;
   gameState: typeof gameState;
@@ -58,6 +63,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   inspectGame: typeof inspectGame;
   rooms: typeof rooms;
+  showdownSolver: typeof showdownSolver;
   simpleBots: typeof simpleBots;
   stats: typeof stats;
   testDeck: typeof testDeck;

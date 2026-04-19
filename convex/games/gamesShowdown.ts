@@ -3,6 +3,7 @@ import { api, internal } from "../_generated/api";
 import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import type { GameTile } from "../gameState";
+import { getBotCharacterForAuthUserId, getBotCharacterForSeed } from "../aiStrategy";
 import { calculateScore } from "./gamesScoring";
 
 export type SubmitWordArgs = {
@@ -294,9 +295,9 @@ export async function getShowdownResultsHandler(ctx: QueryCtx, args: { gameId: D
   }
   const allPlayerResults = hands.map((hand) => {
     const submission = submissionsByPlayer.get(hand.playerId);
-    if (hand.hasFolded && !submission) return { playerId: hand.playerId, word: null, score: 0, scoreBreakdown: null, status: "forfeited" as const };
-    if (submission) return { playerId: submission.playerId, word: submission.word, score: submission.score, scoreBreakdown: submission.scoreBreakdown, status: "submitted" as const };
-    return { playerId: hand.playerId, word: null, score: 0, scoreBreakdown: null, status: "no-submission" as const };
+    if (hand.hasFolded && !submission) return { playerId: hand.playerId, word: null, tiles: [], score: 0, scoreBreakdown: null, status: "forfeited" as const };
+    if (submission) return { playerId: submission.playerId, word: submission.word, tiles: submission.tiles, score: submission.score, scoreBreakdown: submission.scoreBreakdown, status: "submitted" as const };
+    return { playerId: hand.playerId, word: null, tiles: [], score: 0, scoreBreakdown: null, status: "no-submission" as const };
   });
   return { hasWinner: !!game.winnerId, winnerId: game.winnerId, winningWord: game.winningWord, winningScore: game.winningScore, winningScoreBreakdown: game.winningScoreBreakdown, allSubmissions: allPlayerResults.sort((a, b) => b.score - a.score) };
 }
@@ -326,12 +327,25 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
     return { ok: false, reason: "Bot hand not found or already folded" };
   }
   try {
+    const botPlayer = runtimeState.players.find((player) => String(player._id) === args.playerId);
+    const botCharacter =
+      getBotCharacterForAuthUserId(botPlayer?.authUserId) ?? getBotCharacterForSeed(args.playerId);
+    const personality = botCharacter.personality;
     logBotShowdown("requesting AI showdown word", {
       playerId: args.playerId,
+      botName: botCharacter.name,
+      botTitle: botCharacter.title,
+      personality,
       revealedCommunityCount: game.communityTiles.filter((tile) => tile.revealed).length,
       handTileCount: botHand.tiles.length,
     });
-    const wordResult = await ctx.runAction(internal.ai.aiSubmitWord, { difficulty: "medium", handTiles: botHand.tiles, communityTiles: game.communityTiles });
+    const wordResult = await ctx.runAction(internal.ai.aiSubmitWord, {
+      difficulty: "medium",
+      personality,
+      handTiles: botHand.tiles,
+      communityTiles: game.communityTiles,
+      timeoutMs: 15_000,
+    });
     if (!wordResult.word || wordResult.tiles.length === 0) {
       const emergencySubmission = buildEmergencyBotSubmission(
         botHand.tiles,
@@ -362,6 +376,8 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
     }
     logBotShowdown("AI generated showdown word", {
       playerId: args.playerId,
+      botName: botCharacter.name,
+      personality,
       word: wordResult.word,
       tileCount: wordResult.tiles.length,
       estimatedScore: wordResult.estimatedScore,
