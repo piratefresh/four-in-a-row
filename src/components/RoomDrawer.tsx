@@ -66,6 +66,8 @@ export function RoomDrawer({
         ]
       : []),
   ];
+  const shouldShowDevRejoin =
+    showDevTools && Boolean(roomData?.viewerSeatPreview) && Boolean(onDevRejoin);
   const joinButtonLabel = isJoining
     ? "Taking seat..."
     : hasOpenSeat
@@ -75,11 +77,11 @@ export function RoomDrawer({
   return (
     <Drawer open={!!roomCode} onOpenChange={(open) => !open && onClose()}>
       <DrawerContent className="border-white/10 bg-[#050505] text-white">
-        <DrawerHeader className="px-5 pb-0 pt-5 text-left">
-          <DrawerTitle className="font-serif text-[2.25rem] tracking-tight text-white">
+        <DrawerHeader className="px-5 pb-0 pt-5 text-center sm:text-center">
+          <DrawerTitle className="text-center font-serif text-[2.25rem] tracking-tight text-white sm:text-center">
             Room {roomCode}
           </DrawerTitle>
-          <DrawerDescription className="text-sm text-white/60">
+          <DrawerDescription className="text-center text-sm text-white/60 sm:text-center">
             Ante ${ANTE_AMOUNT} • {maxPlayers} seats • Tap an open seat to join
           </DrawerDescription>
         </DrawerHeader>
@@ -90,18 +92,19 @@ export function RoomDrawer({
             maxPlayers={maxPlayers}
             onOpenSeatClick={() => onJoinSeat()}
             isJoining={isJoining || !hasOpenSeat}
+            className="!h-[296px] !max-w-[216px] xs:!h-[320px] xs:!max-w-[236px] sm:!h-[460px] sm:!max-w-[340px]"
           />
 
           <button
             type="button"
             onClick={onJoinSeat}
             disabled={isJoining || !hasOpenSeat}
-            className="mt-6 w-full rounded-2xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-5 py-4 text-center text-lg font-semibold text-[#1f1402] shadow-[0_10px_24px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mx-auto mt-5 block w-full max-w-[272px] rounded-xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-4 py-3 text-center text-base font-semibold text-[#1f1402] shadow-[0_10px_24px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 sm:mt-6 sm:max-w-[320px] sm:rounded-2xl sm:px-5 sm:py-4 sm:text-lg"
           >
             {joinButtonLabel}
           </button>
 
-          {showDevTools ? (
+          {shouldShowDevRejoin ? (
             <div className="mx-auto mt-6 flex max-w-[320px] flex-col gap-3">
               <button
                 type="button"

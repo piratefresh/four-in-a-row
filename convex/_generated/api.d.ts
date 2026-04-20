@@ -29,6 +29,7 @@ import type * as games_gamesShowdown from "../games/gamesShowdown.js";
 import type * as http from "../http.js";
 import type * as inspectGame from "../inspectGame.js";
 import type * as messages from "../messages.js";
+import type * as openRouterClient from "../openRouterClient.js";
 import type * as rooms from "../rooms.js";
 import type * as showdownSolver from "../showdownSolver.js";
 import type * as simpleBots from "../simpleBots.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   inspectGame: typeof inspectGame;
   messages: typeof messages;
+  openRouterClient: typeof openRouterClient;
   rooms: typeof rooms;
   showdownSolver: typeof showdownSolver;
   simpleBots: typeof simpleBots;

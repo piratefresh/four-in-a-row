@@ -34,6 +34,10 @@ export function RoomLobbyPanel() {
     devFillRoomWithBots,
   } = actions;
   const { getPlayerName } = meta;
+  const hasEnoughPlayersToStart = (roomData?.members.length ?? 0) >= 2;
+  const allPlayersReady =
+    hasEnoughPlayersToStart &&
+    (roomData?.members.every((member) => member.readyStatus) ?? false);
 
   return (
     <div className="min-h-[calc(100dvh-4rem)] bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 px-6 py-12">
@@ -164,7 +168,7 @@ export function RoomLobbyPanel() {
 
               <div className="space-y-3">
                 {game?.status === "waiting" && roomData.members ? (
-                  roomData.members.every((member) => member.readyStatus) ? (
+                  allPlayersReady ? (
                     <div
                       className="rounded-lg border border-transparent"
                       style={{
@@ -192,7 +196,11 @@ export function RoomLobbyPanel() {
                   ) : (
                     <div className="rounded-lg border border-emerald-500 bg-emerald-500/5 p-3">
                       <p className="mb-2 text-sm text-slate-300">
-                        {`Waiting for players... (${roomData.members.filter((member) => member.readyStatus).length}/${roomData.members.length} ready)`}
+                        {hasEnoughPlayersToStart
+                          ? `Waiting for players... (${roomData.members.filter((member) => member.readyStatus).length}/${roomData.members.length} ready)`
+                          : myPlayerReady
+                            ? "You are ready. Waiting for at least 1 more player to join."
+                            : "Need at least 2 players in the room to start an online game."}
                       </p>
                       <button
                         type="button"

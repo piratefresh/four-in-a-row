@@ -26,16 +26,16 @@ const sizeClasses: Record<WordTileSize, string> = {
 };
 
 const valueClasses: Record<WordTileSize, string> = {
-  xs: "bottom-1 right-1 text-sm",
-  sm: "bottom-1 right-1.5 text-sm",
-  md: "bottom-1.5 right-1.5 text-sm",
-  lg: "bottom-1 right-1 px-0.5 py-px text-[10px] sm:bottom-2 sm:right-2 sm:px-1.5 sm:py-0.5 sm:text-xl",
+  xs: "",
+  sm: "",
+  md: "",
+  lg: "bottom-1 right-1 px-0.5 py-px text-[11px] sm:bottom-2 sm:right-2 sm:px-1.5 sm:py-0.5 sm:text-[1.35rem]",
 };
 
 const choiceSummaryClasses: Record<WordTileSize, string> = {
-  xs: "bottom-1 left-1 px-1 py-0 text-[9px]",
-  sm: "bottom-1 left-1 px-1 py-0 text-[9px]",
-  md: "bottom-1.5 left-1.5 px-1 py-0 text-[10px]",
+  xs: "px-1 py-0 text-[8px] whitespace-nowrap",
+  sm: "px-1 py-0 text-[8px] whitespace-nowrap",
+  md: "px-1 py-0 text-[9px] whitespace-nowrap",
   lg: "bottom-1 left-1 px-1 py-0 text-[9px] sm:bottom-2 sm:left-1.5 sm:px-1 sm:py-0.5 sm:text-[10px]",
 };
 
@@ -60,7 +60,7 @@ const insetClasses: Record<WordTileVariant, string> = {
 };
 
 const valueBadgeClasses: Record<WordTileVariant, string> = {
-  default: "bg-amber-200/80 text-amber-950",
+  default: "bg-black/45 text-white ring-1 ring-white/10",
   community: "bg-slate-950/60 text-[#f3fffc] ring-1 ring-white/10",
   hidden: "",
 };
@@ -81,6 +81,36 @@ const selectedChoiceTextClasses: Record<WordTileVariant, string> = {
   default: "text-amber-950",
   community: "text-white",
   hidden: "",
+};
+
+const inlineCompactValueClasses: Record<Exclude<WordTileSize, "lg">, string> = {
+  xs: "mt-0.5 rounded px-1 py-0 text-[10px]",
+  sm: "mt-0.5 rounded px-1 py-0 text-[10px]",
+  md: "mt-0.5 rounded px-1 py-0 text-[11px]",
+};
+
+const inlineCompactChoiceLetterClasses: Record<
+  Exclude<WordTileSize, "lg">,
+  string
+> = {
+  xs: "gap-0 text-[0.9em]",
+  sm: "gap-0 text-[0.9em]",
+  md: "gap-0.5 text-[0.82em]",
+};
+
+const inlineCompactChoiceValueClasses: Record<
+  Exclude<WordTileSize, "lg">,
+  string
+> = {
+  xs: "flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px]",
+  sm: "flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px]",
+  md: "flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px]",
+};
+
+const compactMetadataSlotClasses: Record<Exclude<WordTileSize, "lg">, string> = {
+  xs: "mt-0.5 h-[22px]",
+  sm: "mt-0.5 h-[22px]",
+  md: "mt-0.5 h-[24px]",
 };
 
 export function WordTile({
@@ -123,6 +153,13 @@ export function WordTile({
       : variant === "community"
         ? { background: communityTileBackground }
         : undefined;
+  const usesInlineCompactValue = size !== "lg";
+  const inlineValueClass =
+    size === "lg" ? null : inlineCompactValueClasses[size];
+  const inlineChoiceLetterClass =
+    size === "lg" ? null : inlineCompactChoiceLetterClasses[size];
+  const inlineChoiceValueClass =
+    size === "lg" ? null : inlineCompactChoiceValueClasses[size];
 
   const tileContent = (
     <>
@@ -135,53 +172,66 @@ export function WordTile({
         <div className="relative flex h-full w-full items-center justify-center">
           {selectedLetter ? (
             <>
-              <span className="font-bold leading-none tracking-wide">
-                {selectedLetter}
-              </span>
-              <div
-                className={`absolute flex items-center gap-0.5 rounded font-semibold leading-none ${choiceSummaryBadgeClasses[variant]} ${choiceSummaryClasses[size]}`}
-              >
-                {displayLetters?.map((displayLetter, index) => (
-                  <span
-                    key={index}
-                    className={
-                      displayLetter === selectedLetter
-                        ? `font-bold ${selectedChoiceTextClasses[variant]}`
-                        : ""
-                    }
-                  >
-                    {displayLetter}
-                    {index < (displayLetters?.length ?? 0) - 1 && (
-                      <span className="mx-px">/</span>
-                    )}
-                  </span>
-                ))}
+              <div className="flex flex-col items-center justify-center leading-none">
+                <span
+                  className={`font-bold leading-none tracking-wide ${
+                    usesInlineCompactValue ? "translate-y-[2px]" : ""
+                  }`}
+                >
+                  {selectedLetter}
+                </span>
               </div>
-              {showValue && displayValues && (
+              {!usesInlineCompactValue ? (
+                <div
+                  className={`absolute flex items-center gap-0.5 rounded font-semibold leading-none ${choiceSummaryBadgeClasses[variant]} ${choiceSummaryClasses[size]}`}
+                >
+                  {displayLetters?.map((displayLetter, index) => (
+                    <span
+                      key={index}
+                      className={
+                        displayLetter === selectedLetter
+                          ? `font-bold ${selectedChoiceTextClasses[variant]}`
+                          : ""
+                      }
+                    >
+                      {displayLetter}
+                      {index < (displayLetters?.length ?? 0) - 1 && (
+                        <span className="mx-px">/</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {showValue && displayValues && !usesInlineCompactValue ? (
                 <span
                   className={`absolute rounded px-1.5 py-0.5 font-bold leading-none ${valueClasses[size]} ${valueBadgeClasses[variant]}`}
                 >
                   {displayValues[displayLetters?.indexOf(selectedLetter) ?? 0]}
                 </span>
-              )}
+              ) : null}
             </>
           ) : (
             <>
-              <div
-                className={`flex items-center gap-1 text-base font-bold leading-none ${choiceTextClasses[variant]}`}
-              >
-                {displayLetters?.map((displayLetter, index) => (
-                  <span key={index}>
-                    {displayLetter}
-                    {index < (displayLetters?.length ?? 0) - 1 && (
-                      <span className="mx-0.5 opacity-50">/</span>
-                    )}
-                  </span>
-                ))}
-              </div>
-              {showValue && displayValues && displayValues.length > 0 && (
+              <div className="flex flex-col items-center justify-center gap-0.5 leading-none">
                 <div
-                  className={`absolute flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold leading-none ${valueClasses[size]} ${valueBadgeClasses[variant]}`}
+                  className={`flex items-center font-bold leading-none ${usesInlineCompactValue ? (inlineChoiceLetterClass ?? "") : "gap-1 text-[1.35rem] sm:text-[1.55rem]"} ${choiceTextClasses[variant]}`}
+                >
+                  {displayLetters?.map((displayLetter, index) => (
+                    <span key={index}>
+                      {displayLetter}
+                      {index < (displayLetters?.length ?? 0) - 1 && (
+                        <span className="mx-0.5 opacity-50">/</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              {showValue &&
+              displayValues &&
+              displayValues.length > 0 &&
+              !usesInlineCompactValue ? (
+                <div
+                  className={`absolute flex items-center gap-1 font-bold leading-none ${valueClasses[size]} ${valueBadgeClasses[variant]}`}
                 >
                   {displayValues.map((value, index) => (
                     <span key={index}>
@@ -192,23 +242,25 @@ export function WordTile({
                     </span>
                   ))}
                 </div>
-              )}
+              ) : null}
             </>
           )}
         </div>
       ) : (
-        <>
+        <div className="flex flex-col items-center justify-center leading-none">
           <span className="font-bold leading-none tracking-wide">
             {displayLetters[0]}
           </span>
-          {showValue && typeof displayValues[0] === "number" && (
+          {showValue &&
+          typeof displayValues[0] === "number" &&
+          !usesInlineCompactValue ? (
             <span
               className={`absolute rounded px-1.5 py-0.5 font-bold leading-none ${valueClasses[size]} ${valueBadgeClasses[variant]}`}
             >
               {displayValues[0]}
             </span>
-          )}
-        </>
+          ) : null}
+        </div>
       )}
     </>
   );
@@ -281,12 +333,75 @@ export function WordTile({
     </div>
   );
 
+  const compactMetadata =
+    usesInlineCompactValue && variant !== "hidden" ? (
+      <div className="flex flex-col items-center gap-0.5 leading-none">
+        {showValue &&
+        (selectedLetter
+          ? typeof displayValues[displayLetters?.indexOf(selectedLetter) ?? 0] ===
+            "number"
+          : isChoiceCard
+            ? displayValues.length > 0
+            : typeof displayValues[0] === "number") ? (
+          selectedLetter ? (
+            <span
+              className={`font-bold leading-none ${inlineValueClass ?? ""} ${valueBadgeClasses[variant]}`}
+            >
+              {displayValues[displayLetters?.indexOf(selectedLetter) ?? 0]}
+            </span>
+          ) : isChoiceCard ? (
+            <div
+              className={`${inlineChoiceValueClass ?? ""} font-bold leading-none ${valueBadgeClasses[variant]}`}
+            >
+              {displayValues.map((value, index) => (
+                <span key={index}>
+                  {value}
+                  {index < displayValues.length - 1 && (
+                    <span className="mx-px">/</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span
+              className={`font-bold leading-none ${inlineValueClass ?? ""} ${valueBadgeClasses[variant]}`}
+            >
+              {displayValues[0]}
+            </span>
+          )
+        ) : null}
+        {selectedLetter && isChoiceCard ? (
+          <div
+            className={`flex items-center gap-0.5 rounded font-semibold leading-none ${choiceSummaryBadgeClasses[variant]} ${choiceSummaryClasses[size]}`}
+          >
+            {displayLetters?.map((displayLetter, index) => (
+              <span
+                key={index}
+                className={
+                  displayLetter === selectedLetter
+                    ? `font-bold ${selectedChoiceTextClasses[variant]}`
+                    : ""
+                }
+              >
+                {displayLetter}
+                {index < (displayLetters?.length ?? 0) - 1 && (
+                  <span className="mx-px">/</span>
+                )}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
+  let renderedTile = tileElement;
+
   // Wrap choice cards or disabled tiles with glowing gold border
   if (
     (isChoiceCard && !selectedLetter && variant === "default") ||
     (disabled && variant === "default")
   ) {
-    return (
+    renderedTile = (
       <div
         className={`relative flex items-center justify-center rounded-[6px] border-2 ${sizeClasses[size]} ${disabled ? "cursor-not-allowed" : ""} ${className ?? ""}`}
         style={{
@@ -303,5 +418,25 @@ export function WordTile({
     );
   }
 
-  return tileElement;
+  if (compactMetadata) {
+    return (
+      <div className="flex flex-col items-center">
+        {renderedTile}
+        <div className={`${compactMetadataSlotClasses[size]} flex flex-col items-center justify-start`}>
+          {compactMetadata}
+        </div>
+      </div>
+    );
+  }
+
+  if (usesInlineCompactValue) {
+    return (
+      <div className="flex flex-col items-center">
+        {renderedTile}
+        <div className={compactMetadataSlotClasses[size]} />
+      </div>
+    );
+  }
+
+  return renderedTile;
 }

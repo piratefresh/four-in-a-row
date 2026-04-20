@@ -16,15 +16,22 @@ import {
 import {
   type AIPersonality,
   type AIDifficulty,
+  type AIProvider,
   AI_DIFFICULTY,
   AI_PERSONALITIES,
+  AI_PROVIDER,
   getModelForDifficulty,
+  getConfiguredAIProvider,
   shouldBluff,
 } from "./aiStrategy";
 import {
   callNvidiaNimChat,
   isNvidiaNimConfigured,
 } from "./aiClient";
+import {
+  callOpenRouterChat,
+  isOpenRouterConfigured,
+} from "./openRouterClient";
 import {
   buildAvailableShowdownTiles,
   type SolveShowdownCommunityTile,
@@ -131,9 +138,22 @@ export const aiDecideBet = internalAction({
     const difficulty = (args.difficulty as AIDifficulty) || AI_DIFFICULTY.MEDIUM;
     const timeoutMs = normalizeAiTimeoutMs(args.timeoutMs);
 
-    if (!isNvidiaNimConfigured()) {
-      console.warn("NVIDIA_NIM_API_KEY not set, using fallback strategy");
-      logAIDebug("betting", "NVIDIA_NIM_API_KEY missing, using fallback strategy", {
+    // Determine which AI provider to use
+    const provider = getConfiguredAIProvider();
+    const useOpenRouter = provider === AI_PROVIDER.OPENROUTER;
+    const useNvidiaNim = provider === AI_PROVIDER.NVIDIA_NIM;
+
+    // Check if the selected provider is configured
+    const isProviderConfigured = useOpenRouter
+      ? isOpenRouterConfigured()
+      : isNvidiaNimConfigured();
+
+    if (!isProviderConfigured) {
+      const providerName = useOpenRouter ? "OpenRouter" : "NVIDIA NIM";
+      const apiKeyName = useOpenRouter ? "OPENROUTER_API_KEY" : "NVIDIA_NIM_API_KEY";
+      console.warn(`${apiKeyName} not set, using fallback strategy`);
+      logAIDebug("betting", `${providerName} not configured, using fallback strategy`, {
+        provider,
         difficulty,
         stage: args.stage,
         currentBet: args.currentBet,
@@ -146,7 +166,7 @@ export const aiDecideBet = internalAction({
     }
 
     try {
-      const model = getModelForDifficulty(difficulty);
+      const model = getModelForDifficulty(difficulty, provider);
       // Filter revealed community tiles
       const revealedCommunity = args.communityTiles
         .filter((t) => t.revealed)
@@ -186,6 +206,7 @@ export const aiDecideBet = internalAction({
       );
 
       logAIDebug("betting", "prepared betting prompt inputs", {
+        provider,
         difficulty,
         model,
         handStrength,
@@ -261,12 +282,21 @@ ACTION: CALL
 CONFIDENCE: 0.7
 REASONING: I have E and A in hand with T and R in community, can likely form RATE or TEAR. Pot odds are good.`;
 
-      const response = await callNvidiaNimChat({
-        model,
-        prompt,
-        timeoutMs,
-      });
+      // Call the appropriate AI provider
+      const response = useOpenRouter
+        ? await callOpenRouterChat({
+            model,
+            prompt,
+            timeoutMs,
+          })
+        : await callNvidiaNimChat({
+            model,
+            prompt,
+            timeoutMs,
+          });
+
       logAIDebug("betting", "received raw betting response", {
+        provider,
         model,
         timeoutMs,
         response,

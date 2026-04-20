@@ -20,7 +20,7 @@ import {
   sortHandsByTurnOrder,
 } from "./gamesShared";
 
-const BOT_AI_TIMEOUT_MS = 15_000;
+const BOT_AI_TIMEOUT_MS = 4_000;
 
 type PlayerActionArgs = { gameId: Doc<"games">["_id"]; playerId: string };
 

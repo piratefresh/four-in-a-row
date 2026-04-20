@@ -11,7 +11,7 @@ import type { BuilderTile } from "./RoomHandsBoard.types";
 import { getLetterValue } from "../../../lib/letterValues";
 
 const MOBILE_COMPACT_TILE_CLASS =
-  "!h-11 !w-11 !text-[1.5rem] xs:!h-12 xs:!w-12 xs:!text-[1.75rem] sm:!h-28 sm:!w-28 sm:!text-6xl";
+  "!h-11 !w-11 !text-[1.5rem] xs:!h-12 xs:!w-12 xs:!text-[1.75rem] sm:!h-24 sm:!w-24 sm:!text-[3rem] lg:!h-24 lg:!w-24 lg:!text-[3rem]";
 
 type RoomBottomPanelProps = {
   isPhase1: boolean;
@@ -52,7 +52,7 @@ function HiddenBuilderTileSlot({ tileKey }: { tileKey: string }) {
         key={tileKey}
         showValue={false}
         variant="hidden"
-        size="lg"
+        size="md"
         className={MOBILE_COMPACT_TILE_CLASS}
       />
     </div>
@@ -229,14 +229,16 @@ export function RoomBottomPanel({
                         {tile.multiplier === "2L" ? "2x" : "3x"}
                       </div>
                     ) : (
-                      <div className="text-[9px] leading-none sm:text-xs opacity-0">-</div>
+                      <div className="text-[9px] leading-none sm:text-xs opacity-0">
+                        -
+                      </div>
                     )}
                     <WordTile
                       letter={tile.letter}
                       baseValue={tile.baseValue}
                       multiplier={tile.multiplier}
                       showValue={true}
-                      size="lg"
+                      size="md"
                       className={MOBILE_COMPACT_TILE_CLASS}
                       variant="default"
                     />
@@ -306,7 +308,7 @@ export function RoomBottomPanel({
               </div>
             </SortableContext>
 
-            <div className="mt-3 flex flex-col items-center gap-1.5 sm:mt-4 sm:gap-2">
+            <div className="mt-1 flex flex-col items-center gap-1.5 sm:mt-4 sm:gap-2">
               <div className="text-center text-sm font-bold tracking-[0.2em] text-white sm:text-xl">
                 {wordPreview || " "}
               </div>

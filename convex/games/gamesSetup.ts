@@ -252,6 +252,15 @@ function calculateBlindPositions(dealerButtonIndex: number, playerCount: number)
   };
 }
 
+function assertMinimumPlayersToStart(participantIds: string[]) {
+  if (participantIds.length < 2) {
+    throw new ConvexError({
+      code: "NOT_ENOUGH_PLAYERS",
+      message: "At least 2 active players are required to start.",
+    });
+  }
+}
+
 async function dealHands(
   ctx: MutationCtx,
   gameId: Id<"games">,
@@ -356,6 +365,7 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
       message: "At least 1 active player is required to start.",
     });
   }
+  assertMinimumPlayersToStart(participantIds);
 
   const deck = createShuffledDeck();
   const choiceCards = deck.filter((card) => card.kind === "choice");
@@ -427,6 +437,9 @@ export async function internalStartGameHandler(
 
   const participantIds = await getParticipantIds(ctx, room._id);
   if (!participantIds) return { ok: false, reason: "Not enough players" };
+  if (participantIds.length < 2) {
+    return { ok: false, reason: "At least 2 active players are required" };
+  }
 
   const deck = createShuffledDeck();
 

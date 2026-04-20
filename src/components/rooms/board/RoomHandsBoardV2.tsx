@@ -12,6 +12,7 @@ import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { WordTile } from "../table/WordTile";
 import { RoomActionControls } from "../controls/RoomActionControls";
+import { RaiseAmountSlider } from "../controls/RaiseAmountSlider";
 import { BlankRoomPhase } from "../phases/BlankRoomPhase";
 import { PhasePlayerBadge } from "../phases/PhasePlayerBadge";
 import { RoomBottomPanel } from "./RoomBottomPanel";
@@ -28,7 +29,7 @@ import { useRoomGameContext } from "../context/RoomGameContext";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
 
 const MOBILE_COMPACT_TILE_CLASS =
-  "!h-12 !w-12 !text-[1.75rem] xs:!h-[52px] xs:!w-[52px] xs:!text-[2rem] sm:!h-28 sm:!w-28 sm:!text-6xl";
+  "!h-12 !w-12 !text-[1.75rem] xs:!h-[52px] xs:!w-[52px] xs:!text-[2rem] sm:!h-24 sm:!w-24 sm:!text-[3.25rem] lg:!h-24 lg:!w-24 lg:!text-[3.25rem]";
 
 type SortableBuilderTileProps = {
   tile: BuilderTile;
@@ -95,7 +96,7 @@ function SortableBuilderTile({
             isChoice={tile.isChoice}
             selectedLetter={selectedLetter}
             showValue={true}
-            size="lg"
+            size="md"
             className={MOBILE_COMPACT_TILE_CLASS}
             variant={tile.source === "community" ? "community" : "default"}
           />
@@ -118,6 +119,10 @@ function formatPlayerActionLabel(
 ) {
   if (!lastAction) return undefined;
   return lastAction.toUpperCase();
+}
+
+function renderEmptyBuilderTile() {
+  return null;
 }
 
 export function RoomHandsBoardV2({
@@ -262,6 +267,8 @@ export function RoomHandsBoardV2({
     builderTiles.length > 1;
   const showInlineBottomPanelShuffle =
     !showBettingControls && gameStage === "showdown" && showShuffleControl;
+  const showTableRaiseSlider =
+    canRaise && !!raiseAmount && (raiseOptions?.length ?? 0) > 1;
   const opponentBets = useMemo(
     () =>
       opponents
@@ -335,6 +342,18 @@ export function RoomHandsBoardV2({
                     bottomBet={bottomHand.betThisRound ?? 0}
                     betPositionClass={BET_POSITION_CLASS}
                   />
+                  {showTableRaiseSlider ? (
+                    <div className="absolute left-full top-1/2 z-30 ml-5 -translate-y-1/2 xs:ml-6 sm:ml-10 lg:ml-14">
+                      <RaiseAmountSlider
+                        value={raiseAmount}
+                        options={raiseOptions}
+                        callAmount={callAmount}
+                        disabled={isBetting || !isMyTurn}
+                        onChange={(amount) => onRaiseAmountChange?.(amount)}
+                        orientation="vertical"
+                      />
+                    </div>
+                  ) : null}
                   <RoomOpponentLayer
                     opponents={opponents}
                     currentTurnPlayerId={currentTurnPlayerId}
@@ -384,8 +403,28 @@ export function RoomHandsBoardV2({
             )}
           </div>
 
-          <div className="flex flex-col items-center gap-4 px-4 sm:gap-5 sm:pb-[3%] [@media(max-height:460px)]:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-            {!isPhase0 && (
+          <div className="flex flex-col items-center gap-1 px-4 sm:gap-4 [@media(max-height:460px)]:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+            {isPhase0 ? (
+              <div className="pointer-events-none invisible">
+                <RoomBottomPanel
+                  isPhase1={true}
+                  mySubmission={null}
+                  canRevealSubmittedWords={false}
+                  showReveal={false}
+                  builderTiles={[]}
+                  choiceSelections={{}}
+                  handleChoiceSelect={() => {}}
+                  isValidating={false}
+                  hasUnresolvedChoices={false}
+                  validationError={null}
+                  wordPreview=""
+                  shuffleTick={0}
+                  gameStage="preflop"
+                  handleSubmitWord={() => {}}
+                  renderBuilderTile={renderEmptyBuilderTile}
+                />
+              </div>
+            ) : (
               <RoomBottomPanel
                 isPhase1={isPhase1}
                 mySubmission={mySubmission}
@@ -497,7 +536,7 @@ export function RoomHandsBoardV2({
                   isChoice={activeTile.isChoice}
                   selectedLetter={choiceSelections[activeTile.id]}
                   showValue={true}
-                  size="lg"
+                  size="md"
                   className={MOBILE_COMPACT_TILE_CLASS}
                   variant={
                     activeTile.source === "community" ? "community" : "default"

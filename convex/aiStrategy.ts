@@ -7,6 +7,26 @@
 
 import { DEV_BOT_AUTH_PREFIX } from "./games/gamesShared";
 
+// AI Provider Selection
+export const AI_PROVIDER = {
+  NVIDIA_NIM: "nvidia_nim",
+  OPENROUTER: "openrouter",
+} as const;
+
+export type AIProvider = (typeof AI_PROVIDER)[keyof typeof AI_PROVIDER];
+
+/**
+ * Get the configured AI provider from environment
+ * Defaults to OpenRouter if not specified
+ */
+export function getConfiguredAIProvider(): AIProvider {
+  const provider = process.env.AI_PROVIDER?.trim().toLowerCase();
+  if (provider === "nvidia_nim") {
+    return AI_PROVIDER.NVIDIA_NIM;
+  }
+  return AI_PROVIDER.OPENROUTER; // Default to OpenRouter
+}
+
 // AI Difficulty Levels
 export const AI_DIFFICULTY = {
   EASY: "easy",
@@ -16,12 +36,22 @@ export const AI_DIFFICULTY = {
 
 export type AIDifficulty = (typeof AI_DIFFICULTY)[keyof typeof AI_DIFFICULTY];
 
-// Model selection remains for betting AI only.
-export const AI_MODELS = {
+// Model selection for NVIDIA NIM
+export const NVIDIA_NIM_MODELS = {
   [AI_DIFFICULTY.EASY]: "google/gemma-3-27b-it",
   [AI_DIFFICULTY.MEDIUM]: "google/gemma-3-27b-it",
   [AI_DIFFICULTY.HARD]: "google/gemma-3-27b-it",
 } as const;
+
+// Model selection for OpenRouter
+export const OPENROUTER_MODELS = {
+  [AI_DIFFICULTY.EASY]: "z-ai/glm-4.5-air:free",
+  [AI_DIFFICULTY.MEDIUM]: "z-ai/glm-4.5-air:free",
+  [AI_DIFFICULTY.HARD]: "z-ai/glm-4.5-air:free",
+} as const;
+
+// Legacy export for backwards compatibility
+export const AI_MODELS = NVIDIA_NIM_MODELS;
 
 export const SHOWDOWN_SELECTION_WINDOWS = {
   [AI_DIFFICULTY.EASY]: 12,
@@ -84,9 +114,16 @@ export function getAIDecisionDelay(difficulty: AIDifficulty): number {
 
 /**
  * Get model identifier for AI difficulty level
+ * Routes to correct provider based on configuration
  */
-export function getModelForDifficulty(difficulty: AIDifficulty): string {
-  return AI_MODELS[difficulty];
+export function getModelForDifficulty(difficulty: AIDifficulty, provider?: AIProvider): string {
+  const activeProvider = provider || getConfiguredAIProvider();
+
+  if (activeProvider === AI_PROVIDER.OPENROUTER) {
+    return OPENROUTER_MODELS[difficulty];
+  }
+
+  return NVIDIA_NIM_MODELS[difficulty];
 }
 
 /**

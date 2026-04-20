@@ -55,6 +55,64 @@ function findFirstAvailableSeat(
   return null;
 }
 
+type OfflineBotSourcePlayer = {
+  authUserId?: string;
+  seatIndex: number;
+  lastSeenAt: number;
+};
+
+export function getOfflineBotSourcePlayers<T extends OfflineBotSourcePlayer>(
+  players: T[],
+) {
+  const botsBySeat = new Map<number, T>();
+
+  for (const player of players) {
+    if (!player.authUserId?.startsWith("dev-bot:")) {
+      continue;
+    }
+
+    const existingBotForSeat = botsBySeat.get(player.seatIndex);
+    if (!existingBotForSeat || player.lastSeenAt > existingBotForSeat.lastSeenAt) {
+      botsBySeat.set(player.seatIndex, player);
+    }
+  }
+
+  return [...botsBySeat.values()].sort((a, b) => a.seatIndex - b.seatIndex);
+}
+
+export function canReuseLinkedNextRoom(args: {
+  roomStatus: Doc<"rooms">["status"] | null | undefined;
+  activePlayerCount: number;
+  existingGameCount: number;
+}) {
+  return (
+    args.roomStatus === "open" &&
+    args.activePlayerCount === 0 &&
+    args.existingGameCount === 0
+  );
+}
+
+async function isFreshNextRoomCandidate(
+  ctx: MutationCtx,
+  room: Doc<"rooms"> | null,
+) {
+  if (!room) {
+    return false;
+  }
+
+  const activePlayers = await getActivePlayersInRoom(ctx, room._id);
+  const existingGames = await ctx.db
+    .query("games")
+    .withIndex("by_room", (q) => q.eq("roomId", String(room._id)))
+    .take(1);
+
+  return canReuseLinkedNextRoom({
+    roomStatus: room.status,
+    activePlayerCount: activePlayers.length,
+    existingGameCount: existingGames.length,
+  });
+}
+
 async function generateUniqueRoomCode(ctx: MutationCtx) {
   let code: string | null = null;
   for (let attempt = 0; attempt < ROOM_CODE_MAX_ATTEMPTS; attempt++) {
@@ -401,6 +459,60 @@ async function joinAuthenticatedUserToRoom(
     seatIndex,
     maxPlayers: room.maxPlayers,
   };
+}
+
+async function syncOfflineBotsToRoom(
+  ctx: MutationCtx,
+  sourceRoomId: Id<"rooms">,
+  targetRoom: Doc<"rooms">,
+  now: number,
+) {
+  const sourceRoomPlayers = await ctx.db
+    .query("players")
+    .withIndex("roomId", (q) => q.eq("roomId", sourceRoomId))
+    .collect();
+  const sourceBots = getOfflineBotSourcePlayers(sourceRoomPlayers);
+
+  if (sourceBots.length === 0) {
+    return 0;
+  }
+
+  const targetActivePlayers = await getActivePlayersInRoom(ctx, targetRoom._id);
+  const occupiedTargetSeats = new Set(
+    targetActivePlayers.map((player) => player.seatIndex),
+  );
+
+  let botsAdded = 0;
+  for (const sourceBot of sourceBots) {
+    if (occupiedTargetSeats.has(sourceBot.seatIndex)) {
+      continue;
+    }
+
+    occupiedTargetSeats.add(sourceBot.seatIndex);
+    const character = getBotCharacterForSeatIndex(sourceBot.seatIndex);
+    await ctx.db.insert("players", {
+      roomId: targetRoom._id,
+      authUserId: buildDevBotAuthUserId(
+        String(targetRoom._id),
+        sourceBot.seatIndex,
+      ),
+      name: character.name,
+      seatIndex: sourceBot.seatIndex,
+      isHost: false,
+      status: "active",
+      readyStatus: true,
+      lastSeenAt: now,
+    });
+    botsAdded += 1;
+  }
+
+  if (botsAdded > 0) {
+    await ctx.db.patch(targetRoom._id, {
+      lastActiveAt: now,
+    });
+  }
+
+  return botsAdded;
 }
 
 async function getActiveAuthedPlayerInRoom(
@@ -998,7 +1110,7 @@ export const continueToNextRoom = mutation({
     let nextRoom =
       room.nextRoomId !== undefined ? await ctx.db.get(room.nextRoomId) : null;
 
-    if (!nextRoom) {
+    if (!(await isFreshNextRoomCandidate(ctx, nextRoom))) {
       const { roomId: nextRoomId } = await createOpenRoom(ctx);
       await ctx.db.patch(room._id, {
         status: "closed",
@@ -1014,6 +1126,14 @@ export const continueToNextRoom = mutation({
         message: "The next room is not available.",
       });
     }
+
+    const now = Date.now();
+    await ctx.db.patch(room._id, {
+      status: "closed",
+      nextRoomId: nextRoom._id,
+      lastActiveAt: now,
+    });
+    await syncOfflineBotsToRoom(ctx, room._id, nextRoom, now);
 
     return await joinAuthenticatedUserToRoom(
       ctx,
@@ -1492,7 +1612,8 @@ export const toggleReady = mutation({
       )
       .collect();
 
-    const allReady = allPlayers.length > 0 && allPlayers.every((p) => p.readyStatus);
+    const allReady =
+      allPlayers.length >= 2 && allPlayers.every((p) => p.readyStatus);
 
     // If all players are ready, auto-start the game
     if (allReady && newReadyStatus) {

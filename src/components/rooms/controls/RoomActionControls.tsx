@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
 import { ActionButton } from "./ActionButton";
-import { RaiseAmountSlider } from "./RaiseAmountSlider";
 import { ShuffleTilesButton } from "./ShuffleTilesButton";
 
 type ReadyControlsProps = {
@@ -91,7 +90,6 @@ export function RoomActionControls({
       betting.turnClockTimeRemaining !== undefined
         ? formatCountdown(betting.turnClockTimeRemaining)
         : null;
-
     return (
       <div className="flex w-full items-center justify-center">
         <AnimatePresence initial={false} mode="wait">
@@ -103,54 +101,62 @@ export function RoomActionControls({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.98 }}
               transition={{ duration: 0.24, ease: "easeOut" }}
-              className="rounded-2xl border border-[#2a2a2a] bg-[linear-gradient(180deg,rgba(18,18,18,0.96)_0%,rgba(10,10,10,0.98)_100%)] px-5 py-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_30px_rgba(0,0,0,0.32)]"
+              className="flex flex-wrap items-center justify-center gap-3"
             >
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.08, duration: 0.2 }}
-              >
-                <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8f8876]">
-                  Waiting on
-                </div>
-                <div className="mt-1 flex items-center justify-center gap-2 text-sm font-semibold text-[#f4d37a] sm:text-base">
-                  {betting.currentTurnPlayerName
-                    ? `${betting.currentTurnPlayerName}'s turn...`
-                    : "next player's turn..."}
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce" />
-                    <span
-                      className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce"
-                      style={{ animationDelay: "120ms" }}
-                    />
-                    <span
-                      className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce"
-                      style={{ animationDelay: "240ms" }}
-                    />
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] font-medium tracking-[0.12em] text-[#b8b19a]">
-                  {turnClockLabel
-                    ? `clock called${betting.turnClockCallerName ? ` by ${betting.turnClockCallerName}` : ""} - ${turnClockLabel}`
-                    : null}
-                </div>
-                {betting.canCallClock || betting.isCallingClock ? (
-                  <div className="mt-3 flex justify-center">
-                    <ActionButton
-                      variant="raise"
-                      size="wide"
-                      onClick={() => betting.onCallClock?.()}
-                      disabled={
-                        betting.isCallingClock ||
-                        !betting.canCallClock ||
-                        !!turnClockLabel
-                      }
-                    >
-                      {betting.isCallingClock ? "Calling..." : "Call Clock"}
-                    </ActionButton>
+              {utility?.onShuffleTiles ? (
+                <ShuffleTilesButton
+                  onClick={() => utility.onShuffleTiles?.()}
+                  disabled={utility.disableShuffle}
+                />
+              ) : null}
+              <div className="rounded-2xl border border-[#2a2a2a] bg-[linear-gradient(180deg,rgba(18,18,18,0.96)_0%,rgba(10,10,10,0.98)_100%)] px-5 py-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_30px_rgba(0,0,0,0.32)]">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.08, duration: 0.2 }}
+                >
+                  <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8f8876]">
+                    Waiting on
                   </div>
-                ) : null}
-              </motion.div>
+                  <div className="mt-1 flex items-center justify-center gap-2 text-sm font-semibold text-[#f4d37a] sm:text-base">
+                    {betting.currentTurnPlayerName
+                      ? `${betting.currentTurnPlayerName}'s turn...`
+                      : "next player's turn..."}
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce" />
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce"
+                        style={{ animationDelay: "120ms" }}
+                      />
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce"
+                        style={{ animationDelay: "240ms" }}
+                      />
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[11px] font-medium tracking-[0.12em] text-[#b8b19a]">
+                    {turnClockLabel
+                      ? `clock called${betting.turnClockCallerName ? ` by ${betting.turnClockCallerName}` : ""} - ${turnClockLabel}`
+                      : null}
+                  </div>
+                  {betting.canCallClock || betting.isCallingClock ? (
+                    <div className="mt-3 flex justify-center">
+                      <ActionButton
+                        variant="raise"
+                        size="wide"
+                        onClick={() => betting.onCallClock?.()}
+                        disabled={
+                          betting.isCallingClock ||
+                          !betting.canCallClock ||
+                          !!turnClockLabel
+                        }
+                      >
+                        {betting.isCallingClock ? "Calling..." : "Call Clock"}
+                      </ActionButton>
+                    </div>
+                  ) : null}
+                </motion.div>
+              </div>
             </motion.div>
           ) : (
             <motion.div
@@ -171,19 +177,7 @@ export function RoomActionControls({
                 </div>
               ) : null}
 
-              {betting.canRaise &&
-              betting.raiseAmount &&
-              (betting.raiseOptions?.length ?? 0) > 1 ? (
-                <RaiseAmountSlider
-                  value={betting.raiseAmount}
-                  options={betting.raiseOptions ?? []}
-                  callAmount={betting.callAmount}
-                  disabled={betting.isBetting || !betting.isMyTurn}
-                  onChange={(amount) => betting.onRaiseAmountChange?.(amount)}
-                />
-              ) : null}
-
-              <div className="flex w-full flex-wrap items-center justify-center gap-1.5 xs:gap-2">
+              <div className="hidden w-full flex-wrap items-center justify-center gap-1.5 xs:gap-2 sm:flex">
                 {utility?.onShuffleTiles ? (
                   <ShuffleTilesButton
                     onClick={() => utility.onShuffleTiles?.()}
@@ -237,6 +231,65 @@ export function RoomActionControls({
                     betting.raiseLabel
                   )}
                 </ActionButton>
+              </div>
+
+              <div className="flex w-full items-end justify-center sm:hidden">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 xs:gap-2">
+                  {utility?.onShuffleTiles ? (
+                    <ShuffleTilesButton
+                      onClick={() => utility.onShuffleTiles?.()}
+                      disabled={utility.disableShuffle}
+                    />
+                  ) : null}
+                  <ActionButton
+                    variant="fold"
+                    onClick={() => betting.onFold?.()}
+                    disabled={betting.isBetting || !betting.canFold}
+                  >
+                    {betting.isBetting ? "Betting..." : "Fold"}
+                  </ActionButton>
+                  <ActionButton
+                    variant={betting.canCheck ? "check" : "call"}
+                    onClick={() => {
+                      if (betting.canCheck) {
+                        betting.onCheck?.();
+                        return;
+                      }
+                      betting.onCall?.();
+                    }}
+                    disabled={
+                      betting.isBetting ||
+                      (!betting.canCheck && !betting.canCall)
+                    }
+                  >
+                    {betting.isBetting ? (
+                      "Betting..."
+                    ) : betting.canCheck ? (
+                      "Check"
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        <span>Call</span>
+                        {betting.callAmount ?? 0}
+                      </span>
+                    )}
+                  </ActionButton>
+                  <ActionButton
+                    variant="raise"
+                    onClick={() => betting.onRaise?.()}
+                    disabled={betting.isBetting || !betting.canRaise}
+                  >
+                    {betting.isBetting ? (
+                      "Betting..."
+                    ) : showRaiseChip ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span>Raise to</span>
+                        {betting.raiseAmount ?? 0}
+                      </span>
+                    ) : (
+                      betting.raiseLabel
+                    )}
+                  </ActionButton>
+                </div>
               </div>
             </motion.div>
           )}

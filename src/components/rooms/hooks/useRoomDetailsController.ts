@@ -716,7 +716,7 @@ export function useRoomDetailsController(code: string) {
         roomData?.members.filter((member) => member.readyStatus).length ?? 0,
       totalPlayers: roomData?.members.length ?? 0,
       allPlayersReady:
-        (roomData?.members?.length ?? 0) > 0 &&
+        (roomData?.members?.length ?? 0) >= 2 &&
         (roomData?.members?.every((member) => member.readyStatus) ?? false),
       isBetting,
       isMyTurn,

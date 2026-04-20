@@ -22,7 +22,7 @@ type RoomCommunityStripProps = {
 };
 
 const MOBILE_COMPACT_TILE_CLASS =
-  "!h-12 !w-12 !text-[1.75rem] xs:!h-[52px] xs:!w-[52px] xs:!text-[2rem] sm:!h-28 sm:!w-28 sm:!text-6xl";
+  "!h-12 !w-12 !text-[1.75rem] xs:!h-[52px] xs:!w-[52px] xs:!text-[2rem] sm:!h-24 sm:!w-24 sm:!text-[3.25rem] lg:!h-24 lg:!w-24 lg:!text-[3.25rem]";
 
 export function RoomCommunityStrip({
   tiles = [],
@@ -75,7 +75,7 @@ export function RoomCommunityStrip({
                     multiplier={isRevealed ? tile?.multiplier : undefined}
                     isChoice={isChoice}
                     showValue={isRevealed}
-                    size="lg"
+                    size="md"
                     className={MOBILE_COMPACT_TILE_CLASS}
                     variant={isRevealed ? "community" : "hidden"}
                   />
