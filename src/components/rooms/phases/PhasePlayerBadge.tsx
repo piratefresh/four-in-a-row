@@ -20,6 +20,21 @@ function getInitials(name: string) {
     .join("");
 }
 
+function getAvatarColor(name: string) {
+  const colors = [
+    "bg-gradient-to-br from-purple-500 to-purple-700",
+    "bg-gradient-to-br from-blue-500 to-blue-700",
+    "bg-gradient-to-br from-green-500 to-green-700",
+    "bg-gradient-to-br from-amber-500 to-amber-700",
+    "bg-gradient-to-br from-rose-500 to-rose-700",
+    "bg-gradient-to-br from-cyan-500 to-cyan-700",
+    "bg-gradient-to-br from-pink-500 to-pink-700",
+    "bg-gradient-to-br from-indigo-500 to-indigo-700",
+  ];
+  const hash = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return colors[hash % colors.length];
+}
+
 type PhasePlayerBadgeProps = {
   name: string;
   avatarUrl?: string | null;
@@ -85,7 +100,7 @@ export function PhasePlayerBadge({
         >
           <AvatarImage src={avatarUrl ?? undefined} alt={`${name} avatar`} />
           <AvatarFallback
-            className={`bg-white/15 font-semibold text-white ${initialsClass}`}
+            className={`${getAvatarColor(name)} font-semibold text-white ${initialsClass}`}
           >
             {getInitials(name)}
           </AvatarFallback>
