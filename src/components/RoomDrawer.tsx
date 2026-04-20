@@ -1,7 +1,9 @@
 import { useQuery } from "convex/react";
+import { useMemo } from "react";
 import { api } from "../../convex/_generated/api";
 import { ANTE_AMOUNT } from "../../convex/gameState";
 import { INITIAL_CHIPS } from "../../convex/games/gamesShared";
+import { isRoomRejoinDismissed } from "@/lib/room-rejoin-dismissal";
 import {
   PokerTable,
   formatStackLabel,
@@ -41,13 +43,20 @@ export function RoomDrawer({
   const maxPlayers = roomData?.room.maxPlayers ?? 4;
   const members = roomData?.members ?? [];
   const hasOpenSeat = members.length < maxPlayers;
+  const shouldShowRejoinPreview = useMemo(() => {
+    if (!roomCode || !roomData?.viewerSeatPreview) {
+      return false;
+    }
+
+    return !isRoomRejoinDismissed(roomCode);
+  }, [roomCode, roomData?.viewerSeatPreview]);
   const previewPlayers = [
     ...members.map((member) => ({
       seatIndex: member.seatIndex,
       name: member.name,
       meta: formatStackLabel(INITIAL_CHIPS),
     })),
-    ...(roomData?.viewerSeatPreview
+    ...(shouldShowRejoinPreview && roomData?.viewerSeatPreview
       ? [
           {
             seatIndex: roomData.viewerSeatPreview.seatIndex,

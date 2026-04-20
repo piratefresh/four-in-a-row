@@ -5,12 +5,13 @@ import {
 } from "@dnd-kit/sortable";
 import { motion, useAnimationControls } from "motion/react";
 import { ActionButton } from "../controls/ActionButton";
+import { ShuffleTilesButton } from "../controls/ShuffleTilesButton";
 import { WordTile } from "../table/WordTile";
 import type { BuilderTile } from "./RoomHandsBoard.types";
 import { getLetterValue } from "../../../lib/letterValues";
 
 const MOBILE_COMPACT_TILE_CLASS =
-  "h-[52px] w-[52px] text-[2rem] sm:h-28 sm:w-28 sm:text-6xl";
+  "!h-11 !w-11 !text-[1.5rem] xs:!h-12 xs:!w-12 xs:!text-[1.75rem] sm:!h-28 sm:!w-28 sm:!text-6xl";
 
 type RoomBottomPanelProps = {
   isPhase1: boolean;
@@ -29,6 +30,8 @@ type RoomBottomPanelProps = {
   handleSubmitWord: () => void;
   renderBuilderTile: (tile: BuilderTile) => ReactNode;
   hasFolded?: boolean;
+  onShuffleTiles?: () => void;
+  disableShuffle?: boolean;
 };
 
 type AnimatedBuilderTileProps = {
@@ -160,8 +163,12 @@ export function RoomBottomPanel({
   handleSubmitWord,
   renderBuilderTile,
   hasFolded,
+  onShuffleTiles,
+  disableShuffle,
 }: RoomBottomPanelProps) {
   const hiddenTileCount = getHiddenTileCount(gameStage);
+  const showSubmitAction = gameStage === "showdown" && wordPreview.length >= 2;
+  const showActionRow = showSubmitAction || !!onShuffleTiles;
 
   return (
     <div className="relative z-30 w-[95vw] text-center sm:w-[min(56vw,980px)]">
@@ -179,6 +186,7 @@ export function RoomBottomPanel({
                 key={`bottom-hidden-${index}`}
                 showValue={false}
                 variant="hidden"
+                className={MOBILE_COMPACT_TILE_CLASS}
               />
             ))}
           </div>
@@ -307,21 +315,29 @@ export function RoomBottomPanel({
                   {validationError}
                 </div>
               )}
-              {gameStage === "showdown" &&
-                wordPreview &&
-                wordPreview.length >= 2 && (
-                  <ActionButton
-                    variant="submit"
-                    onClick={handleSubmitWord}
-                    disabled={isValidating || hasUnresolvedChoices}
-                  >
-                    {isValidating
-                      ? "Validating..."
-                      : hasUnresolvedChoices
-                        ? "Select Letters"
-                        : "Submit Word"}
-                  </ActionButton>
-                )}
+              {showActionRow && (
+                <div className="flex items-center justify-center gap-2">
+                  {onShuffleTiles ? (
+                    <ShuffleTilesButton
+                      onClick={onShuffleTiles}
+                      disabled={disableShuffle}
+                    />
+                  ) : null}
+                  {showSubmitAction ? (
+                    <ActionButton
+                      variant="submit"
+                      onClick={handleSubmitWord}
+                      disabled={isValidating || hasUnresolvedChoices}
+                    >
+                      {isValidating
+                        ? "Validating..."
+                        : hasUnresolvedChoices
+                          ? "Select Letters"
+                          : "Submit Word"}
+                    </ActionButton>
+                  ) : null}
+                </div>
+              )}
             </div>
           </>
         )}

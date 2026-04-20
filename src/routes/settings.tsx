@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 
-const AVATAR_MAX_FILE_BYTES = 5 * 1024 * 1024;
+const AVATAR_MAX_FILE_BYTES = 1024 * 1024; // 1MB - Convex limit
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
@@ -74,7 +74,7 @@ function SettingsPage() {
       return;
     }
     if (file.size > AVATAR_MAX_FILE_BYTES) {
-      toast.error("Image is too large. Max size is 5MB.");
+      toast.error("Image is too large. Max size is 1MB.");
       return;
     }
 

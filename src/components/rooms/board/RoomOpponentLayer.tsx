@@ -3,9 +3,9 @@ import { WordTile } from "../table/WordTile";
 import type { PlayerHand } from "./RoomHandsBoard.types";
 
 const OPPONENT_POSITION_CLASS: Record<"top" | "left" | "right", string> = {
-  top: "left-1/2 top-[10%] -translate-x-1/2 -translate-y-1/2",
-  left: "left-[12%] top-1/2 -translate-x-1/2 -translate-y-1/2",
-  right: "left-[88%] top-1/2 -translate-x-1/2 -translate-y-1/2",
+  top: "left-1/2 top-[11%] -translate-x-1/2 -translate-y-1/2 xs:top-[12%] sm:top-[10%]",
+  left: "left-[12%] top-1/2 -translate-x-1/2 -translate-y-1/2 xs:left-[15%] sm:left-[12%]",
+  right: "left-[88%] top-1/2 -translate-x-1/2 -translate-y-1/2 xs:left-[85%] sm:left-[88%]",
 };
 
 function formatPlayerActionLabel(
@@ -92,9 +92,9 @@ export function RoomOpponentLayer({
           isActiveTurn={currentTurnPlayerId === hand.playerId}
           personality={getPlayerPersonality(hand.playerId)}
           blindPosition={getBlindPosition?.(hand.playerId)}
-          avatarSizeClass="h-12 w-12 sm:h-14 sm:w-14"
-          initialsClass="text-[10px] sm:text-[12px]"
-          infoCardClassName="min-w-[102px] px-2.5 py-1 sm:min-w-[118px] sm:px-3 sm:py-1.5"
+          avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
+          initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"
+          infoCardClassName="min-w-[82px] px-1.5 py-1 xs:min-w-[92px] xs:px-2 sm:min-w-[118px] sm:px-3 sm:py-1.5"
         />
         {gameStage === "showdown" &&
           wordSubmissions?.isCompleted &&

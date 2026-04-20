@@ -22,7 +22,7 @@ type RoomCommunityStripProps = {
 };
 
 const MOBILE_COMPACT_TILE_CLASS =
-  "h-[52px] w-[52px] text-[2rem] sm:h-28 sm:w-28 sm:text-6xl";
+  "!h-12 !w-12 !text-[1.75rem] xs:!h-[52px] xs:!w-[52px] xs:!text-[2rem] sm:!h-28 sm:!w-28 sm:!text-6xl";
 
 export function RoomCommunityStrip({
   tiles = [],

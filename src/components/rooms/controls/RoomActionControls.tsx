@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
-import { Shuffle } from "lucide-react";
 import { ActionButton } from "./ActionButton";
 import { RaiseAmountSlider } from "./RaiseAmountSlider";
+import { ShuffleTilesButton } from "./ShuffleTilesButton";
 
 type ReadyControlsProps = {
   readyCount: number;
@@ -132,7 +132,7 @@ export function RoomActionControls({
                 <div className="mt-1 text-[11px] font-medium tracking-[0.12em] text-[#b8b19a]">
                   {turnClockLabel
                     ? `clock called${betting.turnClockCallerName ? ` by ${betting.turnClockCallerName}` : ""} - ${turnClockLabel}`
-                    : "thinking..."}
+                    : null}
                 </div>
                 {betting.canCallClock || betting.isCallingClock ? (
                   <div className="mt-3 flex justify-center">
@@ -160,7 +160,7 @@ export function RoomActionControls({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.98 }}
               transition={{ duration: 0.24, ease: "easeOut" }}
-              className="flex w-full max-w-[42rem] flex-col items-center gap-2.5"
+              className="flex w-full max-w-[42rem] flex-col items-center gap-2 xs:gap-2.5"
             >
               {turnClockLabel ? (
                 <div className="w-full rounded-2xl border border-[#8a6630] bg-[linear-gradient(180deg,rgba(51,35,12,0.96)_0%,rgba(24,16,6,0.98)_100%)] px-4 py-2 text-center text-sm font-semibold text-[#f4d37a] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_28px_rgba(0,0,0,0.3)]">
@@ -183,17 +183,12 @@ export function RoomActionControls({
                 />
               ) : null}
 
-              <div className="flex w-full flex-wrap items-center justify-center gap-2">
+              <div className="flex w-full flex-wrap items-center justify-center gap-1.5 xs:gap-2">
                 {utility?.onShuffleTiles ? (
-                  <button
-                    type="button"
+                  <ShuffleTilesButton
                     onClick={() => utility.onShuffleTiles?.()}
                     disabled={utility.disableShuffle}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#404247] bg-[linear-gradient(180deg,#2f3034_0%,#1f2023_100%)] text-[#f6f3ee] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_rgba(0,0,0,0.28)] transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-150 outline-none hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_24px_rgba(0,0,0,0.32)] active:translate-y-0 active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_6px_14px_rgba(0,0,0,0.24)] disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-45"
-                    aria-label="Shuffle tiles"
-                  >
-                    <Shuffle className="h-5 w-5" />
-                  </button>
+                  />
                 ) : null}
                 <ActionButton
                   variant="fold"
@@ -254,15 +249,10 @@ export function RoomActionControls({
     return (
       <div className="flex w-full items-center justify-center">
         <div className="flex w-full max-w-[42rem] flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
+          <ShuffleTilesButton
             onClick={() => utility.onShuffleTiles?.()}
             disabled={utility.disableShuffle}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#404247] bg-[linear-gradient(180deg,#2f3034_0%,#1f2023_100%)] text-[#f6f3ee] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_rgba(0,0,0,0.28)] transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-150 outline-none hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_24px_rgba(0,0,0,0.32)] active:translate-y-0 active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_6px_14px_rgba(0,0,0,0.24)] disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-45"
-            aria-label="Shuffle tiles"
-          >
-            <Shuffle className="h-5 w-5" />
-          </button>
+          />
         </div>
       </div>
     );
@@ -270,4 +260,3 @@ export function RoomActionControls({
 
   return null;
 }
-

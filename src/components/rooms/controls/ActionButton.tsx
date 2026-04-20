@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../../lib/utils";
 
 const actionButtonVariants = cva(
-  "inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-xl border px-4 py-2 text-sm font-semibold tracking-[-0.01em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_rgba(0,0,0,0.28)] transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-150 outline-none hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_24px_rgba(0,0,0,0.32)] active:translate-y-0 active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_6px_14px_rgba(0,0,0,0.24)] disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-45",
+  "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-xl border px-2.5 py-1 text-[12px] font-semibold tracking-[-0.01em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_rgba(0,0,0,0.28)] transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-150 outline-none hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_24px_rgba(0,0,0,0.32)] active:translate-y-0 active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_6px_14px_rgba(0,0,0,0.24)] disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-45 xs:min-h-10 xs:px-3.5 xs:py-2 xs:text-[14px] sm:min-h-11 sm:px-4 sm:py-2 sm:text-sm",
   {
     variants: {
       variant: {
@@ -18,8 +18,8 @@ const actionButtonVariants = cva(
           "border-[#d9bf68] bg-[linear-gradient(180deg,#f4e4ac_0%,#d7b85e_100%)] text-[#241708]",
       },
       size: {
-        default: "min-w-[98px] text-[15px] sm:min-w-[112px]",
-        wide: "w-full text-[15px] sm:w-auto sm:min-w-[156px]",
+        default: "min-w-[68px] xs:min-w-[96px] sm:min-w-[112px] sm:text-[15px]",
+        wide: "w-full xs:w-auto xs:min-w-[140px] sm:min-w-[156px] sm:text-[15px]",
       },
     },
     defaultVariants: {

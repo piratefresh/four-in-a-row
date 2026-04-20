@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { authClient } from "@/lib/auth-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { dismissRoomRejoin } from "@/lib/room-rejoin-dismissal";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import {
   DropdownMenu,
@@ -74,6 +75,7 @@ export default function Header() {
     if (!roomCode || isLeavingRoom) return;
 
     setIsLeavingRoom(true);
+    dismissRoomRejoin(roomCode);
     try {
       await leaveRoom({ code: roomCode });
     } catch {

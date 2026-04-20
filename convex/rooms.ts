@@ -1523,10 +1523,22 @@ export const clearAllData = mutation({
       await ctx.db.delete(hand._id);
     }
 
+    // Delete all word submissions
+    const allWordSubmissions = await ctx.db.query("wordSubmissions").collect();
+    for (const submission of allWordSubmissions) {
+      await ctx.db.delete(submission._id);
+    }
+
     // Delete all games
     const allGames = await ctx.db.query("games").collect();
     for (const game of allGames) {
       await ctx.db.delete(game._id);
+    }
+
+    // Delete all room messages
+    const allMessages = await ctx.db.query("messages").collect();
+    for (const message of allMessages) {
+      await ctx.db.delete(message._id);
     }
 
     // Delete all players
@@ -1545,7 +1557,9 @@ export const clearAllData = mutation({
       ok: true,
       deleted: {
         playerHands: allHands.length,
+        wordSubmissions: allWordSubmissions.length,
         games: allGames.length,
+        messages: allMessages.length,
         players: allPlayers.length,
         rooms: allRooms.length,
       },

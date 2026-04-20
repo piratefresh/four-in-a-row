@@ -23,15 +23,15 @@ export function RaiseAmountSlider({
   const maxIndex = options.length - 1;
 
   return (
-    <div className="flex w-full items-center gap-3 sm:px-4 sm:py-3">
-      <div className="flex shrink-0 items-center gap-3 text-[11px] font-medium uppercase tracking-[0.18em] text-[#b8b19a]">
+    <div className="flex w-full items-center gap-2 xs:gap-3 sm:px-4 sm:py-3">
+      <div className="flex shrink-0 items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#b8b19a] xs:gap-3 xs:text-[11px] xs:tracking-[0.18em]">
         <span>
           {callAmount > 0 ? `To call $${callAmount}` : "Raise amount"}
         </span>
         <span className="text-[#f0cf5a]">${value}</span>
       </div>
 
-      <div className="min-w-0 flex-1 px-1">
+      <div className="min-w-0 flex-1 px-0.5 xs:px-1">
         <Slider
           min={0}
           max={maxIndex}
@@ -51,7 +51,7 @@ export function RaiseAmountSlider({
           aria-label="Raise amount"
         />
 
-        <div className="mt-2 flex items-center justify-between text-[11px] font-medium text-[#8f8876]">
+        <div className="mt-1.5 flex items-center justify-between text-[10px] font-medium text-[#8f8876] xs:mt-2 xs:text-[11px]">
           <span>${options[0]}</span>
           <span>${options[maxIndex]}</span>
         </div>

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PokerChip } from "../table/PokerChip";
 import { TypingIndicator } from "./TypingIndicator";
@@ -52,6 +53,7 @@ type PhasePlayerBadgeProps = {
   className?: string;
   blindPosition?: "dealer" | "small" | "big";
   isThinking?: boolean;
+  mobileInfoPlacement?: "top" | "bottom";
 };
 
 export function PhasePlayerBadge({
@@ -71,7 +73,10 @@ export function PhasePlayerBadge({
   className = "",
   blindPosition,
   isThinking = false,
+  mobileInfoPlacement = "bottom",
 }: PhasePlayerBadgeProps) {
+  const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const blindBadgeConfig = {
     dealer: { label: "D", title: "Dealer Button" },
     small: { label: "SB", title: "Small Blind" },
@@ -79,9 +84,61 @@ export function PhasePlayerBadge({
   };
 
   const badge = blindPosition ? blindBadgeConfig[blindPosition] : null;
+  const mobileInfoPopupClassName =
+    mobileInfoPlacement === "top"
+      ? "bottom-full mb-2"
+      : "top-full mt-2";
+
+  useEffect(() => {
+    if (!mobileInfoOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setMobileInfoOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileInfoOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [mobileInfoOpen]);
+
+  const infoCardContent = (
+    <>
+      <div className="max-w-full truncate text-[11px] font-medium leading-none text-white sm:text-[14px]">
+        {name}
+        {personality ? (
+          <span className="ml-1 text-[#a0a0ff]">({personality})</span>
+        ) : null}
+        {isCurrentPlayer ? (
+          <span className="ml-1 text-[#d7c27a]">(you)</span>
+        ) : null}
+      </div>
+      <div className="mt-1 text-[10px] font-medium leading-none text-[#f3f1ea] sm:text-[13px]">
+        ${chips}
+      </div>
+      {isThinking ? (
+        <TypingIndicator className="mt-1 text-amber-400" />
+      ) : actionLabel ? (
+        <div className="mt-1 text-[9px] font-semibold uppercase leading-none tracking-[0.18em] text-[#b8b19a] sm:text-[11px]">
+          {actionLabel}
+        </div>
+      ) : null}
+    </>
+  );
 
   return (
-    <div className={`relative flex flex-col items-center ${className}`}>
+    <div ref={rootRef} className={`relative flex flex-col items-center ${className}`}>
       <div className="relative">
         {chatBubbleMessage ? (
           <div className="pointer-events-none absolute -top-4 left-1/2 z-30 w-max max-w-[180px] -translate-x-1/2 -translate-y-full sm:max-w-[220px]">
@@ -91,20 +148,28 @@ export function PhasePlayerBadge({
             </div>
           </div>
         ) : null}
-        <Avatar
-          className={`relative z-0 overflow-hidden rounded-full border bg-[#d7d0ff] ${
-            isActiveTurn
-              ? "border-[#f4d37a] shadow-[0_0_0_3px_rgba(244,211,122,0.32),0_0_24px_rgba(244,211,122,0.55),0_8px_24px_rgba(0,0,0,0.35)]"
-              : "border-white/25 shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
-          } ${avatarSizeClass}`}
+        <button
+          type="button"
+          className="xs:pointer-events-none"
+          onClick={() => setMobileInfoOpen((open) => !open)}
+          aria-expanded={mobileInfoOpen}
+          aria-label={`Show player info for ${name}`}
         >
-          <AvatarImage src={avatarUrl ?? undefined} alt={`${name} avatar`} />
-          <AvatarFallback
-            className={`${getAvatarColor(name)} font-semibold text-white ${initialsClass}`}
+          <Avatar
+            className={`relative z-0 overflow-hidden rounded-full border bg-[#d7d0ff] ${
+              isActiveTurn
+                ? "border-[#f4d37a] shadow-[0_0_0_3px_rgba(244,211,122,0.32),0_0_24px_rgba(244,211,122,0.55),0_8px_24px_rgba(0,0,0,0.35)]"
+                : "border-white/25 shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
+            } ${avatarSizeClass}`}
           >
-            {getInitials(name)}
-          </AvatarFallback>
-        </Avatar>
+            <AvatarImage src={avatarUrl ?? undefined} alt={`${name} avatar`} />
+            <AvatarFallback
+              className={`${getAvatarColor(name)} font-semibold text-white ${initialsClass}`}
+            >
+              {getInitials(name)}
+            </AvatarFallback>
+          </Avatar>
+        </button>
         {badge && (
           <div
             className="absolute -left-[10px] -top-3 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-[#f4e4c1] text-[#2b1810] shadow-[0_1px_3px_rgba(0,0,0,0.5)]"
@@ -115,33 +180,22 @@ export function PhasePlayerBadge({
             </span>
           </div>
         )}
+        {mobileInfoOpen ? (
+          <div
+            className={`absolute left-1/2 z-50 w-max max-w-[160px] -translate-x-1/2 rounded-lg border border-slate-800 bg-black/96 px-2.5 py-2 text-center shadow-[0_10px_28px_rgba(0,0,0,0.45)] xs:hidden ${mobileInfoPopupClassName}`}
+          >
+            {infoCardContent}
+          </div>
+        ) : null}
       </div>
       <div
-        className={`border border-slate-800 relative z-10 -mt-3 flex min-w-20 flex-col items-center justify-center py-2 text-center ${
+        className={`border border-slate-800 relative z-10 -mt-3 hidden min-w-20 flex-col items-center justify-center py-2 text-center xs:flex ${
           isActiveTurn
             ? "bg-black"
             : "bg-black shadow-[0_6px_16px_rgba(0,0,0,0.35)]"
         } ${infoCardClassName}`}
       >
-        <div className="max-w-full truncate text-[11px] font-medium leading-none text-white sm:text-[14px]">
-          {name}
-          {personality ? (
-            <span className="ml-1 text-[#a0a0ff]">({personality})</span>
-          ) : null}
-          {isCurrentPlayer ? (
-            <span className="ml-1 text-[#d7c27a]">(you)</span>
-          ) : null}
-        </div>
-        <div className="mt-1 text-[10px] font-medium leading-none text-[#f3f1ea] sm:text-[13px]">
-          ${chips}
-        </div>
-        {isThinking ? (
-          <TypingIndicator className="mt-1 text-amber-400" />
-        ) : actionLabel ? (
-          <div className="mt-1 text-[9px] font-semibold uppercase leading-none tracking-[0.18em] text-[#b8b19a] sm:text-[11px]">
-            {actionLabel}
-          </div>
-        ) : null}
+        {infoCardContent}
       </div>
       {bet > 0 && (
         <PokerChip

@@ -8,6 +8,11 @@ import { fileURLToPath, URL } from "url";
 import tailwindcss from "@tailwindcss/vite";
 
 const config = defineConfig({
+  server: {
+    allowedHosts: [
+      "9903-2600-4040-71a0-5200-7d80-4eb6-68eb-157e.ngrok-free.app",
+    ],
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

@@ -20,6 +20,10 @@ code {
     monospace;
 }
 
+@theme {
+  --breakpoint-xs: 26.5625rem;
+}
+
 @theme inline {
   --font-serif: "Noto Serif", ui-serif, Georgia, Cambria, "Times New Roman",
     Times, serif;

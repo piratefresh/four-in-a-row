@@ -28,7 +28,7 @@ import { useRoomGameContext } from "../context/RoomGameContext";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
 
 const MOBILE_COMPACT_TILE_CLASS =
-  "h-[52px] w-[52px] text-[2rem] sm:h-28 sm:w-28 sm:text-6xl";
+  "!h-12 !w-12 !text-[1.75rem] xs:!h-[52px] xs:!w-[52px] xs:!text-[2rem] sm:!h-28 sm:!w-28 sm:!text-6xl";
 
 type SortableBuilderTileProps = {
   tile: BuilderTile;
@@ -260,6 +260,8 @@ export function RoomHandsBoardV2({
     !mySubmission &&
     !bottomHand?.hasFolded &&
     builderTiles.length > 1;
+  const showInlineBottomPanelShuffle =
+    !showBettingControls && gameStage === "showdown" && showShuffleControl;
   const opponentBets = useMemo(
     () =>
       opponents
@@ -322,9 +324,9 @@ export function RoomHandsBoardV2({
             )}
 
             {!isPhase0 && (
-              <div className="relative z-10 flex items-center justify-center px-4">
+              <div className="relative z-10 flex items-center justify-center px-2 xs:px-4">
                 {/* Wrapper with actual size including avatar overflow - responsive to match table size */}
-                <div className="relative flex items-center justify-center min-h-[520px] min-w-[360px] lg:min-h-[620px] lg:min-w-[460px] xl:min-h-[700px] xl:min-w-[520px]">
+                <div className="relative flex items-center justify-center min-h-[330px] min-w-[248px] xs:min-h-[420px] xs:min-w-[292px] sm:min-h-[520px] sm:min-w-[360px] lg:min-h-[620px] lg:min-w-[460px] xl:min-h-[700px] xl:min-w-[520px]">
                   <RoomTable
                     isPhase1={isPhase1}
                     pot={pot}
@@ -346,7 +348,7 @@ export function RoomHandsBoardV2({
                     currentPlayerHasSubmitted={!!mySubmission}
                     canRevealSubmittedWords={canRevealSubmittedWords}
                   />
-                  <div className="absolute bottom-[11%] left-1/2 z-20 -translate-x-1/2 translate-y-1/4 sm:bottom-[12%]">
+                  <div className="absolute bottom-[12%] left-1/2 z-40 -translate-x-1/2 translate-y-1/4 xs:bottom-[15%] sm:bottom-[12%]">
                     <PhasePlayerBadge
                       name={myName}
                       avatarUrl={getPlayerAvatar(bottomHand.playerId)}
@@ -358,10 +360,11 @@ export function RoomHandsBoardV2({
                       isActiveTurn={currentTurnPlayerId === bottomHand.playerId}
                       isCurrentPlayer
                       blindPosition={getBlindPosition(bottomHand.playerId)}
-                      avatarSizeClass="h-20 w-20 sm:h-24 sm:w-24"
-                      initialsClass="text-[16px] sm:text-[18px]"
-                      infoCardClassName="min-w-[112px] px-3 py-1.5 sm:min-w-[132px] sm:px-4 sm:py-2"
+                      avatarSizeClass="h-[52px] w-[52px] xs:h-[60px] xs:w-[60px] sm:h-24 sm:w-24"
+                      initialsClass="text-[11px] xs:text-[12px] sm:text-[18px]"
+                      infoCardClassName="min-w-[84px] px-2 py-1 xs:min-w-[92px] xs:px-2 xs:py-1 sm:min-w-[132px] sm:px-4 sm:py-2"
                       betClassName="left-auto right-0 translate-x-1/4"
+                      mobileInfoPlacement="top"
                     />
                   </div>
                 </div>
@@ -398,6 +401,12 @@ export function RoomHandsBoardV2({
                 shuffleTick={shuffleTick}
                 gameStage={gameStage}
                 handleSubmitWord={handleSubmitWord}
+                onShuffleTiles={
+                  showInlineBottomPanelShuffle ? handleShuffleTiles : undefined
+                }
+                disableShuffle={
+                  showInlineBottomPanelShuffle ? isValidating : undefined
+                }
                 renderBuilderTile={(tile) => (
                   <SortableBuilderTile
                     tile={tile}
@@ -422,7 +431,8 @@ export function RoomHandsBoardV2({
               />
             )}
 
-            {(showBettingControls || showShuffleControl) && (
+            {(showBettingControls ||
+              (showShuffleControl && !showInlineBottomPanelShuffle)) && (
               <RoomActionControls
                 betting={
                   showBettingControls
@@ -453,7 +463,7 @@ export function RoomHandsBoardV2({
                     : undefined
                 }
                 utility={
-                  showShuffleControl
+                  showShuffleControl && !showInlineBottomPanelShuffle
                     ? {
                         onShuffleTiles: handleShuffleTiles,
                         disableShuffle: isValidating,

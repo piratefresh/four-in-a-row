@@ -46,10 +46,10 @@ export function RoomTable({
 }: RoomTableProps) {
   const potDisplay = (
     <div className="flex flex-col items-center gap-1 text-center leading-none">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-[#d7c48e]/75 sm:text-xs">
+      <div className="text-[8px] font-semibold uppercase tracking-[0.2em] text-[#d7c48e]/75 xs:text-[9px] sm:text-xs">
         Pot
       </div>
-      <div className="text-[30px] font-semibold text-[#f4d37a] sm:text-[38px]">
+      <div className="text-[18px] font-semibold text-[#f4d37a] xs:text-[22px] sm:text-[38px]">
         ${pot}
       </div>
     </div>
@@ -61,7 +61,7 @@ export function RoomTable({
       players={[]}
       showSeats={false}
       centerLabel=""
-      className="h-[460px] w-[340px] max-w-none lg:h-[560px] lg:w-[420px] xl:h-[620px] xl:w-[470px]"
+      className="!h-[292px] !w-[228px] !max-w-[228px] xs:!h-[380px] xs:!w-[272px] xs:!max-w-[272px] sm:!h-[460px] sm:!w-[340px] sm:!max-w-[340px] lg:!h-[560px] lg:!w-[420px] lg:!max-w-[420px] xl:!h-[620px] xl:!w-[470px] xl:!max-w-[470px]"
       shellInsetClassName="inset-0"
     >
       {opponentBets.map((bet) => (

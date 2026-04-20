@@ -2,6 +2,11 @@ import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import {
+  clearDismissedRoomRejoin,
+  dismissRoomRejoin,
+  isRoomRejoinDismissed,
+} from "@/lib/room-rejoin-dismissal";
 import { api } from "../../../../convex/_generated/api";
 import { getBotCharacterForAuthUserId } from "../../../../convex/aiStrategy";
 import {
@@ -129,8 +134,9 @@ export function useRoomDetailsController(code: string) {
   useEffect(() => {
     if (myPlayer) {
       autoRejoinAttemptedCodeRef.current = null;
+      clearDismissedRoomRejoin(code);
     }
-  }, [myPlayer]);
+  }, [code, myPlayer]);
 
   useEffect(() => {
     if (game?.status !== "active") return;
@@ -397,6 +403,7 @@ export function useRoomDetailsController(code: string) {
       !session?.user ||
       myPlayer ||
       !roomData?.viewerSeatPreview ||
+      isRoomRejoinDismissed(code) ||
       autoRejoinAttemptedCodeRef.current === code
     ) {
       return;
@@ -419,6 +426,7 @@ export function useRoomDetailsController(code: string) {
   }, [
     code,
     isAuthPending,
+    isRoomRejoinDismissed,
     myPlayer,
     rejoinRoomByCode,
     roomData?.viewerSeatPreview,
@@ -466,24 +474,26 @@ export function useRoomDetailsController(code: string) {
     try {
       const didLeave = await leaveCurrentRoom(false);
       if (didLeave) {
+        dismissRoomRejoin(code);
         await navigate({ to: "/" });
       }
     } finally {
       setIsLeavingRoom(false);
     }
-  }, [leaveCurrentRoom, navigate]);
+  }, [code, leaveCurrentRoom, navigate]);
 
   const handleBack = useCallback(async () => {
     if (isLeavingRoom) return;
     setIsLeavingRoom(true);
     setLeaveMessage(null);
+    dismissRoomRejoin(code);
     try {
       await leaveCurrentRoom(true);
       await navigate({ to: "/" });
     } finally {
       setIsLeavingRoom(false);
     }
-  }, [isLeavingRoom, leaveCurrentRoom, navigate]);
+  }, [code, isLeavingRoom, leaveCurrentRoom, navigate]);
 
   const handleViewResults = useCallback(async () => {
     await navigate({ to: "/results/$code", params: { code } });
