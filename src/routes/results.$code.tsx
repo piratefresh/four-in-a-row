@@ -7,6 +7,22 @@ import { authClient } from "@/lib/auth-client";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/results/$code")({
+  head: ({ params }) => {
+    const roomCode = params.code.toUpperCase();
+    const title = `Results for Room ${roomCode} | Word Poker`;
+    const description = `Showdown results for Room ${roomCode} in Word Poker.`;
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+      ],
+    };
+  },
   component: ResultsPage,
 });
 

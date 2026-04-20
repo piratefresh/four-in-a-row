@@ -12,6 +12,22 @@ import { ChatSidebar, ChatToggleButton } from "@/components/rooms/chat/ChatSideb
 import { useChatSidebar } from "@/components/rooms/chat/useChatSidebar";
 
 export const Route = createFileRoute("/rooms/$code")({
+  head: ({ params }) => {
+    const roomCode = params.code.toUpperCase();
+    const title = `Room ${roomCode} | Word Poker`;
+    const description = `Join Room ${roomCode} in Word Poker and play a live word-building poker hand.`;
+
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+      ],
+    };
+  },
   component: RoomDetailsPage,
 });
 

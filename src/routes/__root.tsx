@@ -24,6 +24,10 @@ const getAuth = createServerFn({ method: "GET" }).handler(async () => {
   return await getToken();
 });
 
+const APP_NAME = "Word Poker";
+const APP_DESCRIPTION =
+  "A multiplayer word-building poker game with shared community letters, betting rounds, and showdown scoring.";
+
 export const Route = createRootRouteWithContext<{
   convexQueryClient: ConvexQueryClient;
 }>()({
@@ -37,10 +41,58 @@ export const Route = createRootRouteWithContext<{
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "TanStack Start Starter",
+        title: APP_NAME,
+      },
+      {
+        name: "description",
+        content: APP_DESCRIPTION,
+      },
+      {
+        name: "application-name",
+        content: APP_NAME,
+      },
+      {
+        name: "theme-color",
+        content: "#0b0b0c",
+      },
+      {
+        property: "og:site_name",
+        content: APP_NAME,
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
+      {
+        property: "og:title",
+        content: APP_NAME,
+      },
+      {
+        property: "og:description",
+        content: APP_DESCRIPTION,
+      },
+      {
+        name: "twitter:card",
+        content: "summary",
+      },
+      {
+        name: "twitter:title",
+        content: APP_NAME,
+      },
+      {
+        name: "twitter:description",
+        content: APP_DESCRIPTION,
       },
     ],
     links: [
+      {
+        rel: "icon",
+        href: "/favicon.ico",
+      },
+      {
+        rel: "manifest",
+        href: "/manifest.json",
+      },
       {
         rel: "stylesheet",
         href: appCss,
