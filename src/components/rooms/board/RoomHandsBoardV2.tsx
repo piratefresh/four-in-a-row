@@ -28,7 +28,7 @@ import { useRoomGameContext } from "../context/RoomGameContext";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
 
 const MOBILE_COMPACT_TILE_CLASS =
-  "h-[60px] w-[45px] text-[2rem] sm:h-28 sm:w-28 sm:text-6xl";
+  "h-[52px] w-[52px] text-[2rem] sm:h-28 sm:w-28 sm:text-6xl";
 
 type SortableBuilderTileProps = {
   tile: BuilderTile;
@@ -69,27 +69,37 @@ function SortableBuilderTile({
       style={style}
       className={`touch-none select-none ${isDragging ? "opacity-0" : ""} ${tile.disabled ? "opacity-50" : ""} transition-all`}
     >
-      <div
-        className={
-          tile.disabled
-            ? "cursor-pointer"
-            : "cursor-grab active:cursor-grabbing"
-        }
-        onClick={handleClick}
-        {...(!tile.disabled ? { ...attributes, ...listeners } : {})}
-      >
-        <WordTile
-          letter={tile.letter}
-          letters={tile.letters}
-          baseValue={tile.baseValue}
-          baseValues={tile.baseValues}
-          isChoice={tile.isChoice}
-          selectedLetter={selectedLetter}
-          showValue={true}
-          size="lg"
-          className={MOBILE_COMPACT_TILE_CLASS}
-          variant={tile.source === "community" ? "community" : "default"}
-        />
+      <div className="flex flex-col items-center gap-1">
+        {tile.multiplier ? (
+          <div className="text-[9px] font-bold leading-none text-white/80 sm:text-xs">
+            {tile.multiplier === "2L" ? "2x" : "3x"}
+          </div>
+        ) : (
+          <div className="text-[9px] leading-none sm:text-xs opacity-0">-</div>
+        )}
+        <div
+          className={
+            tile.disabled
+              ? "cursor-pointer"
+              : "cursor-grab active:cursor-grabbing"
+          }
+          onClick={handleClick}
+          {...(!tile.disabled ? { ...attributes, ...listeners } : {})}
+        >
+          <WordTile
+            letter={tile.letter}
+            letters={tile.letters}
+            baseValue={tile.baseValue}
+            baseValues={tile.baseValues}
+            multiplier={tile.multiplier}
+            isChoice={tile.isChoice}
+            selectedLetter={selectedLetter}
+            showValue={true}
+            size="lg"
+            className={MOBILE_COMPACT_TILE_CLASS}
+            variant={tile.source === "community" ? "community" : "default"}
+          />
+        </div>
       </div>
     </div>
   );
@@ -125,9 +135,12 @@ export function RoomHandsBoardV2({
   smallBlindIndex,
   bigBlindIndex,
   pot = 0,
+  chatDraft,
 }: RoomHandsBoardProps) {
   // Helper function to determine blind position for a player
-  const getBlindPosition = (playerId: string): "dealer" | "small" | "big" | undefined => {
+  const getBlindPosition = (
+    playerId: string,
+  ): "dealer" | "small" | "big" | undefined => {
     const playerIndex = hands.findIndex((h) => h.playerId === playerId);
     if (playerIndex === -1) return undefined;
 
@@ -155,11 +168,13 @@ export function RoomHandsBoardV2({
     canCall,
     canRaise,
     canFold,
+    canCallClock,
     currentTurnPlayerName,
     onCheck,
     onCall,
     onRaise,
     onFold,
+    onCallClock,
     onRaiseAmountChange,
     onLeaveRoom,
     callLabel,
@@ -167,6 +182,9 @@ export function RoomHandsBoardV2({
     raiseLabel,
     raiseAmount,
     raiseOptions,
+    isCallingClock,
+    turnClockTimeRemaining,
+    turnClockCallerName,
     showdownTimeRemaining,
   } = useRoomGameContext();
 
@@ -187,6 +205,10 @@ export function RoomHandsBoardV2({
   }, [bottomPlayerId, hands]);
 
   const bottomHand = useMemo(() => orderedHands[0], [orderedHands]);
+  const activeChatDraft = useMemo(() => {
+    const trimmedDraft = chatDraft?.trim();
+    return trimmedDraft ? trimmedDraft.slice(0, 120) : null;
+  }, [chatDraft]);
 
   const opponents = useMemo(
     () =>
@@ -231,8 +253,13 @@ export function RoomHandsBoardV2({
     showReadyButton ? "phase0" : gameStage;
   const isPhase0 = boardPhase === "phase0";
   const isPhase1 = boardPhase === "preflop";
+  const canRevealSubmittedWords = false;
   const showShuffleControl =
-    !isPhase0 && !isPhase1 && !mySubmission && !bottomHand?.hasFolded && builderTiles.length > 1;
+    !isPhase0 &&
+    !isPhase1 &&
+    !mySubmission &&
+    !bottomHand?.hasFolded &&
+    builderTiles.length > 1;
   const opponentBets = useMemo(
     () =>
       opponents
@@ -297,7 +324,7 @@ export function RoomHandsBoardV2({
             {!isPhase0 && (
               <div className="relative z-10 flex items-center justify-center px-4">
                 {/* Wrapper with actual size including avatar overflow - responsive to match table size */}
-                <div className="relative flex items-center justify-center min-h-[520px] min-w-[360px]">
+                <div className="relative flex items-center justify-center min-h-[520px] min-w-[360px] lg:min-h-[620px] lg:min-w-[460px] xl:min-h-[700px] xl:min-w-[520px]">
                   <RoomTable
                     isPhase1={isPhase1}
                     pot={pot}
@@ -317,13 +344,17 @@ export function RoomHandsBoardV2({
                     wordSubmissions={wordSubmissions}
                     gameStage={gameStage}
                     currentPlayerHasSubmitted={!!mySubmission}
+                    canRevealSubmittedWords={canRevealSubmittedWords}
                   />
                   <div className="absolute bottom-[11%] left-1/2 z-20 -translate-x-1/2 translate-y-1/4 sm:bottom-[12%]">
                     <PhasePlayerBadge
                       name={myName}
                       avatarUrl={getPlayerAvatar(bottomHand.playerId)}
                       chips={bottomHand.chips ?? 0}
-                      actionLabel={formatPlayerActionLabel(bottomHand.lastAction)}
+                      actionLabel={formatPlayerActionLabel(
+                        bottomHand.lastAction,
+                      )}
+                      chatBubbleMessage={activeChatDraft}
                       isActiveTurn={currentTurnPlayerId === bottomHand.playerId}
                       isCurrentPlayer
                       blindPosition={getBlindPosition(bottomHand.playerId)}
@@ -355,6 +386,7 @@ export function RoomHandsBoardV2({
               <RoomBottomPanel
                 isPhase1={isPhase1}
                 mySubmission={mySubmission}
+                canRevealSubmittedWords={canRevealSubmittedWords}
                 showReveal={showReveal}
                 builderTiles={builderTiles}
                 choiceSelections={choiceSelections}
@@ -401,17 +433,22 @@ export function RoomHandsBoardV2({
                         canCall,
                         canRaise,
                         canFold,
+                        canCallClock,
                         currentTurnPlayerName,
                         onCheck,
                         onCall,
                         onRaise,
                         onFold,
+                        onCallClock,
                         onRaiseAmountChange,
                         callLabel,
                         callAmount,
                         raiseLabel,
                         raiseAmount,
                         raiseOptions,
+                        isCallingClock,
+                        turnClockTimeRemaining,
+                        turnClockCallerName,
                       }
                     : undefined
                 }
@@ -431,20 +468,32 @@ export function RoomHandsBoardV2({
         <DragOverlay>
           {activeTile ? (
             <div style={{ cursor: "grabbing" }}>
-              <WordTile
-                letter={activeTile.letter}
-                letters={activeTile.letters}
-                baseValue={activeTile.baseValue}
-                baseValues={activeTile.baseValues}
-                isChoice={activeTile.isChoice}
-                selectedLetter={choiceSelections[activeTile.id]}
-                showValue={true}
-                size="lg"
-                className={MOBILE_COMPACT_TILE_CLASS}
-                variant={
-                  activeTile.source === "community" ? "community" : "default"
-                }
-              />
+              <div className="flex flex-col items-center gap-1">
+                {activeTile.multiplier ? (
+                  <div className="text-[9px] font-bold leading-none text-white/80 sm:text-xs">
+                    {activeTile.multiplier === "2L" ? "2x" : "3x"}
+                  </div>
+                ) : (
+                  <div className="text-[9px] leading-none sm:text-xs opacity-0">
+                    -
+                  </div>
+                )}
+                <WordTile
+                  letter={activeTile.letter}
+                  letters={activeTile.letters}
+                  baseValue={activeTile.baseValue}
+                  baseValues={activeTile.baseValues}
+                  multiplier={activeTile.multiplier}
+                  isChoice={activeTile.isChoice}
+                  selectedLetter={choiceSelections[activeTile.id]}
+                  showValue={true}
+                  size="lg"
+                  className={MOBILE_COMPACT_TILE_CLASS}
+                  variant={
+                    activeTile.source === "community" ? "community" : "default"
+                  }
+                />
+              </div>
             </div>
           ) : null}
         </DragOverlay>

@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PokerChip } from "../table/PokerChip";
+import { TypingIndicator } from "./TypingIndicator";
 
 export const PHASE_BADGE_OPPONENT_POSITION_CLASS: Record<
   "top" | "left" | "right",
@@ -25,6 +26,7 @@ type PhasePlayerBadgeProps = {
   chips: number;
   bet?: number;
   actionLabel?: string;
+  chatBubbleMessage?: string | null;
   isActiveTurn?: boolean;
   isCurrentPlayer?: boolean;
   personality?: string | null;
@@ -34,6 +36,7 @@ type PhasePlayerBadgeProps = {
   betClassName?: string;
   className?: string;
   blindPosition?: "dealer" | "small" | "big";
+  isThinking?: boolean;
 };
 
 export function PhasePlayerBadge({
@@ -42,6 +45,7 @@ export function PhasePlayerBadge({
   chips,
   bet = 0,
   actionLabel,
+  chatBubbleMessage = null,
   isActiveTurn = false,
   isCurrentPlayer = false,
   personality,
@@ -51,6 +55,7 @@ export function PhasePlayerBadge({
   betClassName = "",
   className = "",
   blindPosition,
+  isThinking = false,
 }: PhasePlayerBadgeProps) {
   const blindBadgeConfig = {
     dealer: { label: "D", title: "Dealer Button" },
@@ -63,6 +68,14 @@ export function PhasePlayerBadge({
   return (
     <div className={`relative flex flex-col items-center ${className}`}>
       <div className="relative">
+        {chatBubbleMessage ? (
+          <div className="pointer-events-none absolute -top-4 left-1/2 z-30 w-max max-w-[180px] -translate-x-1/2 -translate-y-full sm:max-w-[220px]">
+            <div className="relative rounded-2xl border border-[#e8d8aa] bg-[#f7f1dd] px-3 py-2 text-center text-[11px] font-medium leading-snug text-[#2b1810] shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:text-[12px]">
+              <span className="block break-words">{chatBubbleMessage}</span>
+              <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-[#e8d8aa] bg-[#f7f1dd]" />
+            </div>
+          </div>
+        ) : null}
         <Avatar
           className={`relative z-0 overflow-hidden rounded-full border bg-[#d7d0ff] ${
             isActiveTurn
@@ -72,7 +85,7 @@ export function PhasePlayerBadge({
         >
           <AvatarImage src={avatarUrl ?? undefined} alt={`${name} avatar`} />
           <AvatarFallback
-            className={`bg-gradient-to-br from-[#cfc7ff] via-[#aebdff] to-[#80a7ff] font-semibold text-white ${initialsClass}`}
+            className={`bg-white/15 font-semibold text-white ${initialsClass}`}
           >
             {getInitials(name)}
           </AvatarFallback>
@@ -107,7 +120,9 @@ export function PhasePlayerBadge({
         <div className="mt-1 text-[10px] font-medium leading-none text-[#f3f1ea] sm:text-[13px]">
           ${chips}
         </div>
-        {actionLabel ? (
+        {isThinking ? (
+          <TypingIndicator className="mt-1 text-amber-400" />
+        ) : actionLabel ? (
           <div className="mt-1 text-[9px] font-semibold uppercase leading-none tracking-[0.18em] text-[#b8b19a] sm:text-[11px]">
             {actionLabel}
           </div>

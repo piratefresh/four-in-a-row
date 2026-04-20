@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoomsCodeRouteImport } from './routes/rooms.$code'
 import { Route as ResultsCodeRouteImport } from './routes/results.$code'
+import { Route as DevTileShowcaseRouteImport } from './routes/dev.tile-showcase'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as DemoBetterAuthRouteImport } from './routes/demo/better-auth'
 import { Route as DemoStartServerFuncsRouteImport } from './routes/demo/start.server-funcs'
@@ -54,6 +55,11 @@ const RoomsCodeRoute = RoomsCodeRouteImport.update({
 const ResultsCodeRoute = ResultsCodeRouteImport.update({
   id: '/results/$code',
   path: '/results/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevTileShowcaseRoute = DevTileShowcaseRouteImport.update({
+  id: '/dev/tile-showcase',
+  path: '/dev/tile-showcase',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoConvexRoute = DemoConvexRouteImport.update({
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
     | '/api/auth/$'
@@ -189,6 +199,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
     | '/api/auth/$'
@@ -207,6 +218,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
     | '/api/auth/$'
@@ -226,6 +238,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   DemoBetterAuthRoute: typeof DemoBetterAuthRoute
   DemoConvexRoute: typeof DemoConvexRoute
+  DevTileShowcaseRoute: typeof DevTileShowcaseRoute
   ResultsCodeRoute: typeof ResultsCodeRoute
   RoomsCodeRoute: typeof RoomsCodeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -280,6 +293,13 @@ declare module '@tanstack/react-router' {
       path: '/results/$code'
       fullPath: '/results/$code'
       preLoaderRoute: typeof ResultsCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/tile-showcase': {
+      id: '/dev/tile-showcase'
+      path: '/dev/tile-showcase'
+      fullPath: '/dev/tile-showcase'
+      preLoaderRoute: typeof DevTileShowcaseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/convex': {
@@ -362,6 +382,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   DemoBetterAuthRoute: DemoBetterAuthRoute,
   DemoConvexRoute: DemoConvexRoute,
+  DevTileShowcaseRoute: DevTileShowcaseRoute,
   ResultsCodeRoute: ResultsCodeRoute,
   RoomsCodeRoute: RoomsCodeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

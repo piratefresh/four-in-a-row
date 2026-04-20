@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { api } from "../../../../convex/_generated/api";
 import { getBotCharacterForAuthUserId } from "../../../../convex/aiStrategy";
-import { RAISE_LADDER, SHOWDOWN_TIMER_MS } from "../../../../convex/gameState";
+import {
+  RAISE_LADDER,
+  SHOWDOWN_TIMER_MS,
+  TURN_CLOCK_GRACE_PERIOD_MS,
+} from "../../../../convex/gameState";
 import type { RoomGameContextValue } from "../context/RoomGameContext";
 import type { RoomPageContextValue } from "../context/RoomPageContext";
 import { useRoomPresence } from "./useRoomPresence";
@@ -18,6 +22,7 @@ function isTransientActionMessage(message: string | null) {
   return (
     !!message &&
     (message === "Checked." ||
+      message === "Clock called." ||
       message === "Folded." ||
       message.startsWith("Matched ") ||
       message.startsWith("Raised to "))
@@ -46,6 +51,7 @@ export function useRoomDetailsController(code: string) {
   );
 
   const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
+  const rejoinRoomByCode = useMutation(api.rooms.rejoinRoomByCode);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const toggleReady = useMutation(api.rooms.toggleReady);
   const debugRejoinRoom = useMutation(api.rooms.debugRejoinRoom);
@@ -54,6 +60,7 @@ export function useRoomDetailsController(code: string) {
   const call = useMutation((api as any).games.call);
   const raise = useMutation((api as any).games.raise);
   const fold = useMutation((api as any).games.fold);
+  const callClock = useMutation((api as any).games.callClock);
   const forfeitShowdown = useMutation(api.games.forfeitShowdown);
 
   const myPlayer = useMemo(() => {
@@ -92,15 +99,18 @@ export function useRoomDetailsController(code: string) {
   const myPlayerRef = useRef<typeof myPlayer>(null);
   const roomCodeRef = useRef(code);
   const hasLeftRoomRef = useRef(false);
+  const autoRejoinAttemptedCodeRef = useRef<string | null>(null);
 
   const [isLeavingRoom, setIsLeavingRoom] = useState(false);
   const [leaveMessage, setLeaveMessage] = useState<string | null>(null);
   const [gameMessage, setGameMessage] = useState<string | null>(null);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [isBetting, setIsBetting] = useState(false);
+  const [isCallingClock, setIsCallingClock] = useState(false);
   const [isTogglingReady, setIsTogglingReady] = useState(false);
   const [isDevRejoining, setIsDevRejoining] = useState(false);
   const [isDevFillingBots, setIsDevFillingBots] = useState(false);
+  const [liveNow, setLiveNow] = useState(() => Date.now());
   const [showdownTimeRemaining, setShowdownTimeRemaining] = useState<
     number | null
   >(null);
@@ -115,6 +125,23 @@ export function useRoomDetailsController(code: string) {
   useEffect(() => {
     roomCodeRef.current = code;
   }, [code]);
+
+  useEffect(() => {
+    if (myPlayer) {
+      autoRejoinAttemptedCodeRef.current = null;
+    }
+  }, [myPlayer]);
+
+  useEffect(() => {
+    if (game?.status !== "active") return;
+
+    setLiveNow(Date.now());
+    const interval = window.setInterval(() => {
+      setLiveNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [game?.status]);
 
   const leaveCurrentRoom = useCallback(
     async (silent: boolean) => {
@@ -221,12 +248,17 @@ export function useRoomDetailsController(code: string) {
     [game, turnOrderedHands],
   );
   const currentTurnPlayerName = useMemo(
-    () =>
-      currentTurnPlayerId
-        ? getPlayerName(currentTurnPlayerId)
-        : null,
+    () => (currentTurnPlayerId ? getPlayerName(currentTurnPlayerId) : null),
     [currentTurnPlayerId, getPlayerName],
   );
+  const currentTurnIsAutomated = useMemo(() => {
+    if (!currentTurnPlayerId) return false;
+    if (currentTurnPlayerId === DEALER_PLAYER_ID) return true;
+    return (
+      memberById.get(currentTurnPlayerId)?.authUserId?.startsWith("dev-bot:") ??
+      false
+    );
+  }, [currentTurnPlayerId, memberById]);
 
   const myHand = useMemo(
     () =>
@@ -267,6 +299,46 @@ export function useRoomDetailsController(code: string) {
     if (!game || !myHand) return 0;
     return game.currentBet - myHand.betThisRound;
   }, [game, myHand]);
+  const hasPendingTurnClock = game?.turnClockExpiresAt !== undefined;
+  const turnClockTimeRemaining = useMemo(() => {
+    if (game?.turnClockExpiresAt === undefined) return null;
+    return Math.max(0, game.turnClockExpiresAt - liveNow);
+  }, [game?.turnClockExpiresAt, liveNow]);
+  const turnClockCallerName = useMemo(
+    () =>
+      game?.turnClockCallerPlayerId
+        ? getPlayerName(game.turnClockCallerPlayerId)
+        : null,
+    [game?.turnClockCallerPlayerId, getPlayerName],
+  );
+  const canCallClock = useMemo(() => {
+    if (
+      !game ||
+      game.status !== "active" ||
+      game.stage === "final" ||
+      game.stage === "showdown" ||
+      !playerId ||
+      !myHand ||
+      myHand.hasFolded ||
+      !currentTurnPlayerId ||
+      currentTurnPlayerId === playerId ||
+      currentTurnIsAutomated ||
+      hasPendingTurnClock ||
+      game.turnStartedAt === undefined
+    ) {
+      return false;
+    }
+
+    return liveNow - game.turnStartedAt >= TURN_CLOCK_GRACE_PERIOD_MS;
+  }, [
+    currentTurnIsAutomated,
+    currentTurnPlayerId,
+    game,
+    hasPendingTurnClock,
+    liveNow,
+    myHand,
+    playerId,
+  ]);
 
   const isMyTurn =
     currentTurnPlayerId === playerId && game?.status === "active";
@@ -284,7 +356,8 @@ export function useRoomDetailsController(code: string) {
 
     return RAISE_LADDER.filter(
       (amount) =>
-        amount > game.currentBet && amount - myHand.betThisRound <= myHand.chips,
+        amount > game.currentBet &&
+        amount - myHand.betThisRound <= myHand.chips,
     );
   }, [game, isMyTurn, myHand, raisesThisRound]);
   const canRaise = availableRaiseOptions.length > 0;
@@ -317,6 +390,40 @@ export function useRoomDetailsController(code: string) {
   }, [game?.status, roomData?.members, rotatedHands]);
 
   useRoomPresence(code, Boolean(session?.user && roomData?.room && myPlayer));
+
+  useEffect(() => {
+    if (
+      isAuthPending ||
+      !session?.user ||
+      myPlayer ||
+      !roomData?.viewerSeatPreview ||
+      autoRejoinAttemptedCodeRef.current === code
+    ) {
+      return;
+    }
+
+    autoRejoinAttemptedCodeRef.current = code;
+    const displayName =
+      session.user.name?.trim() || session.user.email || "Player";
+
+    void (async () => {
+      try {
+        await rejoinRoomByCode({ code, name: displayName });
+        hasLeftRoomRef.current = false;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to rejoin room.";
+        setGameMessage(message);
+      }
+    })();
+  }, [
+    code,
+    isAuthPending,
+    myPlayer,
+    rejoinRoomByCode,
+    roomData?.viewerSeatPreview,
+    session?.user,
+  ]);
 
   useEffect(() => {
     if (isAuthPending) return;
@@ -384,10 +491,7 @@ export function useRoomDetailsController(code: string) {
 
   useEffect(() => {
     if (game?.status !== "completed" || !showdownResults) return;
-    const timer = setTimeout(() => {
-      void handleViewResults();
-    }, 2000);
-    return () => clearTimeout(timer);
+    void handleViewResults();
   }, [game?.status, handleViewResults, showdownResults]);
 
   useEffect(() => {
@@ -509,6 +613,23 @@ export function useRoomDetailsController(code: string) {
     }
   }, [fold, game?._id, playerId]);
 
+  const handleCallClock = useCallback(async () => {
+    if (!game?._id || !playerId) return;
+
+    setIsCallingClock(true);
+    setGameMessage(null);
+    try {
+      await callClock({ gameId: game._id, playerId });
+      setGameMessage("Clock called.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to call the clock.";
+      setGameMessage(message);
+    } finally {
+      setIsCallingClock(false);
+    }
+  }, [callClock, game?._id, playerId]);
+
   const handleToggleReady = useCallback(async () => {
     setIsTogglingReady(true);
     setGameMessage(null);
@@ -593,11 +714,13 @@ export function useRoomDetailsController(code: string) {
       canCall,
       canRaise,
       canFold: isMyTurn,
+      canCallClock,
       currentTurnPlayerName,
       onCheck: canCheck ? handleCheck : undefined,
       onCall: canCall ? handleCall : undefined,
       onRaise: isMyTurn ? handleRaise : undefined,
       onFold: isMyTurn ? handleFold : undefined,
+      onCallClock: canCallClock ? handleCallClock : undefined,
       onRaiseAmountChange: canRaise ? setSelectedRaiseAmount : undefined,
       onLeaveRoom: handleBack,
       callLabel: callAmount > 0 ? `Call ${callAmount}` : "Call",
@@ -608,12 +731,16 @@ export function useRoomDetailsController(code: string) {
           : "Raise Maxed",
       raiseAmount: selectedRaiseAmount,
       raiseOptions: availableRaiseOptions,
+      isCallingClock,
+      turnClockTimeRemaining,
+      turnClockCallerName,
       showdownTimeRemaining,
     }),
     [
       availableRaiseOptions,
       callAmount,
       canCall,
+      canCallClock,
       canCheck,
       canRaise,
       currentTurnPlayerName,
@@ -622,11 +749,13 @@ export function useRoomDetailsController(code: string) {
       gameMessage,
       handleBack,
       handleCall,
+      handleCallClock,
       handleCheck,
       handleFold,
       handleRaise,
       handleToggleReady,
       isBetting,
+      isCallingClock,
       isMyTurn,
       isTogglingReady,
       myPlayer?.readyStatus,
@@ -634,6 +763,8 @@ export function useRoomDetailsController(code: string) {
       roomData?.members,
       selectedRaiseAmount,
       showdownTimeRemaining,
+      turnClockCallerName,
+      turnClockTimeRemaining,
     ],
   );
 
@@ -656,7 +787,9 @@ export function useRoomDetailsController(code: string) {
         canCheck,
         canCall,
         canRaise,
+        canCallClock,
         callAmount,
+        turnClockTimeRemaining,
         effectiveNextRaiseLevel: selectedRaiseAmount ?? undefined,
         hasDevTools: import.meta.env.DEV,
         isDevRejoining,
@@ -670,6 +803,7 @@ export function useRoomDetailsController(code: string) {
         call: handleCall,
         raise: handleRaise,
         fold: handleFold,
+        callClock: handleCallClock,
         devRejoinRoom: import.meta.env.DEV ? handleDevRejoinRoom : undefined,
         devFillRoomWithBots: import.meta.env.DEV
           ? handleDevFillRoomWithBots
@@ -677,21 +811,25 @@ export function useRoomDetailsController(code: string) {
       },
       meta: {
         getPlayerName,
+        getPlayerAvatar,
         getPlayerPersonality,
       },
     }),
     [
       callAmount,
       canCall,
+      canCallClock,
       canCheck,
       canRaise,
       code,
       game,
       gameMessage,
+      getPlayerAvatar,
       getPlayerName,
       getPlayerPersonality,
       handleBack,
       handleCall,
+      handleCallClock,
       handleCheck,
       handleDevFillRoomWithBots,
       handleDevRejoinRoom,
@@ -712,6 +850,7 @@ export function useRoomDetailsController(code: string) {
       roomData,
       selectedRaiseAmount,
       showdownResults,
+      turnClockTimeRemaining,
     ],
   );
 

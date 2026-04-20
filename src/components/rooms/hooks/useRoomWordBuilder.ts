@@ -61,6 +61,7 @@ export function useRoomWordBuilder({
             id: `hand-${bottomHand._id}-${index}-choice-${tile.options.join("/")}`,
             letters: tile.options,
             baseValues: tile.baseValues,
+            multiplier: tile.multiplier,
             source: "hand" as const,
             disabled: true,
             isChoice: true,
@@ -71,6 +72,7 @@ export function useRoomWordBuilder({
           id: `hand-${bottomHand._id}-${index}-${tile.letter}-${tile.baseValue}`,
           letter: tile.letter,
           baseValue: tile.baseValue,
+          multiplier: tile.multiplier,
           source: "hand" as const,
           disabled: true,
           cardIndex: index,
@@ -84,6 +86,7 @@ export function useRoomWordBuilder({
               id: `community-${index}-choice-${tile.options.join("/")}`,
               letters: tile.options,
               baseValues: tile.baseValues,
+              multiplier: tile.multiplier,
               source: "community" as const,
               disabled: true,
               isChoice: true,
@@ -94,6 +97,7 @@ export function useRoomWordBuilder({
             id: `community-${index}-${tile.letter}-${tile.baseValue}`,
             letter: tile.letter,
             baseValue: tile.baseValue,
+            multiplier: tile.multiplier,
             source: "community" as const,
             disabled: true,
             cardIndex: index,
@@ -148,6 +152,21 @@ export function useRoomWordBuilder({
       (submission) => submission.playerId === bottomHand.playerId,
     );
   }, [bottomHand, wordSubmissions]);
+
+  useEffect(() => {
+    if (!mySubmission || !wordSubmissions?.isCompleted) {
+      setShowReveal(false);
+      return;
+    }
+
+    const revealTimer = window.setTimeout(() => {
+      setShowReveal(true);
+    }, 500);
+
+    return () => {
+      window.clearTimeout(revealTimer);
+    };
+  }, [mySubmission, wordSubmissions?.isCompleted]);
 
   const otherSubmissions = useMemo(() => {
     if (!bottomHand || !wordSubmissions?.submissions) return [];
@@ -239,6 +258,7 @@ export function useRoomWordBuilder({
           return {
             letter: selectedLetter,
             baseValue: selectedValue,
+            multiplier: tile.multiplier,
             source: tile.source,
             cardIndex: tile.cardIndex,
             wasChoice: true,
@@ -247,6 +267,7 @@ export function useRoomWordBuilder({
         return {
           letter: tile.letter!,
           baseValue: tile.baseValue!,
+          multiplier: tile.multiplier,
           source: tile.source,
           cardIndex: tile.cardIndex,
           wasChoice: false,
@@ -288,9 +309,6 @@ export function useRoomWordBuilder({
       }
 
       setIsValidating(false);
-      setTimeout(() => {
-        setShowReveal(true);
-      }, 500);
     } catch (error) {
       const message =
         error instanceof Error

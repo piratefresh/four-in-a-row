@@ -44,6 +44,7 @@ export type RoomHandsBoardProps = {
   smallBlindIndex?: number;
   bigBlindIndex?: number;
   pot?: number;
+  chatDraft?: string;
 };
 
 export type BuilderTile = {
@@ -52,6 +53,7 @@ export type BuilderTile = {
   letters?: string[];
   baseValue?: number;
   baseValues?: number[];
+  multiplier?: "2L" | "3L";
   source: "hand" | "community";
   disabled?: boolean;
   isChoice?: boolean;

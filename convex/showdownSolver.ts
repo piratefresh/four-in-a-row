@@ -11,6 +11,7 @@ import { calculateStaticShowdownScore } from "./games/gamesScoring";
 export type SolverWordTile = {
   letter: string;
   baseValue: number;
+  multiplier?: "2L" | "3L";
   source: "hand" | "community";
   cardIndex?: number;
   wasChoice?: boolean;
@@ -26,11 +27,13 @@ export type SolveShowdownHandTile =
       kind: "single";
       letter: string;
       baseValue: number;
+      multiplier?: "2L" | "3L";
     }
   | {
       kind: "choice";
       options: string[];
       baseValues: number[];
+      multiplier?: "2L" | "3L";
     };
 
 export type SolveShowdownCommunityTile =
@@ -38,12 +41,14 @@ export type SolveShowdownCommunityTile =
       kind: "single";
       letter: string;
       baseValue: number;
+      multiplier?: "2L" | "3L";
       revealed: boolean;
     }
   | {
       kind: "choice";
       options: string[];
       baseValues: number[];
+      multiplier?: "2L" | "3L";
       revealed: boolean;
     };
 
@@ -55,6 +60,7 @@ export type AvailableShowdownTile = {
   choices: Array<{
     letter: string;
     baseValue: number;
+    multiplier?: "2L" | "3L";
   }>;
 };
 
@@ -65,6 +71,7 @@ export type DeterministicShowdownCandidate = {
   staticScore: ReturnType<typeof calculateStaticShowdownScore>;
   tileCount: number;
   baseValueSum: number;
+  highestTileScore: number;
   commonLetterScore: number;
   unusualLetterScore: number;
   uniqueLetterCount: number;
@@ -143,6 +150,9 @@ function sortCandidatesByStrength(
   if (right.tileCount !== left.tileCount) {
     return right.tileCount - left.tileCount;
   }
+  if (right.highestTileScore !== left.highestTileScore) {
+    return right.highestTileScore - left.highestTileScore;
+  }
   if (right.baseValueSum !== left.baseValueSum) {
     return right.baseValueSum - left.baseValueSum;
   }
@@ -166,9 +176,16 @@ function buildCandidate(
     word,
     tiles,
     choiceResolutions,
-    staticScore: calculateStaticShowdownScore(word),
+    staticScore: calculateStaticShowdownScore(tiles),
     tileCount: tiles.length,
     baseValueSum: tiles.reduce((total, tile) => total + tile.baseValue, 0),
+    highestTileScore: Math.max(
+      0,
+      ...tiles.map((tile) =>
+        tile.baseValue *
+        (tile.multiplier === "3L" ? 3 : tile.multiplier === "2L" ? 2 : 1),
+      ),
+    ),
     commonLetterScore: scoreCandidateCommonLetters(word),
     unusualLetterScore: scoreCandidateUnusualLetters(word),
     uniqueLetterCount: new Set(word.split("")).size,
@@ -182,7 +199,7 @@ export function serializeAvailableShowdownTiles(
   source: "hand" | "community";
   cardIndex: number;
   wasChoice: boolean;
-  choices: Array<{ letter: string; baseValue: number }>;
+  choices: Array<{ letter: string; baseValue: number; multiplier?: "2L" | "3L" }>;
 }> {
   return availableTiles.map((tile) => ({
     ref: tile.ref,
@@ -192,6 +209,7 @@ export function serializeAvailableShowdownTiles(
     choices: tile.choices.map((choice) => ({
       letter: choice.letter,
       baseValue: choice.baseValue,
+      multiplier: choice.multiplier,
     })),
   }));
 }
@@ -209,7 +227,11 @@ export function buildAvailableShowdownTiles(
         source: "hand",
         cardIndex: index,
         wasChoice: false,
-        choices: [{ letter: tile.letter.toUpperCase(), baseValue: tile.baseValue }],
+        choices: [{
+          letter: tile.letter.toUpperCase(),
+          baseValue: tile.baseValue,
+          multiplier: tile.multiplier,
+        }],
       });
       return;
     }
@@ -222,6 +244,7 @@ export function buildAvailableShowdownTiles(
       choices: tile.options.map((letter, optionIndex) => ({
         letter: letter.toUpperCase(),
         baseValue: tile.baseValues[optionIndex] ?? tile.baseValues[0] ?? 0,
+        multiplier: tile.multiplier,
       })),
     });
   });
@@ -235,7 +258,11 @@ export function buildAvailableShowdownTiles(
           source: "community",
           cardIndex: index,
           wasChoice: false,
-          choices: [{ letter: tile.letter.toUpperCase(), baseValue: tile.baseValue }],
+          choices: [{
+            letter: tile.letter.toUpperCase(),
+            baseValue: tile.baseValue,
+            multiplier: tile.multiplier,
+          }],
         });
         return;
       }
@@ -248,6 +275,7 @@ export function buildAvailableShowdownTiles(
         choices: tile.options.map((letter, optionIndex) => ({
           letter: letter.toUpperCase(),
           baseValue: tile.baseValues[optionIndex] ?? tile.baseValues[0] ?? 0,
+          multiplier: tile.multiplier,
         })),
       });
     });
@@ -310,6 +338,7 @@ function materializeShowdownTile(
   return {
     letter: matchingChoice.letter,
     baseValue: matchingChoice.baseValue,
+    multiplier: matchingChoice.multiplier,
     source: tile.source,
     cardIndex: tile.cardIndex,
     wasChoice: tile.wasChoice,
@@ -515,6 +544,9 @@ function sortCandidatesForPersonality(
         }
         if (right.tileCount !== left.tileCount) {
           return right.tileCount - left.tileCount;
+        }
+        if (right.highestTileScore !== left.highestTileScore) {
+          return right.highestTileScore - left.highestTileScore;
         }
         if (right.baseValueSum !== left.baseValueSum) {
           return right.baseValueSum - left.baseValueSum;

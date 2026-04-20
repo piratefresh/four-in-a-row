@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   RoomDevTools,
   RoomGameProvider,
@@ -6,22 +7,48 @@ import {
   RoomPageProvider,
   useRoomDetailsController,
 } from "@/components/rooms";
-import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { Spinner } from "@/components/ui/spinner";
+import { ChatSidebar, ChatToggleButton } from "@/components/rooms/chat/ChatSidebar";
+import { useChatSidebar } from "@/components/rooms/chat/useChatSidebar";
 
 export const Route = createFileRoute("/rooms/$code")({
   component: RoomDetailsPage,
 });
 
-function StatusScreen({ message }: { message: string }) {
+function StatusScreen({
+  message,
+  showSpinner = true,
+  actionLabel,
+  onAction,
+}: {
+  message: string;
+  showSpinner?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
-    <div className="relative min-h-screen bg-[#252525]">
-      <LoadingOverlay message={message} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-6 rounded-xl border border-slate-700 bg-slate-800/90 px-12 py-10 text-center shadow-2xl">
+        {showSpinner ? <Spinner size="lg" className="text-slate-300" /> : null}
+        <p className="text-xl font-semibold text-slate-200">{message}</p>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636]"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 function RoomDetailsPage() {
+  const navigate = useNavigate();
   const { code } = Route.useParams();
+  const [isDesktopChatVisible, setIsDesktopChatVisible] = useState(false);
   const {
     session,
     isAuthPending,
@@ -42,6 +69,22 @@ function RoomDetailsPage() {
     onDevFillRoomWithBots,
   } = useRoomDetailsController(code);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const syncDesktopChatVisibility = () => {
+      setIsDesktopChatVisible(mediaQuery.matches);
+    };
+
+    syncDesktopChatVisibility();
+    mediaQuery.addEventListener("change", syncDesktopChatVisibility);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncDesktopChatVisibility);
+    };
+  }, []);
+
+  const chat = useChatSidebar(roomData?.room._id, isDesktopChatVisible);
+
   if (isAuthPending) {
     return <StatusScreen message="Loading..." />;
   }
@@ -56,7 +99,16 @@ function RoomDetailsPage() {
   }
 
   if (roomData === null) {
-    return <StatusScreen message="Room not found." />;
+    return (
+      <StatusScreen
+        message="Room not found."
+        showSpinner={false}
+        actionLabel="Go home"
+        onAction={() => {
+          void navigate({ to: "/" });
+        }}
+      />
+    );
   }
 
   if (!game || displayHands.length === 0) {
@@ -65,7 +117,7 @@ function RoomDetailsPage() {
 
   return (
     <RoomPageProvider value={roomPageContextValue}>
-      <>
+      <div className="relative lg:pr-[400px]">
         <RoomGameProvider value={roomGameContextValue}>
           <RoomHandsBoardV2
             gameId={game._id}
@@ -82,6 +134,7 @@ function RoomDetailsPage() {
             getPlayerName={getPlayerName}
             getPlayerAvatar={getPlayerAvatar}
             getPlayerPersonality={getPlayerPersonality}
+            chatDraft={chat.draftMessage}
           />
         </RoomGameProvider>
 
@@ -98,7 +151,24 @@ function RoomDetailsPage() {
             }}
           />
         ) : null}
-      </>
+
+        {/* Chat toggle button */}
+        <div className="fixed bottom-6 right-6 z-30">
+          <ChatToggleButton
+            onClick={chat.toggleChat}
+            unreadCount={chat.unreadCount}
+          />
+        </div>
+
+        <ChatSidebar
+          isOpen={chat.isOpen}
+          onClose={chat.closeChat}
+          messages={chat.messages}
+          draftMessage={chat.draftMessage}
+          onDraftMessageChange={chat.setDraftMessage}
+          onSendMessage={chat.sendMessage}
+        />
+      </div>
     </RoomPageProvider>
   );
 }

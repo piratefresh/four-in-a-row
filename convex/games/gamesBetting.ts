@@ -2,14 +2,23 @@ import { ConvexError } from "convex/values";
 import { api, internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../_generated/server";
-import { MAX_RAISES_PER_ROUND, RAISE_LADDER } from "../gameState";
+import {
+  MAX_RAISES_PER_ROUND,
+  RAISE_LADDER,
+  TURN_CLOCK_CALLED_DURATION_MS,
+  TURN_CLOCK_GRACE_PERIOD_MS,
+} from "../gameState";
 import { isNvidiaNimConfigured } from "../aiClient";
 import {
   advanceTurn,
   handlePostActionProgression,
   scheduleBotTurnIfNeeded,
 } from "./gamesProgression";
-import { sortHandsByTurnOrder } from "./gamesShared";
+import {
+  AI_DEALER_PLAYER_ID,
+  DEV_BOT_AUTH_PREFIX,
+  sortHandsByTurnOrder,
+} from "./gamesShared";
 
 const BOT_AI_TIMEOUT_MS = 15_000;
 
@@ -34,15 +43,47 @@ function assertActiveBettingGame(game: Doc<"games"> | null) {
 }
 
 async function getCurrentTurnHand(ctx: MutationCtx, game: Doc<"games">, playerId: string) {
+  const { orderedHands, currentTurnHand } = await getOrderedHandsAndCurrentTurnHand(ctx, game);
   if (!playerId) throw new ConvexError({ code: "INVALID_PLAYER_ID", message: "Player ID is required." });
+  if (currentTurnHand.playerId !== playerId) throw new ConvexError({ code: "NOT_YOUR_TURN", message: "It is not your turn." });
+  if (currentTurnHand.hasFolded) throw new ConvexError({ code: "PLAYER_ALREADY_FOLDED", message: "You have already folded." });
+  return { orderedHands, currentTurnHand };
+}
+
+async function getOrderedHandsAndCurrentTurnHand(
+  ctx: MutationCtx,
+  game: Doc<"games">,
+) {
   const hands = await ctx.db.query("playerHands").withIndex("by_game", (q) => q.eq("gameId", game._id)).collect();
   if (hands.length === 0) throw new ConvexError({ code: "HANDS_NOT_FOUND", message: "No hands found for this game." });
   const orderedHands = sortHandsByTurnOrder(hands);
   const currentTurnHand = orderedHands[game.currentPlayerIndex];
   if (!currentTurnHand) throw new ConvexError({ code: "INVALID_TURN_INDEX", message: "Current turn index is out of range." });
-  if (currentTurnHand.playerId !== playerId) throw new ConvexError({ code: "NOT_YOUR_TURN", message: "It is not your turn." });
-  if (currentTurnHand.hasFolded) throw new ConvexError({ code: "PLAYER_ALREADY_FOLDED", message: "You have already folded." });
+  if (currentTurnHand.hasFolded) throw new ConvexError({ code: "PLAYER_ALREADY_FOLDED", message: "Current turn player has already folded." });
   return { orderedHands, currentTurnHand };
+}
+
+async function isAutomatedTurnPlayer(
+  ctx: MutationCtx,
+  game: Doc<"games">,
+  playerId: string,
+) {
+  if (playerId === AI_DEALER_PLAYER_ID) {
+    return true;
+  }
+
+  const normalizedPlayerId = ctx.db.normalizeId("players", playerId);
+  if (!normalizedPlayerId) {
+    return false;
+  }
+
+  const player = await ctx.db.get(normalizedPlayerId);
+  return (
+    !!player &&
+    player.roomId === game.roomId &&
+    player.status === "active" &&
+    player.authUserId.startsWith(DEV_BOT_AUTH_PREFIX)
+  );
 }
 
 export async function checkHandler(ctx: MutationCtx, args: PlayerActionArgs) {
@@ -141,6 +182,130 @@ export async function foldHandler(ctx: MutationCtx, args: PlayerActionArgs) {
   }));
   await handlePostActionProgression(ctx, game as any, updatedHands);
   return { ok: true, action: "fold" as const, playerId };
+}
+
+export async function callClockHandler(
+  ctx: MutationCtx,
+  args: PlayerActionArgs,
+) {
+  const game = assertActiveBettingGame(await ctx.db.get(args.gameId));
+  const callerPlayerId = args.playerId.trim();
+  const { orderedHands, currentTurnHand } = await getOrderedHandsAndCurrentTurnHand(
+    ctx,
+    game,
+  );
+
+  if (!callerPlayerId) {
+    throw new ConvexError({
+      code: "INVALID_PLAYER_ID",
+      message: "Player ID is required.",
+    });
+  }
+
+  const callerHand = orderedHands.find((hand) => hand.playerId === callerPlayerId);
+  if (!callerHand || callerHand.hasFolded) {
+    throw new ConvexError({
+      code: "CLOCK_CALLER_NOT_ACTIVE",
+      message: "Only active players in the hand can call the clock.",
+    });
+  }
+
+  if (currentTurnHand.playerId === callerPlayerId) {
+    throw new ConvexError({
+      code: "CLOCK_CANNOT_TARGET_SELF",
+      message: "You cannot call the clock on your own turn.",
+    });
+  }
+
+  if (await isAutomatedTurnPlayer(ctx, game, currentTurnHand.playerId)) {
+    throw new ConvexError({
+      code: "CLOCK_NOT_AVAILABLE",
+      message: "Automated players cannot be put on the clock.",
+    });
+  }
+
+  const now = Date.now();
+  if (game.turnClockExpiresAt !== undefined) {
+    throw new ConvexError({
+      code: "CLOCK_ALREADY_RUNNING",
+      message: "The clock is already running for this turn.",
+    });
+  }
+
+  if (game.turnStartedAt === undefined) {
+    throw new ConvexError({
+      code: "CLOCK_NOT_AVAILABLE",
+      message: "The current turn has not started yet.",
+    });
+  }
+
+  const elapsed = now - game.turnStartedAt;
+  if (elapsed < TURN_CLOCK_GRACE_PERIOD_MS) {
+    const secondsRemaining = Math.ceil(
+      (TURN_CLOCK_GRACE_PERIOD_MS - elapsed) / 1000,
+    );
+    throw new ConvexError({
+      code: "CLOCK_TOO_EARLY",
+      message: `Clock becomes available in ${secondsRemaining}s.`,
+    });
+  }
+
+  const turnClockExpiresAt = now + TURN_CLOCK_CALLED_DURATION_MS;
+  await ctx.db.patch(game._id, {
+    turnClockCalledAt: now,
+    turnClockExpiresAt,
+    turnClockCallerPlayerId: callerPlayerId,
+    turnClockTargetPlayerId: currentTurnHand.playerId,
+    updatedAt: now,
+  });
+
+  await ctx.scheduler.runAfter(
+    TURN_CLOCK_CALLED_DURATION_MS,
+    (internal as typeof internal).games.internalResolveExpiredTurnClock,
+    {
+      gameId: game._id,
+      playerId: currentTurnHand.playerId,
+      turnClockExpiresAt,
+    },
+  );
+
+  return {
+    ok: true,
+    callerPlayerId,
+    targetPlayerId: currentTurnHand.playerId,
+    turnClockExpiresAt,
+  };
+}
+
+export async function internalResolveExpiredTurnClockHandler(
+  ctx: MutationCtx,
+  args: PlayerActionArgs & { turnClockExpiresAt: number },
+) {
+  const game = await ctx.db.get(args.gameId);
+  if (
+    !game ||
+    game.status !== "active" ||
+    game.stage === "final" ||
+    game.stage === "showdown" ||
+    game.turnClockExpiresAt !== args.turnClockExpiresAt ||
+    game.turnClockTargetPlayerId !== args.playerId
+  ) {
+    return { ok: false, reason: "Clock expired against a stale turn." };
+  }
+
+  const { currentTurnHand } = await getOrderedHandsAndCurrentTurnHand(ctx, game);
+  if (currentTurnHand.playerId !== args.playerId) {
+    return { ok: false, reason: "Turn changed before the clock resolved." };
+  }
+
+  const amountToCall = game.currentBet - currentTurnHand.betThisRound;
+  if (amountToCall <= 0) {
+    await checkHandler(ctx, { gameId: args.gameId, playerId: args.playerId });
+    return { ok: true, action: "check" as const, playerId: args.playerId };
+  }
+
+  await foldHandler(ctx, { gameId: args.gameId, playerId: args.playerId });
+  return { ok: true, action: "fold" as const, playerId: args.playerId };
 }
 
 export async function internalProcessBotTurnHandler(

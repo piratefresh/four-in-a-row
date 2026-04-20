@@ -36,10 +36,13 @@ export function RaiseAmountSlider({
           min={0}
           max={maxIndex}
           step={1}
-          value={selectedIndex}
+          value={[selectedIndex]}
           disabled={disabled}
           onValueChange={(nextIndex) => {
-            const nextAmount = options[nextIndex];
+            const resolvedIndex = Array.isArray(nextIndex)
+              ? (nextIndex[0] ?? 0)
+              : nextIndex;
+            const nextAmount = options[resolvedIndex];
             if (nextAmount !== undefined) {
               onChange(nextAmount);
             }

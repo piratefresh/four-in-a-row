@@ -23,6 +23,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource/noto-serif": "^5.2.9",
+    "@huggingface/transformers": "^4.1.0",
     "@openrouter/ai-sdk-provider": "^2.2.3",
     "@tailwindcss/vite": "^4.0.6",
     "@tanstack/ai": "^0.10.2",

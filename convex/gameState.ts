@@ -42,11 +42,13 @@ export type GameDeckTile =
       kind: "single";
       letter: string;
       baseValue: number;
+      multiplier?: GameMultiplier;
     }
   | {
       kind: "choice";
       options: string[]; // exactly 2 letters
       baseValues: number[]; // corresponding values for each option
+      multiplier?: GameMultiplier;
     };
 
 export const INITIAL_HAND_SIZE = 2;
@@ -62,6 +64,8 @@ export const DECK_SIZE = 60;
 export const CHOICE_TILE_COUNT = 14;
 export const CHOICE_TOTAL = CHOICE_TILE_COUNT;
 export const SINGLE_TOTAL = DECK_SIZE - CHOICE_TOTAL; // 46
+export const DOUBLE_LETTER_TILE_RATE = 0.15;
+export const TRIPLE_LETTER_TILE_RATE = 0.05;
 
 // Two-letter choice tile options aligned with the current rules.
 export const CHOICE_TILE_OPTIONS: Array<[string, string]> = [
@@ -90,6 +94,8 @@ export const MAX_RAISES_PER_ROUND = 3;
 
 // Showdown timer (1 minute)
 export const SHOWDOWN_TIMER_MS = 60000;
+export const TURN_CLOCK_GRACE_PERIOD_MS = 60000;
+export const TURN_CLOCK_CALLED_DURATION_MS = 30000;
 
 // Speed bonus thresholds (aligned with 1-minute showdown timer)
 export const SPEED_BONUS_TIER_1_SECONDS = 10; // +10 points
@@ -133,11 +139,13 @@ export const gameDeckTileValidator = v.union(
     kind: v.literal("single"),
     letter: v.string(),
     baseValue: v.number(),
+    multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
   }),
   v.object({
     kind: v.literal("choice"),
     options: v.array(v.string()),
     baseValues: v.array(v.number()),
+    multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
   }),
 );
 
@@ -159,6 +167,11 @@ export function createInitialGameDocument(
     bigBlindIndex: 2,
     raisesThisRound: 0,
     status: "waiting" as const,
+    turnStartedAt: undefined,
+    turnClockCalledAt: undefined,
+    turnClockExpiresAt: undefined,
+    turnClockCallerPlayerId: undefined,
+    turnClockTargetPlayerId: undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -170,30 +183,30 @@ const LETTER_DISTRIBUTION: Array<{
   count: number;
 }> = [
   { letter: "A", baseValue: 1, count: 9 },
-  { letter: "B", baseValue: 3, count: 2 },
-  { letter: "C", baseValue: 3, count: 2 },
-  { letter: "D", baseValue: 2, count: 4 },
+  { letter: "B", baseValue: 4, count: 2 },
+  { letter: "C", baseValue: 4, count: 2 },
+  { letter: "D", baseValue: 3, count: 4 },
   { letter: "E", baseValue: 1, count: 12 },
-  { letter: "F", baseValue: 4, count: 2 },
-  { letter: "G", baseValue: 2, count: 3 },
-  { letter: "H", baseValue: 4, count: 2 },
+  { letter: "F", baseValue: 5, count: 2 },
+  { letter: "G", baseValue: 3, count: 3 },
+  { letter: "H", baseValue: 5, count: 2 },
   { letter: "I", baseValue: 1, count: 9 },
   { letter: "J", baseValue: 8, count: 1 },
   { letter: "K", baseValue: 5, count: 1 },
-  { letter: "L", baseValue: 1, count: 4 },
-  { letter: "M", baseValue: 3, count: 2 },
-  { letter: "N", baseValue: 1, count: 6 },
+  { letter: "L", baseValue: 2, count: 4 },
+  { letter: "M", baseValue: 4, count: 2 },
+  { letter: "N", baseValue: 2, count: 6 },
   { letter: "O", baseValue: 1, count: 8 },
-  { letter: "P", baseValue: 3, count: 2 },
+  { letter: "P", baseValue: 4, count: 2 },
   { letter: "Q", baseValue: 10, count: 1 },
-  { letter: "R", baseValue: 1, count: 6 },
-  { letter: "S", baseValue: 1, count: 4 },
-  { letter: "T", baseValue: 1, count: 6 },
+  { letter: "R", baseValue: 2, count: 6 },
+  { letter: "S", baseValue: 2, count: 4 },
+  { letter: "T", baseValue: 2, count: 6 },
   { letter: "U", baseValue: 1, count: 4 },
-  { letter: "V", baseValue: 4, count: 2 },
-  { letter: "W", baseValue: 4, count: 2 },
+  { letter: "V", baseValue: 5, count: 2 },
+  { letter: "W", baseValue: 5, count: 2 },
   { letter: "X", baseValue: 8, count: 1 },
-  { letter: "Y", baseValue: 4, count: 2 },
+  { letter: "Y", baseValue: 5, count: 2 },
   { letter: "Z", baseValue: 10, count: 1 },
 ];
 
@@ -203,10 +216,105 @@ function randomIndex(maxExclusive: number) {
   return bytes[0] % maxExclusive;
 }
 
+function randomFloat() {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  return bytes[0] / 0xffffffff;
+}
+
 // Helper function to get base value for a letter
 function getLetterBaseValue(letter: string): number {
   const entry = LETTER_DISTRIBUTION.find((e) => e.letter === letter);
   return entry?.baseValue ?? 1;
+}
+
+function getTilePeakBaseValue(tile: GameDeckTile): number {
+  return tile.kind === "single"
+    ? tile.baseValue
+    : Math.max(...tile.baseValues);
+}
+
+function getMultiplierWeight(tile: GameDeckTile): number {
+  const peakBaseValue = getTilePeakBaseValue(tile);
+  const highValueBoost = peakBaseValue >= 5 ? 2.5 : 1;
+  return Math.max(1, peakBaseValue * highValueBoost);
+}
+
+function pickWeightedTileIndexes(
+  tiles: GameDeckTile[],
+  count: number,
+  excluded = new Set<number>(),
+) {
+  const selected: number[] = [];
+  const blocked = new Set(excluded);
+
+  while (selected.length < count) {
+    const candidates = tiles
+      .map((tile, index) => ({
+        index,
+        weight: getMultiplierWeight(tile),
+      }))
+      .filter((candidate) => !blocked.has(candidate.index));
+
+    if (candidates.length === 0) {
+      break;
+    }
+
+    const totalWeight = candidates.reduce(
+      (sum, candidate) => sum + candidate.weight,
+      0,
+    );
+    let cursor = randomFloat() * totalWeight;
+    let chosen = candidates[candidates.length - 1]!;
+
+    for (const candidate of candidates) {
+      cursor -= candidate.weight;
+      if (cursor <= 0) {
+        chosen = candidate;
+        break;
+      }
+    }
+
+    selected.push(chosen.index);
+    blocked.add(chosen.index);
+  }
+
+  return selected;
+}
+
+function applyDeckMultipliers(deck: GameDeckTile[]): GameDeckTile[] {
+  const nextDeck = deck.map((tile) => ({ ...tile }));
+  const tripleTileCount = Math.min(
+    nextDeck.length,
+    Math.round(nextDeck.length * TRIPLE_LETTER_TILE_RATE),
+  );
+  const tripleIndexes = pickWeightedTileIndexes(nextDeck, tripleTileCount);
+  const reservedIndexes = new Set(tripleIndexes);
+  const doubleTileCount = Math.min(
+    nextDeck.length - reservedIndexes.size,
+    Math.round(nextDeck.length * DOUBLE_LETTER_TILE_RATE),
+  );
+  const doubleIndexes = pickWeightedTileIndexes(
+    nextDeck,
+    doubleTileCount,
+    reservedIndexes,
+  );
+
+  for (const index of tripleIndexes) {
+    nextDeck[index] = {
+      ...nextDeck[index]!,
+      multiplier: "3L",
+    };
+  }
+
+  for (const index of doubleIndexes) {
+    nextDeck[index] = {
+      ...nextDeck[index]!,
+      multiplier: "2L",
+    };
+  }
+
+  return nextDeck;
 }
 
 /**
@@ -304,13 +412,18 @@ export function createShuffledDeck(config?: {
     addedSingleCards++;
   }
 
+  const deckWithMultipliers = applyDeckMultipliers(deck);
+
   // Shuffle the deck
-  for (let i = deck.length - 1; i > 0; i--) {
+  for (let i = deckWithMultipliers.length - 1; i > 0; i--) {
     const j = randomIndex(i + 1);
-    [deck[i], deck[j]] = [deck[j], deck[i]];
+    [deckWithMultipliers[i], deckWithMultipliers[j]] = [
+      deckWithMultipliers[j],
+      deckWithMultipliers[i],
+    ];
   }
 
-  return deck;
+  return deckWithMultipliers;
 }
 
 export function getNextStage(stage: GameStage): GameStage | null {

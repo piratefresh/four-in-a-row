@@ -152,6 +152,7 @@ export function RoomLobbyPanel() {
                       showdownResults={showdownResults}
                       playerId={playerId}
                       getPlayerName={getPlayerName}
+                      getPlayerAvatar={meta.getPlayerAvatar}
                     />
                   ) : null}
                 </>

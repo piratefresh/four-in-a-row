@@ -15,6 +15,10 @@ export function HomeModeMenu({
   onStartOffline,
   onResumeRoom,
 }: HomeModeMenuProps) {
+  const offlineCtaLabel = isStartingOffline
+    ? "Setting up table..."
+    : "Start offline game";
+
   return (
     <main className="relative overflow-hidden bg-[#07120f] text-white flex flex-1">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(214,171,76,0.2),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(18,95,71,0.26),transparent_34%),linear-gradient(160deg,#0b1712_0%,#050806_54%,#020303_100%)]" />
@@ -32,6 +36,16 @@ export function HomeModeMenu({
         </div>
 
         <div className="grid flex-1 content-center gap-3 py-4 sm:gap-4 sm:py-8 lg:grid-cols-2">
+          {activeRoomCode ? (
+            <button
+              type="button"
+              onClick={onResumeRoom}
+              className="inline-flex items-center rounded-full border border-white/12 bg-black/25 px-4 py-2 text-sm font-medium text-[#f1eee4] transition-colors hover:border-[#d5b35f]/35 hover:text-white"
+            >
+              Resume playing in room {activeRoomCode}
+            </button>
+          ) : null}
+
           <button
             type="button"
             onClick={onSelectOnline}
@@ -53,12 +67,7 @@ export function HomeModeMenu({
             </div>
           </button>
 
-          <button
-            type="button"
-            onClick={onStartOffline}
-            disabled={isStartingOffline}
-            className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(145deg,rgba(49,28,12,0.94),rgba(11,10,8,0.98))] p-5 text-left shadow-[0_24px_60px_rgba(0,0,0,0.4)] transition-transform duration-200 hover:-translate-y-1 hover:border-[#f1a15c]/40 disabled:cursor-not-allowed disabled:opacity-60 sm:p-6"
-          >
+          <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(145deg,rgba(49,28,12,0.94),rgba(11,10,8,0.98))] p-5 text-left shadow-[0_24px_60px_rgba(0,0,0,0.4)] sm:p-6">
             <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-[#f6a96d]/80 to-transparent opacity-80" />
             <p className="text-[11px] uppercase tracking-[0.28em] text-[#f2a165]">
               Offline Play
@@ -67,13 +76,20 @@ export function HomeModeMenu({
               Quick start vs bots
             </h2>
             <p className="mt-2 max-w-md text-sm leading-5 text-[#d6c5b8] sm:mt-3 sm:leading-6">
-              Create a fresh room, fill the table with AI opponents, and drop
-              straight into a playable hand.
+              Create a fresh room, fill the table with bots, and drop straight
+              into a playable hand.
             </p>
-            <div className="mt-5 inline-flex items-center rounded-full border border-[#f2a165]/35 px-4 py-2 text-sm font-medium text-[#f4cfb0] sm:mt-8">
-              {isStartingOffline ? "Setting up table..." : "Start offline game"}
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 sm:mt-8">
+              <button
+                type="button"
+                onClick={onStartOffline}
+                disabled={isStartingOffline}
+                className="inline-flex items-center rounded-full border border-[#f2a165]/35 px-4 py-2 text-sm font-medium text-[#f4cfb0] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#f1a15c]/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {offlineCtaLabel}
+              </button>
             </div>
-          </button>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -81,16 +97,6 @@ export function HomeModeMenu({
             <div className="max-w-2xl rounded-2xl border border-cyan-500/15 bg-cyan-950/25 p-3 text-sm text-cyan-100">
               {statusMessage}
             </div>
-          ) : null}
-
-          {activeRoomCode ? (
-            <button
-              type="button"
-              onClick={onResumeRoom}
-              className="inline-flex items-center rounded-full border border-white/12 bg-black/25 px-4 py-2 text-sm font-medium text-[#f1eee4] transition-colors hover:border-[#d5b35f]/35 hover:text-white"
-            >
-              Resume room {activeRoomCode}
-            </button>
           ) : null}
         </div>
       </div>

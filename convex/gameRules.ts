@@ -34,11 +34,11 @@ Players receive private letter tiles and share community tiles, betting on their
   - Preferred distribution: 1 private choice tile and 1-2 community choice tiles
 
 ## Letter Values (Point System)
-- **1 point**: A, E, I, O, U (vowels), R, S, T, L, N
-- **2 points**: D, G
-- **3 points**: B, C, M, P
-- **4 points**: F, H, V, W, Y
-- **5 points**: K
+- **1 point**: A, E, I, O, U
+- **2 points**: R, S, T, L, N
+- **3 points**: D, G
+- **4 points**: B, C, M, P
+- **5 points**: F, H, V, W, Y, K
 - **8 points**: J, X
 - **10 points**: Q, Z
 
@@ -46,11 +46,7 @@ Players receive private letter tiles and share community tiles, betting on their
 1. **Base Score**: Sum all letter values
 2. **Multipliers**: Some tiles have 2L (double letter) or 3L (triple letter) bonuses
 3. **Full Rack Bonus**: Using all 7 tiles = +10 bonus points
-4. **Speed Bonus** (Showdown only):
-   - Submit within 10 seconds: +10 points
-   - Submit within 20 seconds: +5 points
-   - After 20 seconds: 0 bonus
-5. **Valid Word Bonus**: +5 points for dictionary-valid word
+4. **No timer bonus**: Speed does not change score
 
 ## Word Requirements
 - Must be 2-7 letters long
@@ -145,10 +141,9 @@ export function getStageStrategy(stage: GameStage): string {
     case "showdown":
       return `Showdown Strategy (60-second timer):
 - Build the highest-scoring valid word possible
-- Prioritize longer words (more base points)
+- Prioritize high-value letters and multiplier tiles
 - Use high-value letters strategically
 - If you can use all 7 tiles, do it! (+10 bonus)
-- Submit quickly for speed bonus (+10 within 10s, +5 within 20s)
 - Verify word is valid before submitting (0 points if invalid)`;
   }
 }
@@ -165,8 +160,6 @@ export function estimateHandStrength(
 
   // Count vowels and consonants
   const vowels = allTiles.filter(t => "AEIOU".includes(t.letter)).length;
-  const consonants = allTiles.length - vowels;
-
   // Calculate average tile value
   const avgValue = allTiles.reduce((sum, t) => sum + t.baseValue, 0) / allTiles.length;
 

@@ -10,11 +10,12 @@ import type { BuilderTile } from "./RoomHandsBoard.types";
 import { getLetterValue } from "../../../lib/letterValues";
 
 const MOBILE_COMPACT_TILE_CLASS =
-  "h-[60px] w-[45px] text-[2rem] sm:h-28 sm:w-28 sm:text-6xl";
+  "h-[52px] w-[52px] text-[2rem] sm:h-28 sm:w-28 sm:text-6xl";
 
 type RoomBottomPanelProps = {
   isPhase1: boolean;
   mySubmission: any;
+  canRevealSubmittedWords: boolean;
   showReveal: boolean;
   builderTiles: BuilderTile[];
   choiceSelections: Record<string, string>;
@@ -40,6 +41,21 @@ type AnimatedBuilderTileProps = {
   shuffleTick: number;
 };
 
+function HiddenBuilderTileSlot({ tileKey }: { tileKey: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="text-[9px] leading-none opacity-0 sm:text-xs">-</div>
+      <WordTile
+        key={tileKey}
+        showValue={false}
+        variant="hidden"
+        size="lg"
+        className={MOBILE_COMPACT_TILE_CLASS}
+      />
+    </div>
+  );
+}
+
 function getShuffleTilt(index: number) {
   const direction = index % 2 === 0 ? 1 : -1;
   return direction * (4 + (index % 3) * 1.5);
@@ -55,6 +71,13 @@ function AnimatedBuilderTile({
   shuffleTick,
 }: AnimatedBuilderTileProps) {
   const controls = useAnimationControls();
+  const choiceLetters = Array.isArray(tile.letters) ? tile.letters : [];
+  const showChoicePicker =
+    !tile.disabled && tile.isChoice && choiceLetters.length > 0;
+  const hasSelectedChoice = Boolean(choiceSelections[tile.id]);
+  const reservesChoicePickerSpace = Boolean(
+    tile.isChoice && choiceLetters.length > 0,
+  );
 
   useEffect(() => {
     if (shuffleTick === 0) return;
@@ -73,31 +96,31 @@ function AnimatedBuilderTile({
 
   return (
     <motion.div
-      layout
       initial={false}
       animate={controls}
-      transition={{ layout: { duration: 0.34, ease: "easeInOut" } }}
-      className={`flex flex-col items-center gap-2 transition-opacity duration-300 ${
-        isValidating && tile.disabled ? "opacity-30" : "opacity-100"
-      }`}
+      className={`relative flex flex-col items-center transition-opacity duration-300 ${
+        reservesChoicePickerSpace ? "pt-[56px] sm:pt-[68px]" : ""
+      } ${isValidating && tile.disabled ? "opacity-30" : "opacity-100"}`}
     >
-      {!tile.disabled &&
-        tile.isChoice &&
-        tile.letters &&
-        !choiceSelections[tile.id] && (
-          <div className="flex gap-1.5 rounded-lg border-2 border-[#3b82f6] bg-[#0a0a0a]/90 px-2 py-1.5 shadow-md backdrop-blur-sm sm:px-3 sm:py-2">
-            {tile.letters.map((letter, optionIndex) => (
-              <button
-                key={letter}
-                onClick={() => handleChoiceSelect(tile.id, letter)}
-                className="min-h-[36px] rounded-lg bg-slate-700 px-2 py-1 text-sm font-bold text-white transition-all hover:bg-[#3b82f6] sm:px-3 sm:py-1.5 sm:text-base"
-                title={`Select ${letter} (value: ${getLetterValue(letter) ?? tile.baseValues?.[optionIndex] ?? 1})`}
-              >
-                {letter}
-              </button>
-            ))}
-          </div>
-        )}
+      {showChoicePicker && (
+        <div
+          className={`absolute left-1/2 top-0 flex -translate-x-1/2 gap-1.5 rounded-lg border-2 border-[#3b82f6] bg-[#0a0a0a]/90 px-2 py-1.5 shadow-md backdrop-blur-sm sm:px-3 sm:py-2 ${
+            hasSelectedChoice ? "pointer-events-none opacity-0" : "opacity-100"
+          }`}
+        >
+          {choiceLetters.map((letter, optionIndex) => (
+            <button
+              key={letter}
+              onClick={() => handleChoiceSelect(tile.id, letter)}
+              className="min-h-[36px] rounded-lg bg-slate-700 px-2 py-1 text-sm font-bold text-white transition-all hover:bg-[#3b82f6] sm:px-3 sm:py-1.5 sm:text-base"
+              title={`Select ${letter} (value: ${getLetterValue(letter) ?? tile.baseValues?.[optionIndex] ?? 1})`}
+              tabIndex={hasSelectedChoice ? -1 : 0}
+            >
+              {letter}
+            </button>
+          ))}
+        </div>
+      )}
       {renderBuilderTile(tile)}
     </motion.div>
   );
@@ -123,6 +146,7 @@ function getHiddenTileCount(
 export function RoomBottomPanel({
   isPhase1,
   mySubmission,
+  canRevealSubmittedWords,
   showReveal,
   builderTiles,
   choiceSelections,
@@ -167,9 +191,18 @@ export function RoomBottomPanel({
               You are no longer eligible to submit a word
             </div>
           </div>
+        ) : mySubmission && !canRevealSubmittedWords ? (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <div className="text-lg font-bold text-[#f1eee7] sm:text-2xl">
+              Word submitted
+            </div>
+            <div className="text-sm text-[#d7d1bf] sm:text-base">
+              Waiting for the showdown reveal.
+            </div>
+          </div>
         ) : mySubmission ? (
           <div className="flex flex-col items-center gap-4">
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4">
+            <div className="flex flex-wrap items-start justify-center gap-1">
               {mySubmission.tiles.map((tile: any, index: number) => (
                 <div
                   key={`revealed-${index}`}
@@ -182,14 +215,24 @@ export function RoomBottomPanel({
                     transitionDelay: showReveal ? `${index * 100}ms` : "0ms",
                   }}
                 >
-                  <WordTile
-                    letter={tile.letter}
-                    baseValue={tile.baseValue}
-                    showValue={true}
-                    size="lg"
-                    className={MOBILE_COMPACT_TILE_CLASS}
-                    variant="default"
-                  />
+                  <div className="flex flex-col items-center gap-1">
+                    {tile.multiplier ? (
+                      <div className="text-[9px] font-bold leading-none text-white/80 sm:text-xs">
+                        {tile.multiplier === "2L" ? "2x" : "3x"}
+                      </div>
+                    ) : (
+                      <div className="text-[9px] leading-none sm:text-xs opacity-0">-</div>
+                    )}
+                    <WordTile
+                      letter={tile.letter}
+                      baseValue={tile.baseValue}
+                      multiplier={tile.multiplier}
+                      showValue={true}
+                      size="lg"
+                      className={MOBILE_COMPACT_TILE_CLASS}
+                      variant="default"
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -233,7 +276,7 @@ export function RoomBottomPanel({
               items={builderTiles.map((tile) => tile.id)}
               strategy={horizontalListSortingStrategy}
             >
-              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-6 [@media(max-height:460px)]:gap-1.5">
+              <div className="flex flex-wrap items-end justify-center gap-1 [@media(max-height:460px)]:gap-1.5">
                 {builderTiles.map((tile, index) => (
                   <AnimatedBuilderTile
                     key={tile.id}
@@ -247,10 +290,9 @@ export function RoomBottomPanel({
                   />
                 ))}
                 {Array.from({ length: hiddenTileCount }).map((_, index) => (
-                  <WordTile
+                  <HiddenBuilderTileSlot
                     key={`bottom-stage-hidden-${gameStage}-${index}`}
-                    showValue={false}
-                    variant="hidden"
+                    tileKey={`bottom-stage-hidden-${gameStage}-${index}`}
                   />
                 ))}
               </div>
@@ -260,11 +302,6 @@ export function RoomBottomPanel({
               <div className="text-center text-sm font-bold tracking-[0.2em] text-white sm:text-xl">
                 {wordPreview || " "}
               </div>
-              {hasUnresolvedChoices && (
-                <div className="text-[10px] italic text-[#f59e0b] sm:text-xs">
-                  Please select a letter for each choice card
-                </div>
-              )}
               {validationError && (
                 <div className="text-xs font-medium text-[#ef4444] sm:text-sm">
                   {validationError}

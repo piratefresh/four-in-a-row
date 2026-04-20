@@ -36,7 +36,7 @@ export function BlankRoomPhase({
 }: BlankRoomPhaseProps) {
   return (
     <div className="relative z-10 flex items-center justify-center px-4">
-      <div className="relative flex min-h-[420px] min-w-[360px] items-center justify-center">
+      <div className="relative flex min-h-[420px] min-w-[360px] items-center justify-center lg:min-h-[620px] lg:min-w-[460px] xl:min-h-[700px] xl:min-w-[520px]">
         <RoomTable
           isPhase1={false}
           pot={0}

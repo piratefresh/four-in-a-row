@@ -41,7 +41,9 @@ type RoomPageState = {
   canCheck: boolean;
   canCall: boolean;
   canRaise: boolean;
+  canCallClock: boolean;
   callAmount: number;
+  turnClockTimeRemaining: number | null;
   effectiveNextRaiseLevel: number | undefined;
   hasDevTools: boolean;
   isDevRejoining: boolean;
@@ -56,12 +58,14 @@ type RoomPageActions = {
   call: () => Promise<void>;
   raise: () => Promise<void>;
   fold: () => Promise<void>;
+  callClock: () => Promise<void>;
   devRejoinRoom?: () => Promise<void>;
   devFillRoomWithBots?: () => Promise<void>;
 };
 
 type RoomPageMeta = {
   getPlayerName: (playerId: string) => string;
+  getPlayerAvatar: (playerId: string) => string | null;
   getPlayerPersonality: (playerId: string) => string | null;
 };
 

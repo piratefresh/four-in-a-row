@@ -1,11 +1,13 @@
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 type Submission = {
   playerId: string;
   word: string | null;
   score: number;
   scoreBreakdown: {
-    lengthPoints: number;
-    speedBonus: number;
-    validWordBonus: number;
+    basePoints: number;
+    multiplierBonus: number;
+    fullRackBonus: number;
   } | null;
   status: "submitted" | "forfeited" | "no-submission";
 };
@@ -16,9 +18,9 @@ type ShowdownResults = {
   winningWord?: string | null;
   winningScore?: number;
   winningScoreBreakdown?: {
-    lengthPoints: number;
-    speedBonus: number;
-    validWordBonus: number;
+    basePoints: number;
+    multiplierBonus: number;
+    fullRackBonus: number;
   } | null;
   allSubmissions?: Submission[];
 };
@@ -27,10 +29,12 @@ export function ShowdownResultsPanel({
   showdownResults,
   playerId,
   getPlayerName,
+  getPlayerAvatar,
 }: {
   showdownResults: ShowdownResults;
   playerId: string | null;
   getPlayerName: (id: string) => string;
+  getPlayerAvatar: (id: string) => string | null;
 }) {
   return (
     <div className="mb-3 rounded-md border border-purple-700 bg-purple-950/40 p-4">
@@ -56,15 +60,15 @@ export function ShowdownResultsPanel({
                 {showdownResults.winningScoreBreakdown && (
                   <div className="text-xs text-slate-300">
                     <p>
-                      Length Points:{" "}
-                      {showdownResults.winningScoreBreakdown.lengthPoints}
+                      Base Points:{" "}
+                      {showdownResults.winningScoreBreakdown.basePoints}
                     </p>
                     <p>
-                      Speed Bonus: {showdownResults.winningScoreBreakdown.speedBonus}
+                      Multiplier Bonus: {showdownResults.winningScoreBreakdown.multiplierBonus}
                     </p>
                     <p>
-                      Valid Word Bonus:{" "}
-                      {showdownResults.winningScoreBreakdown.validWordBonus}
+                      Full Rack Bonus:{" "}
+                      {showdownResults.winningScoreBreakdown.fullRackBonus}
                     </p>
                   </div>
                 )}
@@ -96,22 +100,33 @@ export function ShowdownResultsPanel({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <div>
-                          <span className="font-semibold text-slate-200">
-                            {submission.playerId === playerId
-                              ? "You"
-                              : getPlayerName(submission.playerId)}
-                          </span>
-                          <span className="mx-2 text-slate-400">|</span>
-                          {isForfeited ? (
-                            <span className="italic text-slate-500">
-                              Forfeited
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8 border border-white/10">
+                            <AvatarImage
+                              src={getPlayerAvatar(submission.playerId) ?? undefined}
+                              alt={`${getPlayerName(submission.playerId)} avatar`}
+                            />
+                            <AvatarFallback className="bg-slate-700 text-xs font-semibold text-white">
+                              {getInitials(getPlayerName(submission.playerId))}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <span className="font-semibold text-slate-200">
+                              {submission.playerId === playerId
+                                ? "You"
+                                : getPlayerName(submission.playerId)}
                             </span>
-                          ) : (
-                            <span className="font-bold text-white">
-                              {submission.word?.toUpperCase()}
-                            </span>
-                          )}
+                            <span className="mx-2 text-slate-400">|</span>
+                            {isForfeited ? (
+                              <span className="italic text-slate-500">
+                                Forfeited
+                              </span>
+                            ) : (
+                              <span className="font-bold text-white">
+                                {submission.word?.toUpperCase()}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <span className={`font-bold ${isForfeited ? "text-slate-600" : "text-cyan-300"}`}>
                           {submission.score} pts
@@ -119,9 +134,9 @@ export function ShowdownResultsPanel({
                       </div>
                       {!isForfeited && submission.scoreBreakdown && (
                         <div className="mt-1 text-xs text-slate-400">
-                          Length: {submission.scoreBreakdown.lengthPoints} | Speed:{" "}
-                          {submission.scoreBreakdown.speedBonus} | Valid:{" "}
-                          {submission.scoreBreakdown.validWordBonus}
+                          Base: {submission.scoreBreakdown.basePoints} | Mult:{" "}
+                          {submission.scoreBreakdown.multiplierBonus} | Rack:{" "}
+                          {submission.scoreBreakdown.fullRackBonus}
                         </div>
                       )}
                     </div>
@@ -136,4 +151,8 @@ export function ShowdownResultsPanel({
       )}
     </div>
   );
+}
+
+function getInitials(name: string) {
+  return name.trim()[0]?.toUpperCase() ?? "?";
 }

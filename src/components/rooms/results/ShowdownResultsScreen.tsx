@@ -1,8 +1,10 @@
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getLetterValue } from "@/lib/letterValues";
 
 type SubmissionTile = {
   letter: string;
   baseValue: number;
+  multiplier?: "2L" | "3L";
   source: "hand" | "community";
   cardIndex?: number;
   wasChoice?: boolean;
@@ -14,9 +16,9 @@ type Submission = {
   tiles?: SubmissionTile[];
   score: number;
   scoreBreakdown: {
-    lengthPoints: number;
-    speedBonus: number;
-    validWordBonus: number;
+    basePoints: number;
+    multiplierBonus: number;
+    fullRackBonus: number;
   } | null;
   status: "submitted" | "forfeited" | "no-submission";
 };
@@ -30,11 +32,11 @@ type ShowdownResults = {
 };
 
 type ShowdownResultsScreenProps = {
-  roomCode: string;
   pot: number;
   playerId: string | null;
   showdownResults: ShowdownResults;
   getPlayerName: (id: string) => string;
+  getPlayerAvatar: (id: string) => string | null;
   onNextHand: () => Promise<void> | void;
   isStartingNextHand: boolean;
   nextHandError: string | null;
@@ -48,11 +50,11 @@ const PLAYER_GRADIENTS = [
 ] as const;
 
 export function ShowdownResultsScreen({
-  roomCode,
   pot,
   playerId,
   showdownResults,
   getPlayerName,
+  getPlayerAvatar,
   onNextHand,
   isStartingNextHand,
   nextHandError,
@@ -79,6 +81,21 @@ export function ShowdownResultsScreen({
           </p>
         </header>
 
+        <button
+          type="button"
+          onClick={() => {
+            void onNextHand();
+          }}
+          disabled={isStartingNextHand}
+          className="mt-6 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-5 text-lg font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {isStartingNextHand ? "Starting new room..." : "Start a new room"}
+        </button>
+
+        <p className="mt-3 text-center text-sm text-white/52">
+          This leaves the finished table untouched and opens a fresh room for the next hand.
+        </p>
+
         <div className="mt-8 flex-1 space-y-3">
           {submissions.map((submission, index) => (
             <ShowdownSubmissionCard
@@ -91,6 +108,7 @@ export function ShowdownResultsScreen({
                   ? `${getPlayerName(submission.playerId)} (you)`
                   : getPlayerName(submission.playerId)
               }
+              avatarUrl={getPlayerAvatar(submission.playerId)}
               gradientClassName={
                 PLAYER_GRADIENTS[index % PLAYER_GRADIENTS.length]
               }
@@ -101,17 +119,6 @@ export function ShowdownResultsScreen({
         {nextHandError ? (
           <p className="mb-3 text-sm text-rose-300">{nextHandError}</p>
         ) : null}
-
-        <button
-          type="button"
-          onClick={() => {
-            void onNextHand();
-          }}
-          disabled={isStartingNextHand}
-          className="mt-6 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-5 text-lg font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {isStartingNextHand ? "Starting next hand..." : "Next hand →"}
-        </button>
       </div>
     </div>
   );
@@ -122,12 +129,14 @@ function ShowdownSubmissionCard({
   isWinner,
   isCurrentPlayer,
   playerName,
+  avatarUrl,
   gradientClassName,
 }: {
   submission: Submission;
   isWinner: boolean;
   isCurrentPlayer: boolean;
   playerName: string;
+  avatarUrl?: string | null;
   gradientClassName: string;
 }) {
   const displayWord =
@@ -147,11 +156,17 @@ function ShowdownSubmissionCard({
       }`}
     >
       <div className="flex items-start gap-3">
-        <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradientClassName} text-base font-bold text-white shadow-[0_8px_20px_rgba(0,0,0,0.35)]`}
-        >
-          {getInitials(playerName)}
-        </div>
+        <Avatar className="h-11 w-11 shrink-0 border border-white/10 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
+          <AvatarImage
+            src={avatarUrl ?? undefined}
+            alt={`${playerName} avatar`}
+          />
+          <AvatarFallback
+            className={`bg-gradient-to-br ${gradientClassName} text-base font-bold text-white`}
+          >
+            {getInitials(playerName)}
+          </AvatarFallback>
+        </Avatar>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
@@ -171,6 +186,16 @@ function ShowdownSubmissionCard({
                   <span className="ml-2 text-[#d8b84a]">YOU</span>
                 ) : null}
               </div>
+              {submission.status === "submitted" &&
+              submission.scoreBreakdown ? (
+                <div className="mt-1 text-[11px] tracking-[0.08em] text-white/42">
+                  Base {submission.scoreBreakdown.basePoints}
+                  {" • "}
+                  Mult {submission.scoreBreakdown.multiplierBonus}
+                  {" • "}
+                  Rack {submission.scoreBreakdown.fullRackBonus}
+                </div>
+              ) : null}
             </div>
 
             <div className="shrink-0 text-right">
@@ -224,6 +249,17 @@ function ShowdownLetterTile({ tile }: { tile: SubmissionTile }) {
         }`}
       >
         {tile.letter.toUpperCase()}
+        {tile.multiplier ? (
+          <span
+            className={`absolute left-0.5 top-0.5 rounded-[3px] px-0.5 text-[6px] font-black leading-none ${
+              tile.multiplier === "3L"
+                ? "bg-[#f1f5f9] text-[#111827]"
+                : "bg-[#f3d66f] text-[#2b1800]"
+            }`}
+          >
+            {tile.multiplier}
+          </span>
+        ) : null}
         {tile.wasChoice ? (
           <span className="absolute right-0.5 top-0.5 rounded-[3px] bg-[#d7af32] px-0.5 text-[6px] font-black leading-none text-[#2b1800]">
             ?

@@ -2,7 +2,7 @@ import { useMutation } from "convex/react";
 import { useEffect, useRef } from "react";
 import { api } from "../../../../convex/_generated/api";
 
-const HEARTBEAT_INTERVAL_MS = 15_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 export function useRoomPresence(code: string, enabled: boolean) {
   const heartbeatByCode = useMutation(api.rooms.heartbeatByCode);

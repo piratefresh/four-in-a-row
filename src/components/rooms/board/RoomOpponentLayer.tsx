@@ -56,6 +56,7 @@ type RoomOpponentLayerProps = {
   wordSubmissions?: { isCompleted?: boolean } | null;
   gameStage?: string;
   currentPlayerHasSubmitted?: boolean;
+  canRevealSubmittedWords?: boolean;
 };
 
 export function RoomOpponentLayer({
@@ -69,6 +70,7 @@ export function RoomOpponentLayer({
   wordSubmissions,
   gameStage,
   currentPlayerHasSubmitted,
+  canRevealSubmittedWords,
 }: RoomOpponentLayerProps) {
   return opponents.map((hand, opponentIndex) => {
     const position = getOpponentPosition(opponentIndex, opponents.length);
@@ -94,8 +96,11 @@ export function RoomOpponentLayer({
           initialsClass="text-[10px] sm:text-[12px]"
           infoCardClassName="min-w-[102px] px-2.5 py-1 sm:min-w-[118px] sm:px-3 sm:py-1.5"
         />
-
-        {gameStage === "showdown" && wordSubmissions?.isCompleted && currentPlayerHasSubmitted && opponentSubmission?.word && (
+        {gameStage === "showdown" &&
+          wordSubmissions?.isCompleted &&
+          currentPlayerHasSubmitted &&
+          canRevealSubmittedWords &&
+          opponentSubmission?.word && (
           <div className="mt-3 flex flex-col items-center justify-center gap-2">
             <div className="flex items-center gap-2">
               {opponentSubmission.tiles.map((tile: any, index: number) => (

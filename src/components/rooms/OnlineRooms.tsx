@@ -75,13 +75,13 @@ export function OnlineRooms({
               disabled={isRefreshingRooms}
               className="rounded-full border border-[#d7b45e]/35 bg-[linear-gradient(180deg,#ffd861_0%,#b88a1b_100%)] px-5 py-3 text-sm font-semibold text-[#261701] shadow-[0_10px_24px_rgba(0,0,0,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isRefreshingRooms ? "Creating..." : "Create room code"}
+              {isRefreshingRooms ? "Creating..." : "Create new room"}
             </button>
           </div>
         </section>
 
         <div className="flex gap-2 overflow-x-auto">
-          <StatCard title="Your chips" subtitle="$1,500" />
+          <StatCard title="Your chips" subtitle="$1000" />
           <StatCard
             title="Longest word"
             subtitle={stats?.longestWord || "Loading..."}

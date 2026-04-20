@@ -4,12 +4,15 @@ import type { MutationCtx } from "../_generated/server";
 import {
   getNewRevealCountForStage,
   getNextStage,
+  SHOWDOWN_TIMER_MS,
 } from "../gameState";
 import type { GameDeckTile, GameStage, GameTile } from "../gameState";
 import {
   AI_DEALER_PLAYER_ID,
   BOT_ACTION_DELAY_MS,
   DEV_BOT_AUTH_PREFIX,
+  getClearedTurnClockFields,
+  getNewTurnStateFields,
   type PlayerHand,
   sortHandsByTurnOrder,
 } from "./gamesShared";
@@ -20,6 +23,7 @@ export async function advanceTurn(
   orderedHands: PlayerHand[],
 ): Promise<number> {
   let nextPlayerIndex = game.currentPlayerIndex;
+  const now = Date.now();
 
   for (let step = 1; step <= orderedHands.length; step++) {
     const candidateIndex = (game.currentPlayerIndex + step) % orderedHands.length;
@@ -31,7 +35,8 @@ export async function advanceTurn(
 
   await ctx.db.patch(game._id, {
     currentPlayerIndex: nextPlayerIndex,
-    updatedAt: Date.now(),
+    updatedAt: now,
+    ...getNewTurnStateFields(now),
   });
 
   return nextPlayerIndex;
@@ -99,6 +104,11 @@ async function advanceStage(
     raisesThisRound: number;
     updatedAt: number;
     showdownStartedAt?: number;
+    turnStartedAt?: number;
+    turnClockCalledAt?: undefined;
+    turnClockExpiresAt?: undefined;
+    turnClockCallerPlayerId?: undefined;
+    turnClockTargetPlayerId?: undefined;
   } = {
     stage: targetStage,
     communityTiles: updatedCommunityTiles,
@@ -106,10 +116,14 @@ async function advanceStage(
     currentPlayerIndex: 0,
     raisesThisRound: 0,
     updatedAt: now,
+    ...getClearedTurnClockFields(),
   };
 
   if (targetStage === "showdown") {
     updateData.showdownStartedAt = now;
+    updateData.turnStartedAt = undefined;
+  } else {
+    updateData.turnStartedAt = now;
   }
 
   await ctx.db.patch(game._id, updateData);
@@ -183,6 +197,30 @@ async function scheduleBotShowdownSubmissions(
   }
 }
 
+async function scheduleShowdownResolution(
+  ctx: MutationCtx,
+  gameId: Id<"games">,
+) {
+  const game = await ctx.db.get(gameId);
+  if (
+    !game ||
+    game.stage !== "showdown" ||
+    game.status !== "active" ||
+    game.showdownStartedAt === undefined
+  ) {
+    return;
+  }
+
+  await ctx.scheduler.runAfter(
+    SHOWDOWN_TIMER_MS,
+    (internal as typeof internal).games.internalResolveExpiredShowdown,
+    {
+      gameId,
+      showdownStartedAt: game.showdownStartedAt,
+    },
+  );
+}
+
 export async function setRoomUsersActiveGameId(
   ctx: MutationCtx,
   roomId: Id<"rooms">,
@@ -227,6 +265,7 @@ export async function scheduleBotTurnIfNeeded(
   if (game.stage === "showdown") {
     console.log("scheduleBotTurnIfNeeded: Scheduling showdown submissions");
     await scheduleBotShowdownSubmissions(ctx, gameId);
+    await scheduleShowdownResolution(ctx, gameId);
     return;
   }
 
@@ -308,12 +347,16 @@ export async function handlePostActionProgression(
         winningWord: undefined,
         winningScore: undefined,
         winningScoreBreakdown: undefined,
+        turnStartedAt: undefined,
+        ...getClearedTurnClockFields(),
         updatedAt: now,
       });
     } else {
       await ctx.db.patch(game._id, {
         stage: "showdown",
         status: "completed",
+        turnStartedAt: undefined,
+        ...getClearedTurnClockFields(),
         updatedAt: now,
       });
     }
@@ -326,6 +369,8 @@ export async function handlePostActionProgression(
     if (!advanced) {
       await ctx.db.patch(game._id, {
         status: "completed",
+        turnStartedAt: undefined,
+        ...getClearedTurnClockFields(),
         updatedAt: now,
       });
       return;

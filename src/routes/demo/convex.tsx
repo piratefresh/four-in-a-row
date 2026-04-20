@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery, useMutation } from 'convex/react'

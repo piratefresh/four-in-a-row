@@ -26,3 +26,19 @@ export function sortHandsByTurnOrder<T extends { createdAt: number; playerId: st
     return a.playerId.localeCompare(b.playerId);
   });
 }
+
+export function getClearedTurnClockFields() {
+  return {
+    turnClockCalledAt: undefined,
+    turnClockExpiresAt: undefined,
+    turnClockCallerPlayerId: undefined,
+    turnClockTargetPlayerId: undefined,
+  } as const;
+}
+
+export function getNewTurnStateFields(turnStartedAt: number) {
+  return {
+    turnStartedAt,
+    ...getClearedTurnClockFields(),
+  } as const;
+}

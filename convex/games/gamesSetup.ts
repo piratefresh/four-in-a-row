@@ -15,7 +15,12 @@ import {
   type GameTile,
 } from "../gameState";
 import { scheduleBotTurnIfNeeded, setRoomUsersActiveGameId } from "./gamesProgression";
-import { AI_DEALER_PLAYER_ID, INITIAL_CHIPS } from "./gamesShared";
+import {
+  AI_DEALER_PLAYER_ID,
+  getClearedTurnClockFields,
+  getNewTurnStateFields,
+  INITIAL_CHIPS,
+} from "./gamesShared";
 
 function randomIndex(maxExclusive: number) {
   const bytes = new Uint32Array(1);
@@ -62,12 +67,14 @@ function toCommunityTile(tile: GameDeckTile): GameTile {
         kind: "single",
         letter: tile.letter,
         baseValue: tile.baseValue,
+        multiplier: tile.multiplier,
         revealed: false,
       }
     : {
         kind: "choice",
         options: tile.options,
         baseValues: tile.baseValues,
+        multiplier: tile.multiplier,
         revealed: false,
       };
 }
@@ -206,7 +213,19 @@ async function getParticipantIds(ctx: MutationCtx, roomId: Id<"rooms">) {
   if (activePlayers.length < 1) return null;
   activePlayers.sort((a, b) => a.seatIndex - b.seatIndex);
   const participantIds = activePlayers.map((player) => player._id as string);
-  if (participantIds.length === 1) participantIds.push(AI_DEALER_PLAYER_ID);
+
+  // Only auto-add AI dealer if:
+  // 1. There's only 1 player in the room
+  // 2. That room already has bots (offline mode)
+  if (participantIds.length === 1) {
+    const hasExistingBots = activePlayers.some((player) =>
+      player.authUserId?.startsWith("dev-bot:")
+    );
+    if (hasExistingBots) {
+      participantIds.push(AI_DEALER_PLAYER_ID);
+    }
+  }
+
   return participantIds;
 }
 
@@ -377,6 +396,7 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
     smallBlindIndex,
     bigBlindIndex,
     raisesThisRound: 0,
+    ...getNewTurnStateFields(now),
     updatedAt: now,
   });
   await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
@@ -445,6 +465,7 @@ export async function internalStartGameHandler(
     smallBlindIndex,
     bigBlindIndex,
     raisesThisRound: 0,
+    ...getNewTurnStateFields(now),
     updatedAt: now,
   });
   await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
@@ -460,32 +481,43 @@ export async function internalRedealGameForRoomHandler(
   const room = await ctx.db.get(args.roomId);
   if (!room) return { ok: false, reason: "Room not found" };
 
-  const activeGame = await ctx.db
-    .query("games")
-    .withIndex("by_room_status", (q) =>
-      q.eq("roomId", String(room._id)).eq("status", "active"),
-    )
-    .unique();
   const waitingGame = await ctx.db
     .query("games")
     .withIndex("by_room_status", (q) =>
       q.eq("roomId", String(room._id)).eq("status", "waiting"),
     )
     .unique();
+  if (waitingGame) {
+    return {
+      ok: true,
+      gameId: waitingGame._id,
+      status: "waiting" as const,
+    };
+  }
+
+  const activeGame = await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(room._id)).eq("status", "active"),
+    )
+    .unique();
+  if (activeGame) return { ok: false, reason: "Game already active" };
+
   const completedGame = await ctx.db
     .query("games")
     .withIndex("by_room_status", (q) =>
       q.eq("roomId", String(room._id)).eq("status", "completed"),
     )
     .unique();
-  const game = activeGame ?? waitingGame ?? completedGame;
+  const game = completedGame;
   if (!game) return { ok: false, reason: "No game found for room" };
 
   const participantIds = await getParticipantIds(ctx, room._id);
   if (!participantIds) return { ok: false, reason: "Not enough players" };
 
-  const deck = createShuffledDeck();
+  const now = Date.now();
 
+  // Clear hands and submissions from previous round
   await clearHands(ctx, game._id);
   const existingSubmissions = await ctx.db
     .query("wordSubmissions")
@@ -493,57 +525,50 @@ export async function internalRedealGameForRoomHandler(
     .collect();
   for (const submission of existingSubmissions) await ctx.db.delete(submission._id);
 
-  const roundDeal = createChoiceTileDeal(deck, participantIds.length);
-
-  const now = Date.now();
-
-  // Rotate blinds for next round - advance dealer button
+  // Rotate dealer button for next round
   const previousDealerIndex = game.dealerButtonIndex ?? 0;
   const dealerButtonIndex = (previousDealerIndex + 1) % participantIds.length;
-  const { smallBlindIndex, bigBlindIndex } = calculateBlindPositions(
-    dealerButtonIndex,
-    participantIds.length
-  );
 
-  const totalBlinds = SMALL_BLIND + BIG_BLIND;
-  const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
-
-  await dealHands(
-    ctx,
-    game._id,
-    participantIds,
-    roundDeal.hands,
-    smallBlindIndex,
-    bigBlindIndex,
-    now,
-  );
+  // Reset game to waiting state so players can ready up
   await ctx.db.patch(game._id, {
     stage: "preflop",
-    status: "active",
-    communityTiles: roundDeal.communityTiles,
-    deck: roundDeal.deck,
-    pot: totalBlinds,
-    currentBet: BIG_BLIND,
-    currentPlayerIndex: firstActionIndex,
+    status: "waiting",
+    communityTiles: [],
+    deck: [],
+    pot: 0,
+    currentBet: 0,
+    currentPlayerIndex: 0,
     dealerButtonIndex,
-    smallBlindIndex,
-    bigBlindIndex,
+    smallBlindIndex: 0,
+    bigBlindIndex: 0,
     raisesThisRound: 0,
     winnerId: undefined,
     winningWord: undefined,
     winningScore: undefined,
     winningScoreBreakdown: undefined,
     showdownStartedAt: undefined,
+    turnStartedAt: undefined,
+    ...getClearedTurnClockFields(),
     updatedAt: now,
   });
+
+  // Reset all player ready status
+  const players = await ctx.db
+    .query("players")
+    .withIndex("roomId_status", (q) =>
+      q.eq("roomId", room._id).eq("status", "active"),
+    )
+    .collect();
+  for (const player of players) {
+    await ctx.db.patch(player._id, { readyStatus: false });
+  }
+
   await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
-  await scheduleBotTurnIfNeeded(ctx, game._id);
 
   return {
     ok: true,
     gameId: game._id,
-    playersDealt: participantIds.length,
-    includesAiDealer: participantIds.includes(AI_DEALER_PLAYER_ID),
+    status: "waiting" as const,
   };
 }
 

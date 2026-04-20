@@ -1,14 +1,23 @@
 import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { gameDeckTileValidator } from "./gameState";
-import { callHandler, checkHandler, foldHandler, internalProcessBotTurnHandler, raiseHandler } from "./games/gamesBetting";
+import {
+  callClockHandler,
+  callHandler,
+  checkHandler,
+  foldHandler,
+  internalProcessBotTurnHandler,
+  internalResolveExpiredTurnClockHandler,
+  raiseHandler,
+} from "./games/gamesBetting";
 import { createGameForRoomHandler, internalRedealGameForRoomHandler, internalStartGameHandler, redealGameForRoomHandler, startGameHandler } from "./games/gamesSetup";
 import { getGameByRoomHandler, getPlayerHandsHandler, internalGetGameRuntimeStateHandler } from "./games/gamesRuntime";
-import { forfeitShowdownHandler, getShowdownResultsHandler, getWordSubmissionsHandler, internalProcessBotShowdownHandler, resolveShowdownHandler, submitWordHandler, submitWordInternalHandler } from "./games/gamesShowdown";
+import { forfeitShowdownHandler, getShowdownResultsHandler, getWordSubmissionsHandler, internalProcessBotShowdownHandler, internalResolveExpiredShowdownHandler, resolveShowdownHandler, submitWordHandler, submitWordInternalHandler } from "./games/gamesShowdown";
 
 const submitWordTileValidator = v.object({
   letter: v.string(),
   baseValue: v.number(),
+  multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
   source: v.union(v.literal("hand"), v.literal("community")),
   cardIndex: v.optional(v.number()),
   wasChoice: v.optional(v.boolean()),
@@ -84,6 +93,20 @@ export const fold = mutation({
   handler: foldHandler,
 });
 
+export const callClock = mutation({
+  args: { gameId: v.id("games"), playerId: v.string() },
+  handler: callClockHandler,
+});
+
+export const internalResolveExpiredTurnClock = internalMutation({
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    turnClockExpiresAt: v.number(),
+  },
+  handler: internalResolveExpiredTurnClockHandler,
+});
+
 export const submitWordInternal = internalMutation({
   args: {
     gameId: v.id("games"),
@@ -115,6 +138,11 @@ export const submitWord = action({
 export const resolveShowdown = mutation({
   args: { gameId: v.id("games") },
   handler: resolveShowdownHandler,
+});
+
+export const internalResolveExpiredShowdown = internalMutation({
+  args: { gameId: v.id("games"), showdownStartedAt: v.number() },
+  handler: internalResolveExpiredShowdownHandler,
 });
 
 export const getWordSubmissions = query({

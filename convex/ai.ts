@@ -51,6 +51,7 @@ export type AIWordResult = {
   tiles: Array<{
     letter: string;
     baseValue: number;
+    multiplier?: "2L" | "3L";
     source: "hand" | "community";
     cardIndex?: number;
     wasChoice?: boolean;
@@ -89,11 +90,13 @@ export const aiDecideBet = internalAction({
           kind: v.literal("single"),
           letter: v.string(),
           baseValue: v.number(),
+          multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
         }),
         v.object({
           kind: v.literal("choice"),
           options: v.array(v.string()),
           baseValues: v.array(v.number()),
+          multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
         })
       )
     ),
@@ -103,12 +106,14 @@ export const aiDecideBet = internalAction({
           kind: v.literal("single"),
           letter: v.string(),
           baseValue: v.number(),
+          multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
           revealed: v.boolean(),
         }),
         v.object({
           kind: v.literal("choice"),
           options: v.array(v.string()),
           baseValues: v.array(v.number()),
+          multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
           revealed: v.boolean(),
         })
       )
@@ -367,11 +372,13 @@ export const aiSubmitWord = internalAction({
           kind: v.literal("single"),
           letter: v.string(),
           baseValue: v.number(),
+          multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
         }),
         v.object({
           kind: v.literal("choice"),
           options: v.array(v.string()),
           baseValues: v.array(v.number()),
+          multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
         })
       )
     ),
@@ -381,12 +388,14 @@ export const aiSubmitWord = internalAction({
           kind: v.literal("single"),
           letter: v.string(),
           baseValue: v.number(),
+          multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
           revealed: v.boolean(),
         }),
         v.object({
           kind: v.literal("choice"),
           options: v.array(v.string()),
           baseValues: v.array(v.number()),
+          multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
           revealed: v.boolean(),
         })
       )

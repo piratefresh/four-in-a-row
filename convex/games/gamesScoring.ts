@@ -1,44 +1,70 @@
-const SPEED_BONUS_TIER_1_SECONDS = 5;
-const SPEED_BONUS_TIER_2_SECONDS = 10;
+import type { GameMultiplier } from "../gameState";
 
-export function calculateLengthPoints(wordLength: number): number {
-  return wordLength * 3;
+const FULL_RACK_TILE_COUNT = 7;
+const FULL_RACK_BONUS = 10;
+
+export type ShowdownScoringTile = {
+  baseValue: number;
+  multiplier?: GameMultiplier;
+};
+
+export type ShowdownScoreBreakdown = {
+  basePoints: number;
+  multiplierBonus: number;
+  fullRackBonus: number;
+};
+
+function getMultiplierFactor(multiplier?: GameMultiplier) {
+  switch (multiplier) {
+    case "3L":
+      return 3;
+    case "2L":
+      return 2;
+    default:
+      return 1;
+  }
 }
 
-function calculateSpeedBonus(
-  submissionTime: number,
-  showdownStartTime: number,
-): number {
-  const secondsElapsed = (submissionTime - showdownStartTime) / 1000;
-  if (secondsElapsed <= SPEED_BONUS_TIER_1_SECONDS) return 10;
-  if (secondsElapsed <= SPEED_BONUS_TIER_2_SECONDS) return 5;
-  return 0;
+export function getEffectiveTileScore(tile: ShowdownScoringTile) {
+  return tile.baseValue * getMultiplierFactor(tile.multiplier);
+}
+
+export function getHighestScoringTileValue(tiles: ShowdownScoringTile[]) {
+  return tiles.reduce(
+    (highest, tile) => Math.max(highest, getEffectiveTileScore(tile)),
+    0,
+  );
+}
+
+function calculateScoreBreakdown(tiles: ShowdownScoringTile[]): ShowdownScoreBreakdown {
+  const basePoints = tiles.reduce((total, tile) => total + tile.baseValue, 0);
+  const multiplierBonus = tiles.reduce((total, tile) => {
+    const multiplierFactor = getMultiplierFactor(tile.multiplier);
+    return total + tile.baseValue * (multiplierFactor - 1);
+  }, 0);
+  const fullRackBonus = tiles.length === FULL_RACK_TILE_COUNT ? FULL_RACK_BONUS : 0;
+
+  return {
+    basePoints,
+    multiplierBonus,
+    fullRackBonus,
+  };
 }
 
 export function calculateScore(
-  word: string,
-  submissionTime: number,
-  stageStartTime: number,
+  tiles: ShowdownScoringTile[],
 ) {
-  const lengthPoints = calculateLengthPoints(word.length);
-  const speedBonus = calculateSpeedBonus(submissionTime, stageStartTime);
-  const validWordBonus = 5;
+  const breakdown = calculateScoreBreakdown(tiles);
 
   return {
-    lengthPoints,
-    speedBonus,
-    validWordBonus,
-    total: lengthPoints + speedBonus + validWordBonus,
+    ...breakdown,
+    total:
+      breakdown.basePoints +
+      breakdown.multiplierBonus +
+      breakdown.fullRackBonus,
   };
 }
 
-export function calculateStaticShowdownScore(word: string) {
-  const lengthPoints = calculateLengthPoints(word.length);
-  const validWordBonus = 5;
-
-  return {
-    lengthPoints,
-    validWordBonus,
-    total: lengthPoints + validWordBonus,
-  };
+export function calculateStaticShowdownScore(tiles: ShowdownScoringTile[]) {
+  return calculateScore(tiles);
 }

@@ -14,6 +14,7 @@ export const appTables = {
     status: v.union(v.literal("open"), v.literal("closed")),
     maxPlayers: v.number(),
     hostPlayerId: v.optional(v.id("players")),
+    nextRoomId: v.optional(v.id("rooms")),
     createdAt: v.number(),
     lastActiveAt: v.number(),
   })
@@ -35,12 +36,14 @@ export const appTables = {
     .index("authUserId_status", ["authUserId", "status"]),
   messages: defineTable({
     roomId: v.id("rooms"),
-    playerId: v.id("players"),
+    playerId: v.optional(v.id("players")),
+    senderAuthUserId: v.optional(v.string()),
+    senderName: v.string(),
     text: v.string(),
+    type: v.union(v.literal("player"), v.literal("ai"), v.literal("system")),
     createdAt: v.number(),
   })
-    .index("roomId_createdAt", ["roomId", "createdAt"])
-    .index("playerId", ["playerId"]),
+    .index("roomId_createdAt", ["roomId", "createdAt"]),
   games: defineTable({
     roomId: v.string(),
     stage: gameStageValidator,
@@ -59,12 +62,17 @@ export const appTables = {
     winningScore: v.optional(v.number()),
     winningScoreBreakdown: v.optional(
       v.object({
-        lengthPoints: v.number(),
-        speedBonus: v.number(),
-        validWordBonus: v.number(),
+        basePoints: v.number(),
+        multiplierBonus: v.number(),
+        fullRackBonus: v.number(),
       })
     ),
     showdownStartedAt: v.optional(v.number()),
+    turnStartedAt: v.optional(v.number()),
+    turnClockCalledAt: v.optional(v.number()),
+    turnClockExpiresAt: v.optional(v.number()),
+    turnClockCallerPlayerId: v.optional(v.string()),
+    turnClockTargetPlayerId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -101,6 +109,7 @@ export const appTables = {
       v.object({
         letter: v.string(),
         baseValue: v.number(),
+        multiplier: v.optional(v.union(v.literal("2L"), v.literal("3L"))),
         source: v.union(v.literal("hand"), v.literal("community")),
         // For resolved choice cards - which card index and which option was chosen
         cardIndex: v.optional(v.number()),
@@ -116,9 +125,9 @@ export const appTables = {
     ),
     score: v.number(),
     scoreBreakdown: v.object({
-      lengthPoints: v.number(),
-      speedBonus: v.number(),
-      validWordBonus: v.number(),
+      basePoints: v.number(),
+      multiplierBonus: v.number(),
+      fullRackBonus: v.number(),
     }),
     createdAt: v.number(),
   })

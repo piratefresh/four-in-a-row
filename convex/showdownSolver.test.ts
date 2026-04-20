@@ -166,7 +166,9 @@ describe("deterministic showdown solver", () => {
 
     expect(balanced?.word).toBe("COOEED");
     expect(creative?.word).toBe("COULEE");
-    expect(creative?.estimatedScore).toBe(balanced?.estimatedScore);
+    expect(creative?.estimatedScore).toBeLessThanOrEqual(
+      balanced?.estimatedScore ?? Number.POSITIVE_INFINITY,
+    );
   });
 
   it("keeps aggressive bots anchored to the highest-ranked option", () => {

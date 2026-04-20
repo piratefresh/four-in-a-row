@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { HomeModeMenu } from "@/components/home/HomeModeMenu";
-import { OnlineRooms } from "@/components/home/OnlineRooms";
+import { OnlineRooms } from "@/components/rooms/OnlineRooms";
 import { RoomDrawer } from "@/components/RoomDrawer";
 
 type HomeSearch = {
@@ -30,7 +30,6 @@ function App() {
   const refreshOpenRooms = useMutation(api.rooms.refreshOpenRooms);
   const createRoom = useMutation(api.rooms.createRoom);
   const joinRoom = useMutation(api.rooms.joinRoom);
-  const toggleReady = useMutation(api.rooms.toggleReady);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const debugRejoinRoom = useMutation(api.rooms.debugRejoinRoom);
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
@@ -134,16 +133,6 @@ function App() {
     const displayName = getDisplayName();
     if (!displayName) return;
 
-    if (activeRoom === undefined) {
-      setJoinMessage("Checking for an active room, please try again in a moment.");
-      return;
-    }
-
-    if (activeRoom?.code) {
-      await navigate({ to: "/rooms/$code", params: { code: activeRoom.code } });
-      return;
-    }
-
     setIsStartingOffline(true);
     setJoinMessage(null);
 
@@ -151,7 +140,6 @@ function App() {
       const room = await createRoom({ name: displayName });
       await debugFillRoomWithBots({ code: room.code, count: 3 });
       await createGameForRoom({ roomId: room.roomId });
-      await toggleReady({ code: room.code });
       await navigate({ to: "/rooms/$code", params: { code: room.code } });
     } catch (error) {
       const message =

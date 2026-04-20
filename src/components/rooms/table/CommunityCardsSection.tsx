@@ -52,6 +52,7 @@ export function CommunityCardsSection({ tiles, currentBet, betLabel }: Community
                 baseValues={
                   isRevealed && isChoice && tile.kind === 'choice' ? tile.baseValues : undefined
                 }
+                multiplier={isRevealed ? tile?.multiplier : undefined}
                 isChoice={isChoice}
                 showValue={false}
                 size="md"

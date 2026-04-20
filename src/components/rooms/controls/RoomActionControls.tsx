@@ -19,17 +19,22 @@ type BettingControlsProps = {
   canCall: boolean;
   canRaise: boolean;
   canFold: boolean;
+  canCallClock?: boolean;
   currentTurnPlayerName: string | null;
   onCheck?: () => void;
   onCall?: () => void;
   onRaise?: () => void;
   onFold?: () => void;
+  onCallClock?: () => void;
   onRaiseAmountChange?: (amount: number) => void;
   callLabel: string;
   callAmount?: number;
   raiseLabel: string;
   raiseAmount?: number | null;
   raiseOptions?: number[];
+  isCallingClock?: boolean;
+  turnClockTimeRemaining?: number | null;
+  turnClockCallerName?: string | null;
 };
 
 type UtilityControlsProps = {
@@ -42,6 +47,15 @@ type RoomActionControlsProps = {
   betting?: BettingControlsProps;
   utility?: UtilityControlsProps;
 };
+
+function formatCountdown(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
 
 export function RoomActionControls({
   ready,
@@ -72,6 +86,12 @@ export function RoomActionControls({
   }
 
   if (betting) {
+    const turnClockLabel =
+      betting.turnClockTimeRemaining !== null &&
+      betting.turnClockTimeRemaining !== undefined
+        ? formatCountdown(betting.turnClockTimeRemaining)
+        : null;
+
     return (
       <div className="flex w-full items-center justify-center">
         <AnimatePresence initial={false} mode="wait">
@@ -110,8 +130,26 @@ export function RoomActionControls({
                   </span>
                 </div>
                 <div className="mt-1 text-[11px] font-medium tracking-[0.12em] text-[#b8b19a]">
-                  thinking...
+                  {turnClockLabel
+                    ? `clock called${betting.turnClockCallerName ? ` by ${betting.turnClockCallerName}` : ""} - ${turnClockLabel}`
+                    : "thinking..."}
                 </div>
+                {betting.canCallClock || betting.isCallingClock ? (
+                  <div className="mt-3 flex justify-center">
+                    <ActionButton
+                      variant="raise"
+                      size="wide"
+                      onClick={() => betting.onCallClock?.()}
+                      disabled={
+                        betting.isCallingClock ||
+                        !betting.canCallClock ||
+                        !!turnClockLabel
+                      }
+                    >
+                      {betting.isCallingClock ? "Calling..." : "Call Clock"}
+                    </ActionButton>
+                  </div>
+                ) : null}
               </motion.div>
             </motion.div>
           ) : (
@@ -124,6 +162,15 @@ export function RoomActionControls({
               transition={{ duration: 0.24, ease: "easeOut" }}
               className="flex w-full max-w-[42rem] flex-col items-center gap-2.5"
             >
+              {turnClockLabel ? (
+                <div className="w-full rounded-2xl border border-[#8a6630] bg-[linear-gradient(180deg,rgba(51,35,12,0.96)_0%,rgba(24,16,6,0.98)_100%)] px-4 py-2 text-center text-sm font-semibold text-[#f4d37a] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_28px_rgba(0,0,0,0.3)]">
+                  {betting.turnClockCallerName
+                    ? `${betting.turnClockCallerName} called the clock`
+                    : "Clock called"}{" "}
+                  - {turnClockLabel}
+                </div>
+              ) : null}
+
               {betting.canRaise &&
               betting.raiseAmount &&
               (betting.raiseOptions?.length ?? 0) > 1 ? (
@@ -223,3 +270,4 @@ export function RoomActionControls({
 
   return null;
 }
+

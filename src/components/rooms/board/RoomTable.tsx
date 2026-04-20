@@ -61,34 +61,34 @@ export function RoomTable({
       players={[]}
       showSeats={false}
       centerLabel=""
-      className="h-[460px] w-[340px] max-w-none"
+      className="h-[460px] w-[340px] max-w-none lg:h-[560px] lg:w-[420px] xl:h-[620px] xl:w-[470px]"
       shellInsetClassName="inset-0"
     >
-      {!showCenterPot ? null : isPhase1 ? (
-        <div className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2">
+      {opponentBets.map((bet) => (
+        <div
+          key={bet.id}
+          className={`absolute ${betPositionClass[bet.position]} z-30`}
+        >
+          <PokerChip amount={bet.amount} label="BET" size="sm" />
+        </div>
+      ))}
+
+      {bottomBet > 0 && (
+        <div className={`absolute ${betPositionClass.bottom} z-30`}>
+          <PokerChip amount={bottomBet} label="BET" size="sm" />
+        </div>
+      )}
+
+      {!showCenterPot ? null : (
+        <div
+          className={`absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center ${
+            isPhase1
+              ? "gap-2"
+              : "w-full max-w-[96%] gap-1 sm:max-w-[70%] sm:gap-5"
+          }`}
+        >
           {potDisplay}
         </div>
-      ) : (
-        <>
-          {opponentBets.map((bet) => (
-            <div
-              key={bet.id}
-              className={`absolute ${betPositionClass[bet.position]} z-30`}
-            >
-              <PokerChip amount={bet.amount} label="BET" size="sm" />
-            </div>
-          ))}
-
-          {bottomBet > 0 && (
-            <div className={`absolute ${betPositionClass.bottom} z-30`}>
-              <PokerChip amount={bottomBet} label="BET" size="sm" />
-            </div>
-          )}
-
-          <div className="absolute left-1/2 top-1/2 z-20 flex w-full max-w-[96%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-1 sm:max-w-[70%] sm:gap-5">
-            {potDisplay}
-          </div>
-        </>
       )}
     </PokerTable>
   );

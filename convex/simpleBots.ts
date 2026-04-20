@@ -3,9 +3,6 @@
  * Use this if you want bots to work immediately without API setup
  */
 
-import { internalMutation } from "./_generated/server";
-import { v } from "convex/values";
-
 /**
  * Toggle to use simple bots instead of AI bots
  * Set to true to bypass OpenRouter and use rule-based logic
@@ -22,7 +19,7 @@ export function getSimpleBotDecision(args: {
   pot: number;
   stage: string;
 }): { action: "fold" | "check" | "call" | "raise"; raiseAmount?: number } {
-  const { currentBet, chips, pot, stage } = args;
+  const { currentBet, chips, pot } = args;
   const amountToCall = currentBet;
 
   // No bet yet - always check

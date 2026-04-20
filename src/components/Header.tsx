@@ -130,7 +130,7 @@ export default function Header() {
           <h1
             className={
               isRoomView || isResultsView || isOnlineRoomsView
-                ? "truncate text-[10px] font-medium uppercase tracking-[0.22em] text-white/45"
+                ? "truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]"
                 : "font-serif text-xl font-semibold tracking-tight"
             }
           >

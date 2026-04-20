@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { buildDevBotAuthUserId, getBotCharacterForSeatIndex } from "./aiStrategy";
 import { authComponent, createAuth } from "./auth";
+import { internalStartGameHandler } from "./games/gamesSetup";
 import {
   PLAYER_NAME_MAX_LENGTH,
   ROOM_CODE_ALPHABET,
@@ -14,6 +15,7 @@ import {
 } from "./constants";
 
 const STALE_SCOREBOARD_ROOM_MS = 30 * 60 * 1000;
+const INACTIVE_PLAYER_TIMEOUT_MS = 4 * 60 * 1000;
 
 function normalizeName(name: string) {
   return name.trim().replace(/\s+/g, " ");
@@ -82,10 +84,143 @@ async function createOpenRoom(ctx: MutationCtx) {
     code,
     status: "open",
     maxPlayers: ROOM_MAX_PLAYERS,
+    nextRoomId: undefined,
     createdAt: now,
     lastActiveAt: now,
   });
   return { roomId, code, now };
+}
+
+function isPlayerInactive(
+  player: Pick<Doc<"players">, "lastSeenAt" | "authUserId">,
+  now: number,
+) {
+  if (player.authUserId?.startsWith("dev-bot:")) {
+    return false;
+  }
+
+  return now - player.lastSeenAt > INACTIVE_PLAYER_TIMEOUT_MS;
+}
+
+async function getActivePlayersInRoom(
+  ctx: MutationCtx | QueryCtx,
+  roomId: Id<"rooms">,
+) {
+  return await ctx.db
+    .query("players")
+    .withIndex("roomId_status", (q) =>
+      q.eq("roomId", roomId).eq("status", "active"),
+    )
+    .collect();
+}
+
+async function completeLiveGamesForRoom(
+  ctx: MutationCtx,
+  roomId: Id<"rooms">,
+  now: number,
+) {
+  const games = await ctx.db
+    .query("games")
+    .withIndex("by_room", (q) => q.eq("roomId", String(roomId)))
+    .collect();
+
+  for (const game of games) {
+    if (game.status === "completed") continue;
+    await ctx.db.patch(game._id, {
+      status: "completed",
+      updatedAt: now,
+    });
+  }
+}
+
+async function reapInactivePlayersForRoom(
+  ctx: MutationCtx,
+  room: Doc<"rooms">,
+  now: number,
+) {
+  const activePlayers = await getActivePlayersInRoom(ctx, room._id);
+  const stalePlayers = activePlayers.filter((player) =>
+    isPlayerInactive(player, now),
+  );
+
+  if (stalePlayers.length === 0) {
+    return {
+      stalePlayersRemoved: 0,
+      roomClosed: false,
+      freshActivePlayers: activePlayers,
+    };
+  }
+
+  for (const player of stalePlayers) {
+    await ctx.db.patch(player._id, {
+      status: "left",
+      isHost: false,
+      lastSeenAt: now,
+    });
+  }
+
+  const freshActivePlayers = activePlayers.filter(
+    (player) => !isPlayerInactive(player, now),
+  );
+
+  if (freshActivePlayers.length === 0) {
+    await completeLiveGamesForRoom(ctx, room._id, now);
+    await ctx.db.patch(room._id, {
+      status: "closed",
+      hostPlayerId: undefined,
+      lastActiveAt: now,
+    });
+    await createOpenRoom(ctx);
+
+    return {
+      stalePlayersRemoved: stalePlayers.length,
+      roomClosed: true,
+      freshActivePlayers,
+    };
+  }
+
+  const currentHostStillActive =
+    room.hostPlayerId !== undefined &&
+    freshActivePlayers.some((player) => player._id === room.hostPlayerId);
+
+  let nextHostPlayerId = room.hostPlayerId;
+  if (!currentHostStillActive) {
+    const nextHost = [...freshActivePlayers].sort(
+      (a, b) => a.seatIndex - b.seatIndex,
+    )[0]!;
+    await ctx.db.patch(nextHost._id, { isHost: true });
+    nextHostPlayerId = nextHost._id;
+  }
+
+  await ctx.db.patch(room._id, {
+    status: "open",
+    hostPlayerId: nextHostPlayerId,
+    lastActiveAt: now,
+  });
+
+  return {
+    stalePlayersRemoved: stalePlayers.length,
+    roomClosed: false,
+    freshActivePlayers,
+  };
+}
+
+async function reapInactivePlayersAcrossOpenRooms(ctx: MutationCtx) {
+  const now = Date.now();
+  const openRooms = await ctx.db
+    .query("rooms")
+    .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
+    .collect();
+
+  let stalePlayersRemoved = 0;
+  let roomsClosed = 0;
+  for (const room of openRooms) {
+    const result = await reapInactivePlayersForRoom(ctx, room, now);
+    stalePlayersRemoved += result.stalePlayersRemoved;
+    roomsClosed += result.roomClosed ? 1 : 0;
+  }
+
+  return { stalePlayersRemoved, roomsClosed };
 }
 
 async function closeStaleScoreboardRooms(ctx: MutationCtx) {
@@ -129,6 +264,7 @@ async function closeStaleScoreboardRooms(ctx: MutationCtx) {
       hostPlayerId: undefined,
       lastActiveAt: now,
     });
+    await createOpenRoom(ctx);
     closed += 1;
   }
 
@@ -157,8 +293,6 @@ async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
     });
   }
 
-  const { roomId, code, now } = await createOpenRoom(ctx);
-
   const authUserId = await getAuthenticatedUserId(ctx);
   if (!authUserId) {
     throw new ConvexError({
@@ -166,6 +300,13 @@ async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
       message: "Authentication required.",
     });
   }
+
+  const existingAuthedPlayer = await getAnyActiveAuthedPlayer(ctx, authUserId);
+  if (existingAuthedPlayer) {
+    await leavePlayer(ctx, existingAuthedPlayer);
+  }
+
+  const { roomId, code, now } = await createOpenRoom(ctx);
   const playerId = await ctx.db.insert("players", {
     roomId,
     authUserId,
@@ -184,6 +325,81 @@ async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
     playerId,
     seatIndex: 0,
     maxPlayers: ROOM_MAX_PLAYERS,
+  };
+}
+
+async function joinAuthenticatedUserToRoom(
+  ctx: MutationCtx,
+  room: Doc<"rooms">,
+  authUserId: string,
+  name: string,
+  preferredSeatIndex?: number | null,
+) {
+  const existingAuthedPlayer = await getAnyActiveAuthedPlayer(ctx, authUserId);
+  if (existingAuthedPlayer) {
+    if (existingAuthedPlayer.roomId !== room._id) {
+      await leavePlayer(ctx, existingAuthedPlayer);
+    } else {
+      return {
+        roomId: room._id,
+        code: room.code,
+        playerId: existingAuthedPlayer._id,
+        seatIndex: existingAuthedPlayer.seatIndex,
+        maxPlayers: room.maxPlayers,
+      };
+    }
+  }
+
+  const activePlayers = await getActivePlayersInRoom(ctx, room._id);
+
+  if (activePlayers.length >= room.maxPlayers) {
+    throw new ConvexError({
+      code: "ROOM_FULL",
+      message: "Room is full.",
+    });
+  }
+
+  const occupiedSeats = new Set(activePlayers.map((player) => player.seatIndex));
+  const preferredSeatAvailable =
+    preferredSeatIndex !== null &&
+    preferredSeatIndex !== undefined &&
+    !occupiedSeats.has(preferredSeatIndex);
+  const seatIndex = preferredSeatAvailable
+    ? preferredSeatIndex
+    : findFirstAvailableSeat(occupiedSeats, room.maxPlayers);
+
+  if (seatIndex === null) {
+    throw new ConvexError({
+      code: "ROOM_FULL",
+      message: "No available seats in room.",
+    });
+  }
+
+  const isHost = activePlayers.length === 0;
+  const now = Date.now();
+
+  const playerId = await ctx.db.insert("players", {
+    roomId: room._id,
+    authUserId,
+    name,
+    seatIndex,
+    isHost,
+    status: "active",
+    readyStatus: false,
+    lastSeenAt: now,
+  });
+
+  await ctx.db.patch(room._id, {
+    lastActiveAt: now,
+    hostPlayerId: isHost ? playerId : room.hostPlayerId,
+  });
+
+  return {
+    roomId: room._id,
+    code: room.code,
+    playerId,
+    seatIndex,
+    maxPlayers: room.maxPlayers,
   };
 }
 
@@ -237,6 +453,17 @@ async function getRoomByCode(ctx: MutationCtx | QueryCtx, rawCode: string) {
   }
 
   return room;
+}
+
+async function getAuthUserByPlayerAuthUserId(
+  ctx: MutationCtx | QueryCtx,
+  authUserId: string | undefined,
+) {
+  if (!authUserId || authUserId.startsWith("dev-bot:")) {
+    return null;
+  }
+
+  return await authComponent.getAnyUserById(ctx, authUserId);
 }
 
 async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
@@ -300,7 +527,7 @@ async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
   await ctx.db.patch(room._id, {
     hostPlayerId: nextHostPlayerId,
     lastActiveAt: now,
-    status: "open",
+    status: room.status === "open" ? "open" : room.status,
   });
 
   return {
@@ -342,7 +569,16 @@ export const joinRoom = mutation({
       });
     }
 
-    const room = await getRoomByCode(ctx, args.code);
+    let room = await getRoomByCode(ctx, args.code);
+    await reapInactivePlayersForRoom(ctx, room, Date.now());
+    const refreshedRoom = await ctx.db.get(room._id);
+    if (!refreshedRoom) {
+      throw new ConvexError({
+        code: "ROOM_NOT_FOUND",
+        message: "Room does not exist.",
+      });
+    }
+    room = refreshedRoom;
 
     if (room.status !== "open") {
       throw new ConvexError({
@@ -356,68 +592,158 @@ export const joinRoom = mutation({
       authUserId,
     );
     if (existingAuthedPlayer) {
-      const existingRoom = await ctx.db.get(existingAuthedPlayer.roomId);
-      if (existingRoom) {
-        return {
-          roomId: existingRoom._id,
-          code: existingRoom.code,
-          playerId: existingAuthedPlayer._id,
-          seatIndex: existingAuthedPlayer.seatIndex,
-          maxPlayers: existingRoom.maxPlayers,
-        };
+      if (existingAuthedPlayer.roomId !== room._id) {
+        await leavePlayer(ctx, existingAuthedPlayer);
+      } else {
+        const existingRoom = await ctx.db.get(existingAuthedPlayer.roomId);
+        if (existingRoom) {
+          return {
+            roomId: existingRoom._id,
+            code: existingRoom.code,
+            playerId: existingAuthedPlayer._id,
+            seatIndex: existingAuthedPlayer.seatIndex,
+            maxPlayers: existingRoom.maxPlayers,
+          };
+        }
       }
     }
+    return await joinAuthenticatedUserToRoom(ctx, room, authUserId, name);
+  },
+});
 
-    const activePlayers = await ctx.db
-      .query("players")
-      .withIndex("roomId_status", (q) =>
-        q.eq("roomId", room._id).eq("status", "active"),
-      )
-      .collect();
-
-    if (activePlayers.length >= room.maxPlayers) {
-      throw new ConvexError({
-        code: "ROOM_FULL",
-        message: "Room is full.",
-      });
-    }
-
-    const occupiedSeats = new Set(
-      activePlayers.map((player) => player.seatIndex),
-    );
-    const seatIndex = findFirstAvailableSeat(occupiedSeats, room.maxPlayers);
-    if (seatIndex === null) {
-      throw new ConvexError({
-        code: "ROOM_FULL",
-        message: "No available seats in room.",
-      });
-    }
-
-    const isHost = activePlayers.length === 0;
-    const now = Date.now();
-
-    const playerId = await ctx.db.insert("players", {
-      roomId: room._id,
-      authUserId,
-      name,
-      seatIndex,
-      isHost,
-      status: "active",
-      lastSeenAt: now,
+async function rejoinRoomMember(
+  ctx: MutationCtx,
+  args: {
+    code: string;
+    name?: string;
+    defaultName?: string;
+  },
+) {
+  const authUserId = await getAuthenticatedUserId(ctx);
+  if (!authUserId) {
+    throw new ConvexError({
+      code: "UNAUTHORIZED",
+      message: "Authentication required.",
     });
+  }
 
+  const room = await getRoomByCode(ctx, args.code);
+  const now = Date.now();
+  const activePlayer = await getActiveAuthedPlayerInRoom(ctx, room._id, authUserId);
+  if (activePlayer) {
+    await ctx.db.patch(activePlayer._id, { lastSeenAt: now });
     await ctx.db.patch(room._id, {
+      status: "open",
       lastActiveAt: now,
-      hostPlayerId: isHost ? playerId : room.hostPlayerId,
+      hostPlayerId: room.hostPlayerId ?? activePlayer._id,
     });
-
     return {
       roomId: room._id,
       code: room.code,
-      playerId,
+      playerId: activePlayer._id,
+      seatIndex: activePlayer.seatIndex,
+      maxPlayers: room.maxPlayers,
+      rejoined: true,
+    };
+  }
+
+  const historicalPlayers = await ctx.db
+    .query("players")
+    .withIndex("roomId", (q) => q.eq("roomId", room._id))
+    .filter((q) => q.eq(q.field("authUserId"), authUserId))
+    .collect();
+
+  const activePlayers = await ctx.db
+    .query("players")
+    .withIndex("roomId_status", (q) =>
+      q.eq("roomId", room._id).eq("status", "active"),
+    )
+    .collect();
+
+  const occupiedSeats = new Set(activePlayers.map((player) => player.seatIndex));
+  const reusablePlayer =
+    [...historicalPlayers].sort((a, b) => b.lastSeenAt - a.lastSeenAt)[0] ?? null;
+
+  const seatIndex =
+    reusablePlayer && !occupiedSeats.has(reusablePlayer.seatIndex)
+      ? reusablePlayer.seatIndex
+      : findFirstAvailableSeat(occupiedSeats, room.maxPlayers);
+
+  if (seatIndex === null) {
+    throw new ConvexError({
+      code: "ROOM_FULL",
+      message: "No available seats in room.",
+    });
+  }
+
+  const fallbackName = normalizeName(args.name ?? "");
+  const nextName =
+    reusablePlayer?.name ??
+    (fallbackName.length > 0
+      ? fallbackName
+      : args.defaultName ?? "Player");
+
+  if (reusablePlayer) {
+    await ctx.db.patch(reusablePlayer._id, {
+      name: nextName,
+      seatIndex,
+      status: "active",
+      readyStatus: false,
+      isHost: activePlayers.length === 0 || room.hostPlayerId === reusablePlayer._id,
+      lastSeenAt: now,
+    });
+    await ctx.db.patch(room._id, {
+      status: "open",
+      lastActiveAt: now,
+      hostPlayerId:
+        activePlayers.length === 0 || !room.hostPlayerId
+          ? reusablePlayer._id
+          : room.hostPlayerId,
+    });
+    return {
+      roomId: room._id,
+      code: room.code,
+      playerId: reusablePlayer._id,
       seatIndex,
       maxPlayers: room.maxPlayers,
+      rejoined: true,
     };
+  }
+
+  const createdPlayerId = await ctx.db.insert("players", {
+    roomId: room._id,
+    authUserId,
+    name: nextName,
+    seatIndex,
+    isHost: activePlayers.length === 0,
+    status: "active",
+    readyStatus: false,
+    lastSeenAt: now,
+  });
+
+  await ctx.db.patch(room._id, {
+    status: "open",
+    lastActiveAt: now,
+    hostPlayerId: activePlayers.length === 0 ? createdPlayerId : room.hostPlayerId,
+  });
+
+  return {
+    roomId: room._id,
+    code: room.code,
+    playerId: createdPlayerId,
+    seatIndex,
+    maxPlayers: room.maxPlayers,
+    rejoined: false,
+  };
+}
+
+export const rejoinRoomByCode = mutation({
+  args: {
+    code: v.string(),
+    name: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await rejoinRoomMember(ctx, { ...args, defaultName: "Player" });
   },
 });
 
@@ -427,120 +753,7 @@ export const debugRejoinRoom = mutation({
     name: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const authUserId = await getAuthenticatedUserId(ctx);
-    if (!authUserId) {
-      throw new ConvexError({
-        code: "UNAUTHORIZED",
-        message: "Authentication required.",
-      });
-    }
-
-    const room = await getRoomByCode(ctx, args.code);
-    const now = Date.now();
-    const activePlayer = await getActiveAuthedPlayerInRoom(ctx, room._id, authUserId);
-    if (activePlayer) {
-      await ctx.db.patch(activePlayer._id, { lastSeenAt: now });
-      await ctx.db.patch(room._id, {
-        status: "open",
-        lastActiveAt: now,
-        hostPlayerId: room.hostPlayerId ?? activePlayer._id,
-      });
-      return {
-        roomId: room._id,
-        code: room.code,
-        playerId: activePlayer._id,
-        seatIndex: activePlayer.seatIndex,
-        maxPlayers: room.maxPlayers,
-        rejoined: true,
-      };
-    }
-
-    const historicalPlayers = await ctx.db
-      .query("players")
-      .withIndex("roomId", (q) => q.eq("roomId", room._id))
-      .filter((q) => q.eq(q.field("authUserId"), authUserId))
-      .collect();
-
-    const activePlayers = await ctx.db
-      .query("players")
-      .withIndex("roomId_status", (q) =>
-        q.eq("roomId", room._id).eq("status", "active"),
-      )
-      .collect();
-
-    const occupiedSeats = new Set(activePlayers.map((player) => player.seatIndex));
-    const reusablePlayer =
-      [...historicalPlayers].sort((a, b) => b.lastSeenAt - a.lastSeenAt)[0] ?? null;
-
-    const seatIndex =
-      reusablePlayer && !occupiedSeats.has(reusablePlayer.seatIndex)
-        ? reusablePlayer.seatIndex
-        : findFirstAvailableSeat(occupiedSeats, room.maxPlayers);
-
-    if (seatIndex === null) {
-      throw new ConvexError({
-        code: "ROOM_FULL",
-        message: "No available seats in room.",
-      });
-    }
-
-    const fallbackName = normalizeName(args.name ?? "");
-    const nextName =
-      reusablePlayer?.name ??
-      (fallbackName.length > 0 ? fallbackName : "Dev Player");
-
-    if (reusablePlayer) {
-      await ctx.db.patch(reusablePlayer._id, {
-        name: nextName,
-        seatIndex,
-        status: "active",
-        readyStatus: false,
-        isHost: activePlayers.length === 0 || room.hostPlayerId === reusablePlayer._id,
-        lastSeenAt: now,
-      });
-      await ctx.db.patch(room._id, {
-        status: "open",
-        lastActiveAt: now,
-        hostPlayerId:
-          activePlayers.length === 0 || !room.hostPlayerId
-            ? reusablePlayer._id
-            : room.hostPlayerId,
-      });
-      return {
-        roomId: room._id,
-        code: room.code,
-        playerId: reusablePlayer._id,
-        seatIndex,
-        maxPlayers: room.maxPlayers,
-        rejoined: true,
-      };
-    }
-
-    const createdPlayerId = await ctx.db.insert("players", {
-      roomId: room._id,
-      authUserId,
-      name: nextName,
-      seatIndex,
-      isHost: activePlayers.length === 0,
-      status: "active",
-      readyStatus: false,
-      lastSeenAt: now,
-    });
-
-    await ctx.db.patch(room._id, {
-      status: "open",
-      lastActiveAt: now,
-      hostPlayerId: activePlayers.length === 0 ? createdPlayerId : room.hostPlayerId,
-    });
-
-    return {
-      roomId: room._id,
-      code: room.code,
-      playerId: createdPlayerId,
-      seatIndex,
-      maxPlayers: room.maxPlayers,
-      rejoined: false,
-    };
+    return await rejoinRoomMember(ctx, { ...args, defaultName: "Dev Player" });
   },
 });
 
@@ -677,6 +890,141 @@ export const leaveRoomByCode = mutation({
   },
 });
 
+export const archiveRoomByCode = mutation({
+  args: {
+    code: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const code = normalizeRoomCode(args.code);
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("code", (q) => q.eq("code", code))
+      .unique();
+    if (!room) {
+      throw new ConvexError({
+        code: "ROOM_NOT_FOUND",
+        message: "Room does not exist.",
+      });
+    }
+
+    const player = await getActiveAuthedPlayerInRoom(ctx, room._id, authUserId);
+    if (!player) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You are not an active member of this room.",
+      });
+    }
+
+    const latestGame = await ctx.db
+      .query("games")
+      .withIndex("by_room", (q) => q.eq("roomId", String(room._id)))
+      .order("desc")
+      .first();
+
+    if (latestGame && latestGame.status !== "completed") {
+      throw new ConvexError({
+        code: "GAME_NOT_COMPLETED",
+        message: "Only completed rooms can be archived for a new hand.",
+      });
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(room._id, {
+      status: "closed",
+      lastActiveAt: now,
+    });
+
+    return {
+      ok: true,
+      roomId: room._id,
+      code: room.code,
+      status: "closed" as const,
+    };
+  },
+});
+
+export const continueToNextRoom = mutation({
+  args: {
+    code: v.string(),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const name = normalizeName(args.name);
+    if (name.length === 0 || name.length > PLAYER_NAME_MAX_LENGTH) {
+      throw new ConvexError({
+        code: "INVALID_NAME",
+        message: `Name must be between 1 and ${PLAYER_NAME_MAX_LENGTH} characters.`,
+      });
+    }
+
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const room = await getRoomByCode(ctx, args.code);
+    const latestGame = await ctx.db
+      .query("games")
+      .withIndex("by_room", (q) => q.eq("roomId", String(room._id)))
+      .order("desc")
+      .first();
+
+    if (!latestGame || latestGame.status !== "completed") {
+      throw new ConvexError({
+        code: "GAME_NOT_COMPLETED",
+        message: "The room must have a completed game before continuing.",
+      });
+    }
+
+    const activePlayer = await getActiveAuthedPlayerInRoom(ctx, room._id, authUserId);
+    if (!activePlayer) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You are not an active member of this room.",
+      });
+    }
+
+    let nextRoom =
+      room.nextRoomId !== undefined ? await ctx.db.get(room.nextRoomId) : null;
+
+    if (!nextRoom) {
+      const { roomId: nextRoomId } = await createOpenRoom(ctx);
+      await ctx.db.patch(room._id, {
+        status: "closed",
+        nextRoomId,
+        lastActiveAt: Date.now(),
+      });
+      nextRoom = await ctx.db.get(nextRoomId);
+    }
+
+    if (!nextRoom || nextRoom.status !== "open") {
+      throw new ConvexError({
+        code: "NEXT_ROOM_UNAVAILABLE",
+        message: "The next room is not available.",
+      });
+    }
+
+    return await joinAuthenticatedUserToRoom(
+      ctx,
+      nextRoom,
+      authUserId,
+      name,
+      activePlayer.seatIndex,
+    );
+  },
+});
+
 export const leaveCurrentRoom = mutation({
   args: {},
   handler: async (ctx) => {
@@ -784,6 +1132,7 @@ export const heartbeatByCode = mutation({
 export const ensureSeedRooms = mutation({
   args: {},
   handler: async (ctx) => {
+    const inactiveCleanup = await reapInactivePlayersAcrossOpenRooms(ctx);
     const staleClosed = await closeStaleScoreboardRooms(ctx);
     const openRooms = await ctx.db
       .query("rooms")
@@ -839,7 +1188,12 @@ export const ensureSeedRooms = mutation({
       await createOpenRoom(ctx);
     }
 
-    return { created: roomsToCreate, staleClosed };
+    return {
+      created: roomsToCreate,
+      staleClosed,
+      inactiveRoomsClosed: inactiveCleanup.roomsClosed,
+      inactivePlayersRemoved: inactiveCleanup.stalePlayersRemoved,
+    };
   },
 });
 
@@ -848,6 +1202,7 @@ export const refreshOpenRooms = mutation({
     count: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const inactiveCleanup = await reapInactivePlayersAcrossOpenRooms(ctx);
     const staleClosed = await closeStaleScoreboardRooms(ctx);
     const now = Date.now();
     const openRooms = await ctx.db
@@ -886,9 +1241,10 @@ export const refreshOpenRooms = mutation({
       .collect();
 
     return {
-      closed: closed + staleClosed,
+      closed: closed + staleClosed + inactiveCleanup.roomsClosed,
       created: roomsToCreate,
       openRooms: remainingOpenRooms.length,
+      inactivePlayersRemoved: inactiveCleanup.stalePlayersRemoved,
     };
   },
 });
@@ -896,6 +1252,7 @@ export const refreshOpenRooms = mutation({
 export const listRooms = query({
   args: {},
   handler: async (ctx) => {
+    const now = Date.now();
     const rooms = await ctx.db
       .query("rooms")
       .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
@@ -904,12 +1261,9 @@ export const listRooms = query({
 
     const result = [];
     for (const room of rooms) {
-      const activePlayers = await ctx.db
-        .query("players")
-        .withIndex("roomId_status", (q) =>
-          q.eq("roomId", room._id).eq("status", "active"),
-        )
-        .collect();
+      const activePlayers = (await getActivePlayersInRoom(ctx, room._id)).filter(
+        (player) => !isPlayerInactive(player, now),
+      );
       result.push({
         _id: room._id,
         code: room.code,
@@ -928,6 +1282,7 @@ export const getRoomMembers = query({
     code: v.string(),
   },
   handler: async (ctx, args) => {
+    const now = Date.now();
     const code = normalizeRoomCode(args.code);
     if (!/^[A-Z0-9]+$/.test(code) || code.length !== ROOM_CODE_LENGTH) {
       throw new ConvexError({
@@ -945,12 +1300,9 @@ export const getRoomMembers = query({
       return null;
     }
 
-    const activePlayers = await ctx.db
-      .query("players")
-      .withIndex("roomId_status", (q) =>
-        q.eq("roomId", room._id).eq("status", "active"),
-      )
-      .collect();
+    const activePlayers = (await getActivePlayersInRoom(ctx, room._id)).filter(
+      (player) => !isPlayerInactive(player, now),
+    );
 
     activePlayers.sort((a, b) => a.seatIndex - b.seatIndex);
 
@@ -994,10 +1346,10 @@ export const getRoomMembers = query({
 
     const members = await Promise.all(
       activePlayers.map(async (player) => {
-        const authUser =
-          player.authUserId && !player.authUserId.startsWith("dev-bot:")
-            ? await ctx.db.get(player.authUserId as Id<"user">)
-            : null;
+        const authUser = await getAuthUserByPlayerAuthUserId(
+          ctx,
+          player.authUserId,
+        );
 
         return {
           _id: player._id,
@@ -1029,6 +1381,7 @@ export const getRoomMembers = query({
 export const getMyActiveRoom = query({
   args: {},
   handler: async (ctx) => {
+    const now = Date.now();
     const authUserId = await getAuthenticatedUserId(ctx);
     if (!authUserId) {
       return null;
@@ -1045,8 +1398,12 @@ export const getMyActiveRoom = query({
       return null;
     }
 
+    if (isPlayerInactive(activePlayer, now)) {
+      return null;
+    }
+
     const room = await ctx.db.get(activePlayer.roomId);
-    if (!room) {
+    if (!room || room.status !== "open") {
       return null;
     }
 
@@ -1086,6 +1443,29 @@ export const toggleReady = mutation({
       });
     }
 
+    const waitingGame = await ctx.db
+      .query("games")
+      .withIndex("by_room_status", (q) =>
+        q.eq("roomId", String(room._id)).eq("status", "waiting")
+      )
+      .unique();
+
+    if (!waitingGame) {
+      const activeGame = await ctx.db
+        .query("games")
+        .withIndex("by_room_status", (q) =>
+          q.eq("roomId", String(room._id)).eq("status", "active")
+        )
+        .unique();
+
+      throw new ConvexError({
+        code: activeGame ? "GAME_ALREADY_ACTIVE" : "NO_WAITING_GAME",
+        message: activeGame
+          ? "The next hand already started."
+          : "There is no next hand waiting for ready checks.",
+      });
+    }
+
     const player = await ctx.db
       .query("players")
       .withIndex("roomId_status", (q) =>
@@ -1119,13 +1499,12 @@ export const toggleReady = mutation({
       const game = await ctx.db
         .query("games")
         .withIndex("by_room_status", (q) =>
-          q.eq("roomId", room._id).eq("status", "waiting")
+          q.eq("roomId", String(room._id)).eq("status", "waiting")
         )
         .unique();
 
       if (game) {
-        // Schedule the game start (use internal mutation to avoid auth checks)
-        await ctx.scheduler.runAfter(0, internal.games.internalStartGame, {
+        await internalStartGameHandler(ctx, {
           gameId: game._id,
         });
       }
