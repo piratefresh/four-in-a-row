@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canReuseLinkedNextRoom, getOfflineBotSourcePlayers } from "./rooms";
+import { getOfflineBotSourcePlayers } from "./rooms";
 
 describe("offline next-hand bot carry-forward", () => {
   it("keeps bot seats from room history even if those bot players are no longer active", () => {

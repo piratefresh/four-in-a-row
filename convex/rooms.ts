@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -80,39 +80,6 @@ export function getOfflineBotSourcePlayers<T extends OfflineBotSourcePlayer>(
   return [...botsBySeat.values()].sort((a, b) => a.seatIndex - b.seatIndex);
 }
 
-export function canReuseLinkedNextRoom(args: {
-  roomStatus: Doc<"rooms">["status"] | null | undefined;
-  activePlayerCount: number;
-  existingGameCount: number;
-}) {
-  return (
-    args.roomStatus === "open" &&
-    args.activePlayerCount === 0 &&
-    args.existingGameCount === 0
-  );
-}
-
-async function isFreshNextRoomCandidate(
-  ctx: MutationCtx,
-  room: Doc<"rooms"> | null,
-) {
-  if (!room) {
-    return false;
-  }
-
-  const activePlayers = await getActivePlayersInRoom(ctx, room._id);
-  const existingGames = await ctx.db
-    .query("games")
-    .withIndex("by_room", (q) => q.eq("roomId", String(room._id)))
-    .take(1);
-
-  return canReuseLinkedNextRoom({
-    roomStatus: room.status,
-    activePlayerCount: activePlayers.length,
-    existingGameCount: existingGames.length,
-  });
-}
-
 async function generateUniqueRoomCode(ctx: MutationCtx) {
   let code: string | null = null;
   for (let attempt = 0; attempt < ROOM_CODE_MAX_ATTEMPTS; attempt++) {
@@ -135,7 +102,10 @@ async function generateUniqueRoomCode(ctx: MutationCtx) {
   return code;
 }
 
-async function createOpenRoom(ctx: MutationCtx) {
+async function createOpenRoom(
+  ctx: MutationCtx,
+  sourceRoomId?: Id<"rooms">,
+) {
   const code = await generateUniqueRoomCode(ctx);
   const now = Date.now();
   const roomId = await ctx.db.insert("rooms", {
@@ -143,6 +113,7 @@ async function createOpenRoom(ctx: MutationCtx) {
     status: "open",
     maxPlayers: ROOM_MAX_PLAYERS,
     nextRoomId: undefined,
+    sourceRoomId,
     createdAt: now,
     lastActiveAt: now,
   });
@@ -170,6 +141,45 @@ async function getActivePlayersInRoom(
       q.eq("roomId", roomId).eq("status", "active"),
     )
     .collect();
+}
+
+async function findContinuationRoom(
+  ctx: MutationCtx,
+  sourceRoom: Doc<"rooms">,
+) {
+  const linkedRoom =
+    sourceRoom.nextRoomId !== undefined
+      ? await ctx.db.get(sourceRoom.nextRoomId)
+      : null;
+  if (linkedRoom?.status === "open") {
+    return linkedRoom;
+  }
+
+  const candidateRooms = await ctx.db
+    .query("rooms")
+    .withIndex("sourceRoomId", (q) => q.eq("sourceRoomId", sourceRoom._id))
+    .collect();
+
+  const openCandidates = candidateRooms.filter((room) => room.status === "open");
+  if (openCandidates.length === 0) {
+    return null;
+  }
+
+  const candidatesWithCounts = await Promise.all(
+    openCandidates.map(async (room) => ({
+      room,
+      activePlayers: (await getActivePlayersInRoom(ctx, room._id)).length,
+    })),
+  );
+
+  candidatesWithCounts.sort((left, right) => {
+    if (right.activePlayers !== left.activePlayers) {
+      return right.activePlayers - left.activePlayers;
+    }
+    return right.room.createdAt - left.room.createdAt;
+  });
+
+  return candidatesWithCounts[0]?.room ?? null;
 }
 
 async function completeLiveGamesForRoom(
@@ -516,7 +526,7 @@ async function syncOfflineBotsToRoom(
 }
 
 async function getActiveAuthedPlayerInRoom(
-  ctx: MutationCtx,
+  ctx: MutationCtx | QueryCtx,
   roomId: Id<"rooms">,
   authUserId: string,
 ) {
@@ -1107,17 +1117,22 @@ export const continueToNextRoom = mutation({
       });
     }
 
-    let nextRoom =
-      room.nextRoomId !== undefined ? await ctx.db.get(room.nextRoomId) : null;
+    let nextRoom = await findContinuationRoom(ctx, room);
 
-    if (!(await isFreshNextRoomCandidate(ctx, nextRoom))) {
-      const { roomId: nextRoomId } = await createOpenRoom(ctx);
+    if (!nextRoom || nextRoom.status !== "open") {
+      const { roomId: nextRoomId } = await createOpenRoom(ctx, room._id);
       await ctx.db.patch(room._id, {
         status: "closed",
         nextRoomId,
         lastActiveAt: Date.now(),
       });
       nextRoom = await ctx.db.get(nextRoomId);
+    } else if (room.nextRoomId !== nextRoom._id) {
+      await ctx.db.patch(room._id, {
+        status: "closed",
+        nextRoomId: nextRoom._id,
+        lastActiveAt: Date.now(),
+      });
     }
 
     if (!nextRoom || nextRoom.status !== "open") {

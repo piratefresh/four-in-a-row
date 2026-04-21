@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useRoomPresence } from "@/components/rooms/hooks/useRoomPresence";
 import { ShowdownResultsScreen } from "@/components/rooms/results/ShowdownResultsScreen";
 import { authClient } from "@/lib/auth-client";
@@ -30,9 +30,7 @@ function ResultsPage() {
   const { code } = Route.useParams();
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
-  const continueToNextRoom = useMutation(api.rooms.continueToNextRoom);
-  const [isStartingNextHand, setIsStartingNextHand] = useState(false);
-  const [nextHandError, setNextHandError] = useState<string | null>(null);
+  const leaveRoom = useMutation(api.rooms.leaveRoom);
 
   const roomData = useQuery(api.rooms.getRoomMembers, { code });
   const game = useQuery(api.games.getGameByRoom, {
@@ -71,38 +69,22 @@ function ResultsPage() {
     return null;
   }, [roomData, session?.user]);
 
-  const handleNextHand = async () => {
-    if (isStartingNextHand) {
-      return;
-    }
-
-    const displayName =
-      session?.user?.name?.trim() || session?.user?.email || null;
-    if (!displayName) {
-      await navigate({ to: "/login" });
-      return;
-    }
-
-    setIsStartingNextHand(true);
-    setNextHandError(null);
-
+  const handleReturnToOnlineRooms = async () => {
     try {
-      const newRoom = await continueToNextRoom({
-        code,
-        name: displayName,
-      });
-      await navigate({ to: "/rooms/$code", params: { code: newRoom.code } });
+      await leaveRoom({});
     } catch (error) {
-      console.error("Error starting next hand room:", error);
-
-      setNextHandError(
-        error instanceof Error
-          ? error.message
-          : "Failed to create a new room.",
-      );
-    } finally {
-      setIsStartingNextHand(false);
+      console.error("Error leaving room:", error);
     }
+    void navigate({ to: "/", search: { view: "online" } });
+  };
+
+  const handleReturnToMainMenu = async () => {
+    try {
+      await leaveRoom({});
+    } catch (error) {
+      console.error("Error leaving room:", error);
+    }
+    void navigate({ to: "/" });
   };
 
   useRoomPresence(code, Boolean(session?.user && roomData?.room && myPlayer));
@@ -155,9 +137,8 @@ function ResultsPage() {
       showdownResults={showdownResults}
       getPlayerName={getPlayerName}
       getPlayerAvatar={getPlayerAvatar}
-      onNextHand={handleNextHand}
-      isStartingNextHand={isStartingNextHand}
-      nextHandError={nextHandError}
+      onReturnToOnlineRooms={handleReturnToOnlineRooms}
+      onReturnToMainMenu={handleReturnToMainMenu}
     />
   );
 }

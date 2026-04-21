@@ -15,10 +15,12 @@ export const appTables = {
     maxPlayers: v.number(),
     hostPlayerId: v.optional(v.id("players")),
     nextRoomId: v.optional(v.id("rooms")),
+    sourceRoomId: v.optional(v.id("rooms")),
     createdAt: v.number(),
     lastActiveAt: v.number(),
   })
     .index("code", ["code"])
+    .index("sourceRoomId", ["sourceRoomId"])
     .index("status_lastActiveAt", ["status", "lastActiveAt"]),
   players: defineTable({
     roomId: v.id("rooms"),
