@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRoomPresence } from "@/components/rooms/hooks/useRoomPresence";
 import { ShowdownResultsScreen } from "@/components/rooms/results/ShowdownResultsScreen";
 import { authClient } from "@/lib/auth-client";
@@ -31,6 +31,10 @@ function ResultsPage() {
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
   const leaveRoom = useMutation(api.rooms.leaveRoom);
+  const createRoom = useMutation(api.rooms.createRoom);
+  const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
+  const createGameForRoom = useMutation(api.games.createGameForRoom);
+  const [isStartingNewGame, setIsStartingNewGame] = useState(false);
 
   const roomData = useQuery(api.rooms.getRoomMembers, { code });
   const game = useQuery(api.games.getGameByRoom, {
@@ -68,6 +72,38 @@ function ResultsPage() {
 
     return null;
   }, [roomData, session?.user]);
+
+  // Detect if this is an offline game (all other players are bots)
+  const isOfflineGame = useMemo(() => {
+    if (!roomData?.members) return false;
+    const otherPlayers = roomData.members.filter(
+      (member) => member._id !== myPlayer?._id
+    );
+    return otherPlayers.every((member) => member.authUserId?.startsWith("dev-bot:"));
+  }, [roomData?.members, myPlayer]);
+
+  const handlePlayAnotherOffline = async () => {
+    const displayName =
+      session?.user?.name?.trim() || session?.user?.email || null;
+    if (!displayName) {
+      await navigate({ to: "/login" });
+      return;
+    }
+
+    setIsStartingNewGame(true);
+
+    try {
+      await leaveRoom({});
+      const room = await createRoom({ name: displayName });
+      await debugFillRoomWithBots({ code: room.code, count: 3 });
+      await createGameForRoom({ roomId: room.roomId });
+      await navigate({ to: "/rooms/$code", params: { code: room.code } });
+    } catch (error) {
+      console.error("Error starting new offline game:", error);
+    } finally {
+      setIsStartingNewGame(false);
+    }
+  };
 
   const handleReturnToOnlineRooms = async () => {
     try {
@@ -139,6 +175,9 @@ function ResultsPage() {
       getPlayerAvatar={getPlayerAvatar}
       onReturnToOnlineRooms={handleReturnToOnlineRooms}
       onReturnToMainMenu={handleReturnToMainMenu}
+      isOfflineGame={isOfflineGame}
+      onPlayAnotherOffline={handlePlayAnotherOffline}
+      isStartingNewGame={isStartingNewGame}
     />
   );
 }

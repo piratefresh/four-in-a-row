@@ -37,8 +37,11 @@ type ShowdownResultsScreenProps = {
   showdownResults: ShowdownResults;
   getPlayerName: (id: string) => string;
   getPlayerAvatar: (id: string) => string | null;
-  onReturnToOnlineRooms: () => void;
+  onReturnToOnlineRooms?: () => void;
   onReturnToMainMenu: () => void;
+  isOfflineGame?: boolean;
+  onPlayAnotherOffline?: () => void;
+  isStartingNewGame?: boolean;
 };
 
 const PLAYER_GRADIENTS = [
@@ -56,6 +59,9 @@ export function ShowdownResultsScreen({
   getPlayerAvatar,
   onReturnToOnlineRooms,
   onReturnToMainMenu,
+  isOfflineGame,
+  onPlayAnotherOffline,
+  isStartingNewGame,
 }: ShowdownResultsScreenProps) {
   const submissions = showdownResults.allSubmissions ?? [];
   const winnerName =
@@ -80,25 +86,51 @@ export function ShowdownResultsScreen({
         </header>
 
         <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            onClick={onReturnToOnlineRooms}
-            className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01]"
-          >
-            Online Rooms
-          </button>
+          {isOfflineGame ? (
+            <>
+              <button
+                type="button"
+                onClick={onPlayAnotherOffline}
+                disabled={isStartingNewGame}
+                className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isStartingNewGame ? "Starting..." : "Play Another"}
+              </button>
 
-          <button
-            type="button"
-            onClick={onReturnToMainMenu}
-            className="flex-1 rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-6 py-4 text-base font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01]"
-          >
-            Main Menu
-          </button>
+              <button
+                type="button"
+                onClick={onReturnToMainMenu}
+                disabled={isStartingNewGame}
+                className="flex-1 rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-6 py-4 text-base font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Main Menu
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onReturnToOnlineRooms}
+                className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01]"
+              >
+                Online Rooms
+              </button>
+
+              <button
+                type="button"
+                onClick={onReturnToMainMenu}
+                className="flex-1 rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-6 py-4 text-base font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01]"
+              >
+                Main Menu
+              </button>
+            </>
+          )}
         </div>
 
         <p className="mt-3 text-center text-sm text-white/52">
-          Browse other rooms or return home.
+          {isOfflineGame
+            ? "Start another bot game or return home."
+            : "Browse other rooms or return home."}
         </p>
 
         <div className="mt-8 flex-1 space-y-3">
