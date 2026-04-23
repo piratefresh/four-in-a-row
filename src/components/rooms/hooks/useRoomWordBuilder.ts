@@ -9,6 +9,7 @@ import type {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { calculateShowdownPreviewScore } from "../../../lib/showdownScore";
 
 function sortDisabledToEnd(tiles: BuilderTile[]) {
   return [...tiles].sort((a, b) => Number(!!a.disabled) - Number(!!b.disabled));
@@ -46,6 +47,10 @@ export function useRoomWordBuilder({
   const [choiceSelections, setChoiceSelections] = useState<
     Record<string, string>
   >({});
+  const enabledBuilderTiles = useMemo(
+    () => builderTiles.filter((tile) => !tile.disabled),
+    [builderTiles],
+  );
 
   useEffect(() => {
     if (!bottomHand) {
@@ -124,8 +129,7 @@ export function useRoomWordBuilder({
 
   const wordPreview = useMemo(
     () =>
-      builderTiles
-        .filter((tile) => !tile.disabled)
+      enabledBuilderTiles
         .map((tile) => {
           if (tile.isChoice) {
             return choiceSelections[tile.id] || `[${tile.letters?.[0]}]`;
@@ -133,18 +137,58 @@ export function useRoomWordBuilder({
           return tile.letter ?? "";
         })
         .join(""),
-    [builderTiles, choiceSelections],
+    [choiceSelections, enabledBuilderTiles],
   );
 
   const unresolvedChoices = useMemo(
     () =>
-      builderTiles
-        .filter((tile) => !tile.disabled && tile.isChoice)
+      enabledBuilderTiles
+        .filter((tile) => tile.isChoice)
         .filter((tile) => !choiceSelections[tile.id]),
-    [builderTiles, choiceSelections],
+    [choiceSelections, enabledBuilderTiles],
   );
 
   const hasUnresolvedChoices = unresolvedChoices.length > 0;
+
+  const resolvedPreviewTiles = useMemo(() => {
+    const previewTiles = enabledBuilderTiles.map((tile) => {
+      if (tile.isChoice) {
+        const selectedLetter = choiceSelections[tile.id];
+        if (!selectedLetter) return null;
+
+        const optionIndex = tile.letters?.indexOf(selectedLetter) ?? 0;
+
+        return {
+          letter: selectedLetter,
+          baseValue: tile.baseValues?.[optionIndex] ?? 1,
+          multiplier: tile.multiplier,
+          source: tile.source,
+          cardIndex: tile.cardIndex,
+          wasChoice: true,
+        };
+      }
+
+      if (!tile.letter || typeof tile.baseValue !== "number") {
+        return null;
+      }
+
+      return {
+        letter: tile.letter,
+        baseValue: tile.baseValue,
+        multiplier: tile.multiplier,
+        source: tile.source,
+        cardIndex: tile.cardIndex,
+        wasChoice: false,
+      };
+    });
+
+    return previewTiles.every((tile) => tile !== null) ? previewTiles : null;
+  }, [choiceSelections, enabledBuilderTiles]);
+
+  const wordScorePreview = useMemo(() => {
+    if (!resolvedPreviewTiles) return null;
+    return calculateShowdownPreviewScore(resolvedPreviewTiles);
+  }, [resolvedPreviewTiles]);
 
   const mySubmission = useMemo(() => {
     if (!bottomHand || !wordSubmissions?.submissions) return null;
@@ -249,37 +293,20 @@ export function useRoomWordBuilder({
     setValidationError(null);
 
     try {
-      const enabledTiles = builderTiles.filter((tile) => !tile.disabled);
-      const tiles = enabledTiles.map((tile) => {
-        if (tile.isChoice) {
-          const selectedLetter = choiceSelections[tile.id];
-          const optionIndex = tile.letters?.indexOf(selectedLetter) ?? 0;
-          const selectedValue = tile.baseValues?.[optionIndex] ?? 1;
-          return {
-            letter: selectedLetter,
-            baseValue: selectedValue,
-            multiplier: tile.multiplier,
-            source: tile.source,
-            cardIndex: tile.cardIndex,
-            wasChoice: true,
-          };
-        }
-        return {
-          letter: tile.letter!,
-          baseValue: tile.baseValue!,
-          multiplier: tile.multiplier,
-          source: tile.source,
-          cardIndex: tile.cardIndex,
-          wasChoice: false,
-        };
-      });
+      if (!resolvedPreviewTiles) {
+        setValidationError("Please select a letter for each choice card");
+        setIsValidating(false);
+        return;
+      }
+
+      const tiles = resolvedPreviewTiles;
 
       const choiceResolutions: {
         hand?: Record<string, string>;
         community?: Record<string, string>;
       } = {};
 
-      enabledTiles.forEach((tile) => {
+      enabledBuilderTiles.forEach((tile) => {
         if (tile.isChoice && tile.cardIndex !== undefined) {
           const selectedLetter = choiceSelections[tile.id];
           const resolutionKey = tile.source === "hand" ? "hand" : "community";
@@ -339,6 +366,7 @@ export function useRoomWordBuilder({
     showReveal,
     validationError,
     wordPreview,
+    wordScorePreview,
     wordSubmissions,
   };
 }

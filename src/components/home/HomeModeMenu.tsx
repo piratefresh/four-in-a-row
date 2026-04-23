@@ -1,23 +1,36 @@
 type HomeModeMenuProps = {
   activeRoomCode?: string | null;
+  activeRoomTutorialId?: string | null;
   isStartingOffline: boolean;
+  isStartingTutorial: boolean;
   statusMessage: string | null;
   onSelectOnline: () => void;
   onStartOffline: () => void;
+  onPlayTutorial: () => void;
   onResumeRoom?: () => void;
+  onReplayTutorial?: () => void;
 };
 
 export function HomeModeMenu({
   activeRoomCode,
+  activeRoomTutorialId,
   isStartingOffline,
+  isStartingTutorial,
   statusMessage,
   onSelectOnline,
   onStartOffline,
+  onPlayTutorial,
   onResumeRoom,
+  onReplayTutorial,
 }: HomeModeMenuProps) {
   const offlineCtaLabel = isStartingOffline
     ? "Setting up table..."
     : "Start offline game";
+  const tutorialCtaLabel = isStartingTutorial
+    ? activeRoomTutorialId
+      ? "Resetting tutorial..."
+      : "Setting up tutorial..."
+    : "Play tutorial";
 
   return (
     <main className="relative overflow-hidden bg-[#07120f] text-white flex flex-1">
@@ -37,13 +50,27 @@ export function HomeModeMenu({
 
         <div className="grid flex-1 content-center gap-3 py-4 sm:gap-4 sm:py-8 lg:grid-cols-2">
           {activeRoomCode ? (
-            <button
-              type="button"
-              onClick={onResumeRoom}
-              className="inline-flex items-center rounded-full border border-white/12 bg-black/25 px-4 py-2 text-sm font-medium text-[#f1eee4] transition-colors hover:border-[#d5b35f]/35 hover:text-white"
-            >
-              Resume playing in room {activeRoomCode}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={onResumeRoom}
+                className="inline-flex items-center rounded-full border border-white/12 bg-black/25 px-4 py-2 text-sm font-medium text-[#f1eee4] transition-colors hover:border-[#d5b35f]/35 hover:text-white"
+              >
+                {activeRoomTutorialId
+                  ? `Resume your tutorial table ${activeRoomCode}`
+                  : `Resume playing in room ${activeRoomCode}`}
+              </button>
+
+              {activeRoomTutorialId ? (
+                <button
+                  type="button"
+                  onClick={onReplayTutorial}
+                  className="inline-flex items-center rounded-full border border-[#d5b35f]/30 bg-[#1c1406]/70 px-4 py-2 text-sm font-medium text-[#f3deb0] transition-colors hover:border-[#d5b35f]/55 hover:text-[#fff0cb]"
+                >
+                  Replay tutorial
+                </button>
+              ) : null}
+            </div>
           ) : null}
 
           <button
@@ -80,14 +107,24 @@ export function HomeModeMenu({
               into a playable hand.
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 sm:mt-8">
-              <button
-                type="button"
-                onClick={onStartOffline}
-                disabled={isStartingOffline}
-                className="inline-flex items-center rounded-full border border-[#f2a165]/35 px-4 py-2 text-sm font-medium text-[#f4cfb0] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#f1a15c]/40 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {offlineCtaLabel}
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onStartOffline}
+                  disabled={isStartingOffline || isStartingTutorial}
+                  className="inline-flex items-center rounded-full border border-[#f2a165]/35 px-4 py-2 text-sm font-medium text-[#f4cfb0] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#f1a15c]/40 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {offlineCtaLabel}
+                </button>
+                <button
+                  type="button"
+                  onClick={onPlayTutorial}
+                  disabled={isStartingOffline || isStartingTutorial}
+                  className="inline-flex items-center rounded-full border border-[#d7b45e]/35 bg-[#1a1509]/60 px-4 py-2 text-sm font-medium text-[#f4d99d] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#d7b45e]/50 hover:text-[#fff0cb] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {tutorialCtaLabel}
+                </button>
+              </div>
             </div>
           </div>
         </div>

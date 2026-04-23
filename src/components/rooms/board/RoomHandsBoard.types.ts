@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export type Tile =
@@ -45,6 +46,7 @@ export type RoomHandsBoardProps = {
   bigBlindIndex?: number;
   pot?: number;
   chatDraft?: string;
+  tutorialReplayControl?: ReactNode;
 };
 
 export type BuilderTile = {

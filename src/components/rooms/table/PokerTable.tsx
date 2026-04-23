@@ -20,6 +20,8 @@ export interface PokerTablePlayer {
   meta?: string | null;
 }
 
+type PokerTableSize = "sm" | "md" | "lg" | "responsive";
+
 interface PokerTableProps {
   players?: PokerTablePlayer[];
   maxPlayers: number;
@@ -27,10 +29,19 @@ interface PokerTableProps {
   isJoining?: boolean;
   centerLabel?: string;
   showSeats?: boolean;
+  size?: PokerTableSize;
   className?: string;
   shellInsetClassName?: string;
   children?: ReactNode;
 }
+
+const tableSizeClasses: Record<PokerTableSize, string> = {
+  sm: "w-[430px] h-[240px] max-w-[430px]",
+  md: "w-[750px] h-[350px] max-w-[750px]",
+  lg: "w-[750px] h-[500px] max-w-[750px]",
+  responsive:
+    "w-[min(1000px,calc(100vw-1rem))] max-w-[1000px] h-[clamp(240px,46vw,500px)]",
+};
 
 export function PokerTable({
   players = [],
@@ -39,6 +50,7 @@ export function PokerTable({
   isJoining = false,
   centerLabel = "WORD POKER",
   showSeats = true,
+  size,
   className,
   shellInsetClassName = "inset-x-0 bottom-0 top-6",
   children,
@@ -53,7 +65,9 @@ export function PokerTable({
   }));
 
   return (
-    <div className={`relative mx-auto h-[460px] w-full max-w-[340px] ${className ?? ""}`}>
+    <div
+      className={`relative mx-auto ${size ? tableSizeClasses[size] : "w-[300px] h-[250px]"} ${className ?? ""}`}
+    >
       <div className={`absolute ${shellInsetClassName}`}>
         <div className="relative h-full w-full rounded-[50%/40%] border-[3px] border-[#3a2815] bg-[radial-gradient(circle_at_50%_38%,#2d5016_0%,#1a3010_70%,#0f1d08_100%)] shadow-[inset_0_0_40px_rgba(0,0,0,0.6),0_10px_30px_rgba(0,0,0,0.5)]">
           <div className="absolute inset-3 rounded-[50%/40%] border border-[#f4d37a]/60"></div>
@@ -133,11 +147,7 @@ interface OpenSeatProps {
   onOpenSeatClick?: (seatIndex: number) => void;
 }
 
-function OpenSeat({
-  seatIndex,
-  isJoining,
-  onOpenSeatClick,
-}: OpenSeatProps) {
+function OpenSeat({ seatIndex, isJoining, onOpenSeatClick }: OpenSeatProps) {
   return (
     <div className="flex flex-col items-center">
       <button

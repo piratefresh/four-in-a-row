@@ -17,6 +17,8 @@ import {
   sortHandsByTurnOrder,
 } from "./gamesShared";
 
+const FIRST_BOT_GAME_TUTORIAL_ID = "first-bot-game" as const;
+
 export async function advanceTurn(
   ctx: MutationCtx,
   game: { _id: Id<"games">; currentPlayerIndex: number },
@@ -56,6 +58,7 @@ async function advanceStage(
   ctx: MutationCtx,
   game: {
     _id: Id<"games">;
+    roomId: string;
     stage: GameStage;
     communityTiles: GameTile[];
     deck: GameDeckTile[];
@@ -72,6 +75,12 @@ async function advanceStage(
 
   const now = Date.now();
   const skipBetting = nextStage === "final";
+  const roomId = game.roomId as Id<"rooms">;
+  const room = await ctx.db.get(roomId);
+  const shouldPauseTutorialBetting =
+    nextStage === "flop" && room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
+  const shouldPauseTutorialShowdown =
+    nextStage === "final" && room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
 
   for (const hand of orderedHands) {
     if (!hand.hasFolded) {
@@ -120,10 +129,12 @@ async function advanceStage(
   };
 
   if (targetStage === "showdown") {
-    updateData.showdownStartedAt = now;
+    updateData.showdownStartedAt = shouldPauseTutorialShowdown
+      ? undefined
+      : now;
     updateData.turnStartedAt = undefined;
   } else {
-    updateData.turnStartedAt = now;
+    updateData.turnStartedAt = shouldPauseTutorialBetting ? undefined : now;
   }
 
   await ctx.db.patch(game._id, updateData);
@@ -159,7 +170,11 @@ async function scheduleBotShowdownSubmissions(
   gameId: Id<"games">,
 ) {
   const game = await ctx.db.get(gameId);
-  if (!game || game.stage !== "showdown") {
+  if (
+    !game ||
+    game.stage !== "showdown" ||
+    game.showdownStartedAt === undefined
+  ) {
     return;
   }
 
@@ -264,6 +279,12 @@ export async function scheduleBotTurnIfNeeded(
 
   if (game.stage === "showdown") {
     console.log("scheduleBotTurnIfNeeded: Scheduling showdown submissions");
+    if (game.showdownStartedAt === undefined) {
+      console.log(
+        "scheduleBotTurnIfNeeded: Tutorial showdown is paused until released",
+      );
+      return;
+    }
     await scheduleBotShowdownSubmissions(ctx, gameId);
     await scheduleShowdownResolution(ctx, gameId);
     return;
@@ -271,6 +292,15 @@ export async function scheduleBotTurnIfNeeded(
 
   if (game.stage === "final") {
     console.log("scheduleBotTurnIfNeeded: Stage is final, skipping");
+    return;
+  }
+
+  const room = await ctx.db.get(game.roomId as Id<"rooms">);
+  if (
+    room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID &&
+    game.turnStartedAt === undefined
+  ) {
+    console.log("scheduleBotTurnIfNeeded: Tutorial betting is paused");
     return;
   }
 
@@ -324,6 +354,7 @@ export async function handlePostActionProgression(
   ctx: MutationCtx,
   game: {
     _id: Id<"games">;
+    roomId: string;
     stage: GameStage;
     currentPlayerIndex: number;
     communityTiles: GameTile[];

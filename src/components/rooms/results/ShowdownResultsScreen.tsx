@@ -113,7 +113,7 @@ export function ShowdownResultsScreen({
                 onClick={onReturnToOnlineRooms}
                 className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01]"
               >
-                Online Rooms
+                Return to Room List
               </button>
 
               <button
@@ -130,10 +130,10 @@ export function ShowdownResultsScreen({
         <p className="mt-3 text-center text-sm text-white/52">
           {isOfflineGame
             ? "Start another bot game or return home."
-            : "Browse other rooms or return home."}
+            : "Return to the room list or head back home."}
         </p>
 
-        <div className="mt-8 flex-1 space-y-3">
+        <div id="tutorial-showdown-results" className="mt-8 flex-1 space-y-3">
           {submissions.map((submission, index) => (
             <ShowdownSubmissionCard
               key={submission.playerId}

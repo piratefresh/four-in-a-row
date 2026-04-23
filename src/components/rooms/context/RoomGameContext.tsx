@@ -36,7 +36,12 @@ type RoomGameContextValue = {
   isCallingClock: boolean;
   turnClockTimeRemaining: number | null;
   turnClockCallerName: string | null;
+  turnClockTargetName: string | null;
+  isTurnClockTarget: boolean;
+  callClockAvailableInMs: number | null;
   showdownTimeRemaining: number | null;
+  isShowdownSubmissionOpen: boolean;
+  isTutorialBettingPaused: boolean;
 };
 
 const RoomGameContext = createContext<RoomGameContextValue | null>(null);

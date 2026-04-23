@@ -585,6 +585,106 @@ export async function internalRedealGameForRoomHandler(
   };
 }
 
+export async function resetTutorialGameForRoomHandler(
+  ctx: MutationCtx,
+  args: { roomId: Id<"rooms"> },
+) {
+  const room = await ctx.db.get(args.roomId);
+  if (!room) {
+    throw new ConvexError({
+      code: "ROOM_NOT_FOUND",
+      message: "Room does not exist.",
+    });
+  }
+
+  const activeGame = await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(room._id)).eq("status", "active"),
+    )
+    .unique();
+  const waitingGame = await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(room._id)).eq("status", "waiting"),
+    )
+    .unique();
+  const latestCompletedGame = await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(room._id)).eq("status", "completed"),
+    )
+    .order("desc")
+    .first();
+
+  let game = activeGame ?? waitingGame ?? latestCompletedGame ?? null;
+  if (!game) {
+    const gameId = await createGameForRoomHandler(ctx, { roomId: String(room._id) });
+    game = await ctx.db.get(gameId);
+  }
+
+  if (!game) {
+    throw new ConvexError({
+      code: "GAME_NOT_FOUND",
+      message: "Tutorial game could not be prepared.",
+    });
+  }
+
+  const now = Date.now();
+
+  await clearHands(ctx, game._id);
+  const existingSubmissions = await ctx.db
+    .query("wordSubmissions")
+    .withIndex("by_game", (q) => q.eq("gameId", game._id))
+    .collect();
+  for (const submission of existingSubmissions) {
+    await ctx.db.delete(submission._id);
+  }
+
+  await ctx.db.patch(game._id, {
+    stage: "preflop",
+    status: "waiting",
+    communityTiles: [],
+    deck: [],
+    pot: 0,
+    currentBet: 0,
+    currentPlayerIndex: 0,
+    dealerButtonIndex: 0,
+    smallBlindIndex: 0,
+    bigBlindIndex: 0,
+    raisesThisRound: 0,
+    winnerId: undefined,
+    winningWord: undefined,
+    winningScore: undefined,
+    winningScoreBreakdown: undefined,
+    showdownStartedAt: undefined,
+    turnStartedAt: undefined,
+    ...getClearedTurnClockFields(),
+    updatedAt: now,
+  });
+
+  const activePlayers = await ctx.db
+    .query("players")
+    .withIndex("roomId_status", (q) =>
+      q.eq("roomId", room._id).eq("status", "active"),
+    )
+    .collect();
+
+  for (const player of activePlayers) {
+    await ctx.db.patch(player._id, {
+      readyStatus: player.authUserId?.startsWith("dev-bot:") ?? false,
+    });
+  }
+
+  await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
+
+  return {
+    ok: true,
+    gameId: game._id,
+    status: "waiting" as const,
+  };
+}
+
 export async function redealGameForRoomHandler(
   ctx: MutationCtx,
   args: { roomId: string },

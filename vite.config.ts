@@ -16,6 +16,9 @@ const config = defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "next/navigation": fileURLToPath(
+        new URL("./src/mocks/next-navigation.ts", import.meta.url),
+      ),
     },
   },
   plugins: [
@@ -29,7 +32,7 @@ const config = defineConfig({
     viteReact(),
   ],
   ssr: {
-    noExternal: ["@convex-dev/better-auth"],
+    noExternal: ["@convex-dev/better-auth", "nextstepjs", "motion"],
   },
 });
 

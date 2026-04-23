@@ -5,7 +5,12 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { buildDevBotAuthUserId, getBotCharacterForSeatIndex } from "./aiStrategy";
 import { authComponent, createAuth } from "./auth";
-import { internalStartGameHandler } from "./games/gamesSetup";
+import {
+  createGameForRoomHandler,
+  resetTutorialGameForRoomHandler,
+  internalStartGameHandler,
+} from "./games/gamesSetup";
+import { scheduleBotTurnIfNeeded } from "./games/gamesProgression";
 import {
   PLAYER_NAME_MAX_LENGTH,
   ROOM_CODE_ALPHABET,
@@ -16,6 +21,7 @@ import {
 
 const STALE_SCOREBOARD_ROOM_MS = 30 * 60 * 1000;
 const INACTIVE_PLAYER_TIMEOUT_MS = 4 * 60 * 1000;
+const FIRST_BOT_GAME_TUTORIAL_ID = "first-bot-game" as const;
 
 function normalizeName(name: string) {
   return name.trim().replace(/\s+/g, " ");
@@ -102,9 +108,14 @@ async function generateUniqueRoomCode(ctx: MutationCtx) {
   return code;
 }
 
+type CreateOpenRoomOptions = {
+  sourceRoomId?: Id<"rooms">;
+  tutorialId?: typeof FIRST_BOT_GAME_TUTORIAL_ID;
+};
+
 async function createOpenRoom(
   ctx: MutationCtx,
-  sourceRoomId?: Id<"rooms">,
+  options?: CreateOpenRoomOptions,
 ) {
   const code = await generateUniqueRoomCode(ctx);
   const now = Date.now();
@@ -112,12 +123,37 @@ async function createOpenRoom(
     code,
     status: "open",
     maxPlayers: ROOM_MAX_PLAYERS,
+    tutorialId: options?.tutorialId,
     nextRoomId: undefined,
-    sourceRoomId,
+    sourceRoomId: options?.sourceRoomId,
     createdAt: now,
     lastActiveAt: now,
   });
   return { roomId, code, now };
+}
+
+function isTutorialRoom(room: Pick<Doc<"rooms">, "tutorialId">) {
+  return room.tutorialId !== undefined;
+}
+
+function shouldCreateReplacementOpenRoom(room: Pick<Doc<"rooms">, "tutorialId">) {
+  return !isTutorialRoom(room);
+}
+
+export function canReuseLinkedNextRoom({
+  roomStatus,
+  activePlayerCount,
+  existingGameCount,
+}: {
+  roomStatus: "open" | "closed";
+  activePlayerCount: number;
+  existingGameCount: number;
+}) {
+  return (
+    roomStatus === "open" &&
+    activePlayerCount === 0 &&
+    existingGameCount === 0
+  );
 }
 
 function isPlayerInactive(
@@ -238,7 +274,9 @@ async function reapInactivePlayersForRoom(
       hostPlayerId: undefined,
       lastActiveAt: now,
     });
-    await createOpenRoom(ctx);
+    if (shouldCreateReplacementOpenRoom(room)) {
+      await createOpenRoom(ctx);
+    }
 
     return {
       stalePlayersRemoved: stalePlayers.length,
@@ -332,7 +370,9 @@ async function closeStaleScoreboardRooms(ctx: MutationCtx) {
       hostPlayerId: undefined,
       lastActiveAt: now,
     });
-    await createOpenRoom(ctx);
+    if (shouldCreateReplacementOpenRoom(room)) {
+      await createOpenRoom(ctx);
+    }
     closed += 1;
   }
 
@@ -353,6 +393,16 @@ async function getAuthenticatedUserId(
 }
 
 async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
+  return createRoomWithHostOptions(ctx, rawName, {});
+}
+
+async function createRoomWithHostOptions(
+  ctx: MutationCtx,
+  rawName: string,
+  options: {
+    tutorialId?: typeof FIRST_BOT_GAME_TUTORIAL_ID;
+  },
+) {
   const name = normalizeName(rawName);
   if (name.length === 0 || name.length > PLAYER_NAME_MAX_LENGTH) {
     throw new ConvexError({
@@ -374,7 +424,9 @@ async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
     await leavePlayer(ctx, existingAuthedPlayer);
   }
 
-  const { roomId, code, now } = await createOpenRoom(ctx);
+  const { roomId, code, now } = await createOpenRoom(ctx, {
+    tutorialId: options.tutorialId,
+  });
   const playerId = await ctx.db.insert("players", {
     roomId,
     authUserId,
@@ -393,6 +445,7 @@ async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
     playerId,
     seatIndex: 0,
     maxPlayers: ROOM_MAX_PLAYERS,
+    tutorialId: options.tutorialId,
   };
 }
 
@@ -525,6 +578,62 @@ async function syncOfflineBotsToRoom(
   return botsAdded;
 }
 
+async function addDevBotsToRoom(
+  ctx: MutationCtx,
+  room: Doc<"rooms">,
+  requestedCount: number,
+) {
+  const activePlayers = await ctx.db
+    .query("players")
+    .withIndex("roomId_status", (q) =>
+      q.eq("roomId", room._id).eq("status", "active"),
+    )
+    .collect();
+
+  const remainingSeats = room.maxPlayers - activePlayers.length;
+  const botsToCreate = Math.min(
+    Math.max(0, Math.floor(requestedCount)),
+    remainingSeats,
+  );
+
+  if (botsToCreate === 0) {
+    return { added: 0, totalActivePlayers: activePlayers.length };
+  }
+
+  const occupiedSeats = new Set(activePlayers.map((player) => player.seatIndex));
+  const now = Date.now();
+  let created = 0;
+
+  for (let i = 0; i < botsToCreate; i++) {
+    const seatIndex = findFirstAvailableSeat(occupiedSeats, room.maxPlayers);
+    if (seatIndex === null) break;
+
+    occupiedSeats.add(seatIndex);
+    const character = getBotCharacterForSeatIndex(seatIndex);
+    await ctx.db.insert("players", {
+      roomId: room._id,
+      authUserId: buildDevBotAuthUserId(String(room._id), seatIndex),
+      name: character.name,
+      seatIndex,
+      isHost: false,
+      status: "active",
+      readyStatus: true,
+      lastSeenAt: now,
+    });
+    created += 1;
+  }
+
+  await ctx.db.patch(room._id, {
+    status: "open",
+    lastActiveAt: now,
+  });
+
+  return {
+    added: created,
+    totalActivePlayers: activePlayers.length + created,
+  };
+}
+
 async function getActiveAuthedPlayerInRoom(
   ctx: MutationCtx | QueryCtx,
   roomId: Id<"rooms">,
@@ -539,6 +648,18 @@ async function getActiveAuthedPlayerInRoom(
   return (
     activePlayersForUser.find((player) => player.roomId === roomId) ?? null
   );
+}
+
+async function getHistoricalAuthedPlayersInRoom(
+  ctx: MutationCtx | QueryCtx,
+  roomId: Id<"rooms">,
+  authUserId: string,
+) {
+  return await ctx.db
+    .query("players")
+    .withIndex("roomId", (q) => q.eq("roomId", roomId))
+    .filter((q) => q.eq(q.field("authUserId"), authUserId))
+    .collect();
 }
 
 async function getAnyActiveAuthedPlayer(
@@ -627,7 +748,9 @@ async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
       lastActiveAt: now,
     });
 
-    await createOpenRoom(ctx);
+    if (shouldCreateReplacementOpenRoom(room)) {
+      await createOpenRoom(ctx);
+    }
 
     return {
       ok: true,
@@ -669,6 +792,240 @@ export const createRoom = mutation({
   },
 });
 
+export const createTutorialBotRoom = mutation({
+  args: {
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const room = await createRoomWithHostOptions(ctx, args.name, {
+      tutorialId: FIRST_BOT_GAME_TUTORIAL_ID,
+    });
+    const roomDoc = await ctx.db.get(room.roomId);
+    if (!roomDoc) {
+      throw new ConvexError({
+        code: "ROOM_NOT_FOUND",
+        message: "Tutorial room could not be created.",
+      });
+    }
+
+    await addDevBotsToRoom(ctx, roomDoc, 3);
+    await createGameForRoomHandler(ctx, { roomId: String(room.roomId) });
+
+    return room;
+  },
+});
+
+export const restartTutorialRoom = mutation({
+  args: {
+    code: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const room = await getRoomByCode(ctx, args.code);
+    if (room.tutorialId !== FIRST_BOT_GAME_TUTORIAL_ID) {
+      throw new ConvexError({
+        code: "NOT_TUTORIAL_ROOM",
+        message: "This room is not a tutorial table.",
+      });
+    }
+
+    const activePlayer = await getActiveAuthedPlayerInRoom(ctx, room._id, authUserId);
+    if (!activePlayer) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You must be seated in this tutorial room to restart it.",
+      });
+    }
+
+    const reset = await resetTutorialGameForRoomHandler(ctx, {
+      roomId: room._id,
+    });
+
+    await ctx.db.patch(room._id, {
+      status: "open",
+      lastActiveAt: Date.now(),
+      hostPlayerId: room.hostPlayerId ?? activePlayer._id,
+    });
+
+    return {
+      ok: reset.ok,
+      code: room.code,
+      roomId: room._id,
+      gameId: reset.gameId,
+      status: reset.status,
+    };
+  },
+});
+
+export const startTutorialShowdown = mutation({
+  args: {
+    code: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const room = await getRoomByCode(ctx, args.code);
+    if (room.tutorialId !== FIRST_BOT_GAME_TUTORIAL_ID) {
+      throw new ConvexError({
+        code: "NOT_TUTORIAL_ROOM",
+        message: "This room is not a tutorial table.",
+      });
+    }
+
+    const activePlayer = await getActiveAuthedPlayerInRoom(
+      ctx,
+      room._id,
+      authUserId,
+    );
+    if (!activePlayer) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You must be seated in this tutorial room to start showdown.",
+      });
+    }
+
+    const game = await ctx.db
+      .query("games")
+      .withIndex("by_room_status", (q) =>
+        q.eq("roomId", String(room._id)).eq("status", "active"),
+      )
+      .unique();
+
+    if (!game) {
+      throw new ConvexError({
+        code: "GAME_NOT_FOUND",
+        message: "No active tutorial game was found.",
+      });
+    }
+
+    if (game.stage !== "showdown") {
+      throw new ConvexError({
+        code: "INVALID_GAME_STAGE",
+        message: "Tutorial showdown can only be started during showdown.",
+      });
+    }
+
+    if (game.showdownStartedAt !== undefined) {
+      return {
+        ok: true,
+        gameId: game._id,
+        showdownStartedAt: game.showdownStartedAt,
+        alreadyStarted: true,
+      };
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(game._id, {
+      showdownStartedAt: now,
+      updatedAt: now,
+    });
+    await scheduleBotTurnIfNeeded(ctx, game._id);
+
+    return {
+      ok: true,
+      gameId: game._id,
+      showdownStartedAt: now,
+      alreadyStarted: false,
+    };
+  },
+});
+
+export const resumeTutorialBetting = mutation({
+  args: {
+    code: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const authUserId = await getAuthenticatedUserId(ctx);
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const room = await getRoomByCode(ctx, args.code);
+    if (room.tutorialId !== FIRST_BOT_GAME_TUTORIAL_ID) {
+      throw new ConvexError({
+        code: "NOT_TUTORIAL_ROOM",
+        message: "This room is not a tutorial table.",
+      });
+    }
+
+    const activePlayer = await getActiveAuthedPlayerInRoom(
+      ctx,
+      room._id,
+      authUserId,
+    );
+    if (!activePlayer) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You must be seated in this tutorial room to continue playing.",
+      });
+    }
+
+    const game = await ctx.db
+      .query("games")
+      .withIndex("by_room_status", (q) =>
+        q.eq("roomId", String(room._id)).eq("status", "active"),
+      )
+      .unique();
+
+    if (!game) {
+      throw new ConvexError({
+        code: "GAME_NOT_FOUND",
+        message: "No active tutorial game was found.",
+      });
+    }
+
+    if (game.stage === "showdown" || game.stage === "final") {
+      throw new ConvexError({
+        code: "INVALID_GAME_STAGE",
+        message: "Tutorial betting can only be resumed during betting rounds.",
+      });
+    }
+
+    if (game.turnStartedAt !== undefined) {
+      return {
+        ok: true,
+        gameId: game._id,
+        turnStartedAt: game.turnStartedAt,
+        alreadyStarted: true,
+      };
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(game._id, {
+      turnStartedAt: now,
+      updatedAt: now,
+      turnClockCalledAt: undefined,
+      turnClockExpiresAt: undefined,
+      turnClockCallerPlayerId: undefined,
+      turnClockTargetPlayerId: undefined,
+    });
+    await scheduleBotTurnIfNeeded(ctx, game._id);
+
+    return {
+      ok: true,
+      gameId: game._id,
+      turnStartedAt: now,
+      alreadyStarted: false,
+    };
+  },
+});
+
 export const joinRoom = mutation({
   args: {
     code: v.string(),
@@ -707,6 +1064,20 @@ export const joinRoom = mutation({
         code: "ROOM_CLOSED",
         message: "Room is closed.",
       });
+    }
+
+    if (isTutorialRoom(room)) {
+      const historicalPlayers = await getHistoricalAuthedPlayersInRoom(
+        ctx,
+        room._id,
+        authUserId,
+      );
+      if (historicalPlayers.length === 0) {
+        throw new ConvexError({
+          code: "TUTORIAL_ROOM_PRIVATE",
+          message: "This tutorial table is reserved for its original player.",
+        });
+      }
     }
 
     const existingAuthedPlayer = await getAnyActiveAuthedPlayer(
@@ -769,11 +1140,18 @@ async function rejoinRoomMember(
     };
   }
 
-  const historicalPlayers = await ctx.db
-    .query("players")
-    .withIndex("roomId", (q) => q.eq("roomId", room._id))
-    .filter((q) => q.eq(q.field("authUserId"), authUserId))
-    .collect();
+  const historicalPlayers = await getHistoricalAuthedPlayersInRoom(
+    ctx,
+    room._id,
+    authUserId,
+  );
+
+  if (isTutorialRoom(room) && historicalPlayers.length === 0) {
+    throw new ConvexError({
+      code: "TUTORIAL_ROOM_PRIVATE",
+      message: "This tutorial table is reserved for its original player.",
+    });
+  }
 
   const activePlayers = await ctx.db
     .query("players")
@@ -894,48 +1272,7 @@ export const debugFillRoomWithBots = mutation({
     }
 
     const room = await getRoomByCode(ctx, args.code);
-    const activePlayers = await ctx.db
-      .query("players")
-      .withIndex("roomId_status", (q) =>
-        q.eq("roomId", room._id).eq("status", "active"),
-      )
-      .collect();
-
-    const remainingSeats = room.maxPlayers - activePlayers.length;
-    const requestedCount = Math.max(0, Math.floor(args.count ?? 2));
-    const botsToCreate = Math.min(requestedCount, remainingSeats);
-
-    if (botsToCreate === 0) {
-      return { added: 0, totalActivePlayers: activePlayers.length };
-    }
-
-    const occupiedSeats = new Set(activePlayers.map((player) => player.seatIndex));
-    const now = Date.now();
-    let created = 0;
-
-    for (let i = 0; i < botsToCreate; i++) {
-      const seatIndex = findFirstAvailableSeat(occupiedSeats, room.maxPlayers);
-      if (seatIndex === null) break;
-
-      occupiedSeats.add(seatIndex);
-      const character = getBotCharacterForSeatIndex(seatIndex);
-      await ctx.db.insert("players", {
-        roomId: room._id,
-        authUserId: buildDevBotAuthUserId(String(room._id), seatIndex),
-        name: character.name,
-        seatIndex,
-        isHost: false,
-        status: "active",
-        readyStatus: true,
-        lastSeenAt: now,
-      });
-      created += 1;
-    }
-
-    await ctx.db.patch(room._id, {
-      status: "open",
-      lastActiveAt: now,
-    });
+    const result = await addDevBotsToRoom(ctx, room, args.count ?? 2);
 
     const existingGame = await ctx.db
       .query("games")
@@ -948,8 +1285,8 @@ export const debugFillRoomWithBots = mutation({
     }
 
     return {
-      added: created,
-      totalActivePlayers: activePlayers.length + created,
+      added: result.added,
+      totalActivePlayers: result.totalActivePlayers,
       redealtGame: !!existingGame,
     };
   },
@@ -1120,7 +1457,9 @@ export const continueToNextRoom = mutation({
     let nextRoom = await findContinuationRoom(ctx, room);
 
     if (!nextRoom || nextRoom.status !== "open") {
-      const { roomId: nextRoomId } = await createOpenRoom(ctx, room._id);
+      const { roomId: nextRoomId } = await createOpenRoom(ctx, {
+        sourceRoomId: room._id,
+      });
       await ctx.db.patch(room._id, {
         status: "closed",
         nextRoomId,
@@ -1312,10 +1651,10 @@ export const ensureSeedRooms = mutation({
       }
     }
 
-    const rooms = await ctx.db
+    const rooms = (await ctx.db
       .query("rooms")
       .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
-      .collect();
+      .collect()).filter((room) => !isTutorialRoom(room));
 
     const targetCount = 4;
     const roomsToCreate = Math.max(0, targetCount - rooms.length);
@@ -1340,10 +1679,10 @@ export const refreshOpenRooms = mutation({
     const inactiveCleanup = await reapInactivePlayersAcrossOpenRooms(ctx);
     const staleClosed = await closeStaleScoreboardRooms(ctx);
     const now = Date.now();
-    const openRooms = await ctx.db
+    const openRooms = (await ctx.db
       .query("rooms")
       .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
-      .collect();
+      .collect()).filter((room) => !isTutorialRoom(room));
 
     let closed = 0;
     for (const room of openRooms) {
@@ -1370,10 +1709,10 @@ export const refreshOpenRooms = mutation({
       await createOpenRoom(ctx);
     }
 
-    const remainingOpenRooms = await ctx.db
+    const remainingOpenRooms = (await ctx.db
       .query("rooms")
       .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
-      .collect();
+      .collect()).filter((room) => !isTutorialRoom(room));
 
     return {
       closed: closed + staleClosed + inactiveCleanup.roomsClosed,
@@ -1388,11 +1727,11 @@ export const listRooms = query({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const rooms = await ctx.db
+    const rooms = (await ctx.db
       .query("rooms")
       .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
       .order("desc")
-      .take(20);
+      .take(40)).filter((room) => !isTutorialRoom(room)).slice(0, 20);
 
     const result = [];
     for (const room of rooms) {
@@ -1505,6 +1844,7 @@ export const getRoomMembers = query({
         status: room.status,
         maxPlayers: room.maxPlayers,
         lastActiveAt: room.lastActiveAt,
+        tutorialId: room.tutorialId ?? null,
       },
       members,
       viewerPlayerId,
@@ -1547,6 +1887,7 @@ export const getMyActiveRoom = query({
       code: room.code,
       playerId: activePlayer._id,
       seatIndex: activePlayer.seatIndex,
+      tutorialId: room.tutorialId ?? null,
     };
   },
 });

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useNextStep } from "nextstepjs";
 import {
   DndContext,
   DragOverlay,
@@ -16,8 +17,8 @@ import { RaiseAmountSlider } from "../controls/RaiseAmountSlider";
 import { BlankRoomPhase } from "../phases/BlankRoomPhase";
 import { PhasePlayerBadge } from "../phases/PhasePlayerBadge";
 import { RoomBottomPanel } from "./RoomBottomPanel";
-import { RoomBoardHeader } from "./RoomBoardHeader";
 import { RoomCommunityStrip } from "./RoomCommunityStrip";
+import { PlayerHand } from "./PlayerHand";
 import {
   RoomOpponentLayer,
   getOpponentPosition,
@@ -25,22 +26,28 @@ import {
 } from "./RoomOpponentLayer";
 import { RoomTable } from "./RoomTable";
 import type { BuilderTile, RoomHandsBoardProps } from "./RoomHandsBoard.types";
+import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "./roomBoardLayout";
 import { useRoomGameContext } from "../context/RoomGameContext";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
-
-const MOBILE_COMPACT_TILE_CLASS =
-  "!h-12 !w-12 !text-[1.75rem] xs:!h-[52px] xs:!w-[52px] xs:!text-[2rem] sm:!h-24 sm:!w-24 sm:!text-[3.25rem] lg:!h-24 lg:!w-24 lg:!text-[3.25rem]";
+import type { WordTileSize } from "../table/WordTile";
+import {
+  FIRST_BOT_GAME_TOUR,
+  FIRST_BOT_GAME_WORD_BUILDER_STEP,
+} from "@/components/onboarding/wordPokerTours";
 
 type SortableBuilderTileProps = {
   tile: BuilderTile;
   onToggleDisabled: (id: string) => void;
   selectedLetter?: string;
+  tileSize: WordTileSize;
 };
 
 function SortableBuilderTile({
   tile,
   onToggleDisabled,
   selectedLetter,
+  tileSize,
 }: SortableBuilderTileProps) {
   const {
     attributes,
@@ -96,8 +103,7 @@ function SortableBuilderTile({
             isChoice={tile.isChoice}
             selectedLetter={selectedLetter}
             showValue={true}
-            size="md"
-            className={MOBILE_COMPACT_TILE_CLASS}
+            size={tileSize}
             variant={tile.source === "community" ? "community" : "default"}
           />
         </div>
@@ -108,10 +114,12 @@ function SortableBuilderTile({
 
 const BET_POSITION_CLASS: Record<"top" | "left" | "right" | "bottom", string> =
   {
-    top: "left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2",
-    left: "left-[32%] top-[50%] -translate-x-1/2 -translate-y-1/2",
-    right: "left-[68%] top-[50%] -translate-x-1/2 -translate-y-1/2",
-    bottom: "left-1/2 top-[62%] -translate-x-1/2 -translate-y-1/2",
+    top: "left-[62%] top-[24%] -translate-x-1/2 -translate-y-1/2 sm:left-[60%] sm:top-[22%]",
+    left: "left-[23%] top-[49%] -translate-x-1/2 -translate-y-1/2 sm:left-[25%]",
+    right:
+      "left-[77%] top-[49%] -translate-x-1/2 -translate-y-1/2 sm:left-[75%]",
+    bottom:
+      "left-[64%] top-[72%] -translate-x-1/2 -translate-y-1/2 sm:left-[62%] sm:top-[71%]",
   };
 
 function formatPlayerActionLabel(
@@ -127,7 +135,6 @@ function renderEmptyBuilderTile() {
 
 export function RoomHandsBoardV2({
   gameId,
-  roomCode,
   currentTurnPlayerId,
   gameStage,
   communityTiles,
@@ -141,7 +148,9 @@ export function RoomHandsBoardV2({
   bigBlindIndex,
   pot = 0,
   chatDraft,
+  tutorialReplayControl,
 }: RoomHandsBoardProps) {
+  const { currentStep, currentTour, setCurrentStep } = useNextStep();
   // Helper function to determine blind position for a player
   const getBlindPosition = (
     playerId: string,
@@ -155,10 +164,6 @@ export function RoomHandsBoardV2({
     return undefined;
   };
   const {
-    anteAmount,
-    raisesThisRound,
-    maxRaisesPerRound,
-    actionMessage,
     showBettingControls,
     showReadyButton,
     onReady,
@@ -181,7 +186,6 @@ export function RoomHandsBoardV2({
     onFold,
     onCallClock,
     onRaiseAmountChange,
-    onLeaveRoom,
     callLabel,
     callAmount,
     raiseLabel,
@@ -190,7 +194,7 @@ export function RoomHandsBoardV2({
     isCallingClock,
     turnClockTimeRemaining,
     turnClockCallerName,
-    showdownTimeRemaining,
+    isShowdownSubmissionOpen,
   } = useRoomGameContext();
 
   const sensors = useSensors(
@@ -199,6 +203,13 @@ export function RoomHandsBoardV2({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
+  const isMediumViewport = useMediaQuery("(min-width: 768px)");
+  const isLargeDesktop = useMediaQuery("(min-width: 1441px)");
+  const boardTileSize: WordTileSize = isLargeDesktop
+    ? "lg"
+    : isMediumViewport
+      ? "md"
+      : "sm";
 
   const orderedHands = useMemo(() => {
     if (!bottomPlayerId || hands.length === 0) return hands;
@@ -242,6 +253,7 @@ export function RoomHandsBoardV2({
     showReveal,
     validationError,
     wordPreview,
+    wordScorePreview,
     wordSubmissions,
   } = useRoomWordBuilder({
     gameId,
@@ -268,7 +280,10 @@ export function RoomHandsBoardV2({
   const showInlineBottomPanelShuffle =
     !showBettingControls && gameStage === "showdown" && showShuffleControl;
   const showTableRaiseSlider =
-    canRaise && !!raiseAmount && (raiseOptions?.length ?? 0) > 1;
+    canRaise &&
+    !mySubmission &&
+    !!raiseAmount &&
+    (raiseOptions?.length ?? 0) > 1;
   const opponentBets = useMemo(
     () =>
       opponents
@@ -276,10 +291,19 @@ export function RoomHandsBoardV2({
           id: hand._id,
           amount: hand.betThisRound ?? 0,
           position: getOpponentPosition(opponentIndex, opponents.length),
+          ownerName: getPlayerName(hand.playerId),
         }))
         .filter((bet) => bet.amount > 0),
-    [opponents],
+    [getPlayerName, opponents],
   );
+  const advanceTutorialFromWordBuilderStep = () => {
+    if (
+      currentTour === FIRST_BOT_GAME_TOUR &&
+      currentStep === FIRST_BOT_GAME_WORD_BUILDER_STEP
+    ) {
+      setCurrentStep(FIRST_BOT_GAME_WORD_BUILDER_STEP + 1, 50);
+    }
+  };
 
   return (
     <DndContext
@@ -287,27 +311,25 @@ export function RoomHandsBoardV2({
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
       onDragCancel={handleDragCancel}
-      onDragEnd={handleDragEnd}
+      onDragEnd={(event) => {
+        handleDragEnd(event);
+        if (event.over && event.active.id !== event.over.id) {
+          advanceTutorialFromWordBuilderStep();
+        }
+      }}
     >
       <div className="flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-black font-serif text-[#f1eee7] [@media(max-height:460px)]:h-[calc(100dvh-4rem)]">
-        <RoomBoardHeader
-          phase={boardPhase}
-          roomCode={roomCode}
-          raisesThisRound={raisesThisRound}
-          maxRaisesPerRound={maxRaisesPerRound}
-          anteAmount={anteAmount}
-          actionMessage={actionMessage ?? undefined}
-          pot={pot}
-          onLeaveRoom={onLeaveRoom}
-        />
-
         <main className="flex min-h-0 flex-1 flex-col pt-3 sm:pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {tutorialReplayControl ? (
+            <div className="px-4 pb-2">{tutorialReplayControl}</div>
+          ) : null}
           <RoomCommunityStrip
             tiles={communityTiles}
             hidden={isPhase0 || isPhase1}
+            tileSize={boardTileSize}
           />
 
-          <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="relative flex min-h-0 flex-1 flex-col justify-center">
             {isPhase0 && (
               <BlankRoomPhase
                 opponents={opponents.map((hand, opponentIndex) => ({
@@ -333,27 +355,19 @@ export function RoomHandsBoardV2({
             {!isPhase0 && (
               <div className="relative z-10 flex items-center justify-center px-2 xs:px-4">
                 {/* Wrapper with actual size including avatar overflow - responsive to match table size */}
-                <div className="relative flex items-center justify-center min-h-[330px] min-w-[248px] xs:min-h-[420px] xs:min-w-[292px] sm:min-h-[520px] sm:min-w-[360px] lg:min-h-[620px] lg:min-w-[460px] xl:min-h-[700px] xl:min-w-[520px]">
+                <div
+                  id="tutorial-room-table"
+                  className="relative flex items-center justify-center"
+                >
                   <RoomTable
                     isPhase1={isPhase1}
                     pot={pot}
                     communityTiles={communityTiles}
                     opponentBets={opponentBets}
                     bottomBet={bottomHand.betThisRound ?? 0}
+                    bottomBetOwnerName={myName}
                     betPositionClass={BET_POSITION_CLASS}
                   />
-                  {showTableRaiseSlider ? (
-                    <div className="absolute left-full top-1/2 z-30 ml-5 -translate-y-1/2 xs:ml-6 sm:ml-10 lg:ml-14">
-                      <RaiseAmountSlider
-                        value={raiseAmount}
-                        options={raiseOptions}
-                        callAmount={callAmount}
-                        disabled={isBetting || !isMyTurn}
-                        onChange={(amount) => onRaiseAmountChange?.(amount)}
-                        orientation="vertical"
-                      />
-                    </div>
-                  ) : null}
                   <RoomOpponentLayer
                     opponents={opponents}
                     currentTurnPlayerId={currentTurnPlayerId}
@@ -367,7 +381,7 @@ export function RoomHandsBoardV2({
                     currentPlayerHasSubmitted={!!mySubmission}
                     canRevealSubmittedWords={canRevealSubmittedWords}
                   />
-                  <div className="absolute bottom-[12%] left-1/2 z-40 -translate-x-1/2 translate-y-1/4 xs:bottom-[15%] sm:bottom-[12%]">
+                  <div className={ROOM_BOTTOM_BADGE_POSITION_CLASS}>
                     <PhasePlayerBadge
                       name={myName}
                       avatarUrl={getPlayerAvatar(bottomHand.playerId)}
@@ -390,17 +404,6 @@ export function RoomHandsBoardV2({
               </div>
             )}
 
-            {showdownTimeRemaining !== null && (
-              <div className="absolute bottom-[23%] left-[4%] text-[18px] leading-none text-[#f1eee7] sm:bottom-[25%] sm:left-[8%] sm:text-[64px]">
-                {Math.floor(showdownTimeRemaining / 60000)
-                  .toString()
-                  .padStart(2, "0")}
-                :
-                {Math.floor((showdownTimeRemaining % 60000) / 1000)
-                  .toString()
-                  .padStart(2, "0")}
-              </div>
-            )}
           </div>
 
           <div className="flex flex-col items-center gap-1 px-4 sm:gap-4 [@media(max-height:460px)]:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
@@ -418,8 +421,10 @@ export function RoomHandsBoardV2({
                   hasUnresolvedChoices={false}
                   validationError={null}
                   wordPreview=""
+                  wordScorePreview={null}
                   shuffleTick={0}
                   gameStage="preflop"
+                  isShowdownSubmissionOpen={true}
                   handleSubmitWord={() => {}}
                   renderBuilderTile={renderEmptyBuilderTile}
                 />
@@ -437,8 +442,10 @@ export function RoomHandsBoardV2({
                 hasUnresolvedChoices={hasUnresolvedChoices}
                 validationError={validationError}
                 wordPreview={wordPreview}
+                wordScorePreview={wordScorePreview}
                 shuffleTick={shuffleTick}
                 gameStage={gameStage}
+                isShowdownSubmissionOpen={isShowdownSubmissionOpen}
                 handleSubmitWord={handleSubmitWord}
                 onShuffleTiles={
                   showInlineBottomPanelShuffle ? handleShuffleTiles : undefined
@@ -446,16 +453,34 @@ export function RoomHandsBoardV2({
                 disableShuffle={
                   showInlineBottomPanelShuffle ? isValidating : undefined
                 }
+                tileSize={boardTileSize}
                 renderBuilderTile={(tile) => (
                   <SortableBuilderTile
                     tile={tile}
-                    onToggleDisabled={handleToggleDisabled}
+                    onToggleDisabled={(tileId) => {
+                      handleToggleDisabled(tileId);
+                      advanceTutorialFromWordBuilderStep();
+                    }}
                     selectedLetter={choiceSelections[tile.id]}
+                    tileSize={boardTileSize}
                   />
                 )}
                 hasFolded={bottomHand?.hasFolded}
               />
             )}
+
+            {showTableRaiseSlider ? (
+              <div className="w-full max-w-[42rem] px-3 sm:px-4">
+                <RaiseAmountSlider
+                  value={raiseAmount}
+                  options={raiseOptions}
+                  callAmount={callAmount}
+                  disabled={isBetting || !isMyTurn}
+                  onChange={(amount) => onRaiseAmountChange?.(amount)}
+                  orientation="horizontal"
+                />
+              </div>
+            ) : null}
 
             {showReadyButton && (
               <RoomActionControls
@@ -516,34 +541,11 @@ export function RoomHandsBoardV2({
 
         <DragOverlay>
           {activeTile ? (
-            <div style={{ cursor: "grabbing" }}>
-              <div className="flex flex-col items-center gap-1">
-                {activeTile.multiplier ? (
-                  <div className="text-[9px] font-bold leading-none text-white/80 sm:text-xs">
-                    {activeTile.multiplier === "2L" ? "2x" : "3x"}
-                  </div>
-                ) : (
-                  <div className="text-[9px] leading-none sm:text-xs opacity-0">
-                    -
-                  </div>
-                )}
-                <WordTile
-                  letter={activeTile.letter}
-                  letters={activeTile.letters}
-                  baseValue={activeTile.baseValue}
-                  baseValues={activeTile.baseValues}
-                  multiplier={activeTile.multiplier}
-                  isChoice={activeTile.isChoice}
-                  selectedLetter={choiceSelections[activeTile.id]}
-                  showValue={true}
-                  size="md"
-                  className={MOBILE_COMPACT_TILE_CLASS}
-                  variant={
-                    activeTile.source === "community" ? "community" : "default"
-                  }
-                />
-              </div>
-            </div>
+            <PlayerHand
+              tile={activeTile}
+              selectedLetter={choiceSelections[activeTile.id]}
+              tileSize={boardTileSize}
+            />
           ) : null}
         </DragOverlay>
       </div>

@@ -77,9 +77,12 @@ function ResultsPage() {
   const isOfflineGame = useMemo(() => {
     if (!roomData?.members) return false;
     const otherPlayers = roomData.members.filter(
-      (member) => member._id !== myPlayer?._id
+      (member) => member._id !== myPlayer?._id,
     );
-    return otherPlayers.every((member) => member.authUserId?.startsWith("dev-bot:"));
+    return (
+      otherPlayers.length > 0 &&
+      otherPlayers.every((member) => member.authUserId?.startsWith("dev-bot:"))
+    );
   }, [roomData?.members, myPlayer]);
 
   const handlePlayAnotherOffline = async () => {

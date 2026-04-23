@@ -1,7 +1,8 @@
+import { PhasePlayerBadge } from "./PhasePlayerBadge";
 import {
-  PHASE_BADGE_OPPONENT_POSITION_CLASS,
-  PhasePlayerBadge,
-} from "./PhasePlayerBadge";
+  ROOM_BOTTOM_BADGE_POSITION_CLASS,
+  ROOM_OPPONENT_POSITION_CLASS,
+} from "../board/roomBoardLayout";
 import { RoomTable } from "../board/RoomTable";
 
 const HIDDEN_BET_POSITION_CLASS = {
@@ -35,8 +36,8 @@ export function BlankRoomPhase({
   bottomPlayer,
 }: BlankRoomPhaseProps) {
   return (
-    <div className="relative z-10 flex items-center justify-center px-4">
-      <div className="relative flex min-h-[420px] min-w-[360px] items-center justify-center lg:min-h-[620px] lg:min-w-[460px] xl:min-h-[700px] xl:min-w-[520px]">
+    <div className="relative z-10 flex items-center justify-center px-2 xs:px-4">
+      <div className="relative flex items-center justify-center">
         <RoomTable
           isPhase1={false}
           pot={0}
@@ -50,31 +51,32 @@ export function BlankRoomPhase({
         {opponents.map((opponent) => (
           <div
             key={opponent.id}
-            className={`absolute ${PHASE_BADGE_OPPONENT_POSITION_CLASS[opponent.position]} z-20`}
+            className={`absolute ${ROOM_OPPONENT_POSITION_CLASS[opponent.position]} z-20`}
           >
             <PhasePlayerBadge
               name={opponent.name}
               avatarUrl={opponent.avatarUrl}
               chips={opponent.chips}
               bet={opponent.bet}
-              avatarSizeClass="h-12 w-12 sm:h-14 sm:w-14"
-              initialsClass="text-[10px] sm:text-[12px]"
-              infoCardClassName="min-w-[102px] px-2.5 py-1 sm:min-w-[118px] sm:px-3 sm:py-1.5"
+              avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
+              initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"
+              infoCardClassName="min-w-[82px] px-1.5 py-1 xs:min-w-[92px] xs:px-2 sm:min-w-[118px] sm:px-3 sm:py-1.5"
             />
           </div>
         ))}
 
-        <div className="absolute bottom-[11%] left-1/2 z-30 -translate-x-1/2 translate-y-1/4 sm:bottom-[12%]">
+        <div className={ROOM_BOTTOM_BADGE_POSITION_CLASS}>
           <PhasePlayerBadge
             name={bottomPlayer.name}
             avatarUrl={bottomPlayer.avatarUrl}
             chips={bottomPlayer.chips}
             bet={bottomPlayer.bet}
             isCurrentPlayer
-            avatarSizeClass="h-20 w-20 sm:h-24 sm:w-24"
-            initialsClass="text-[16px] sm:text-[18px]"
-            infoCardClassName="min-w-[112px] px-3 py-1.5 sm:min-w-[132px] sm:px-4 sm:py-2"
+            avatarSizeClass="h-[52px] w-[52px] xs:h-[60px] xs:w-[60px] sm:h-24 sm:w-24"
+            initialsClass="text-[11px] xs:text-[12px] sm:text-[18px]"
+            infoCardClassName="min-w-[84px] px-2 py-1 xs:min-w-[92px] xs:px-2 xs:py-1 sm:min-w-[132px] sm:px-4 sm:py-2"
             betClassName="left-auto right-0 translate-x-1/4"
+            mobileInfoPlacement="top"
           />
         </div>
       </div>

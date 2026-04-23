@@ -3,7 +3,6 @@ import {
   Outlet,
   Scripts,
   createRootRouteWithContext,
-  useRouterState,
   useRouteContext,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
@@ -18,6 +17,7 @@ import { getToken } from "@/lib/auth-server";
 import { ConvexQueryClient } from "@convex-dev/react-query";
 import { authClient } from "@/lib/auth-client";
 import { Toaster } from "@/components/ui/sonner";
+import { AppTourProvider } from "@/components/onboarding/AppTourProvider";
 
 // Get auth information for SSR using available cookies
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
@@ -120,11 +120,6 @@ export const Route = createRootRouteWithContext<{
 
 function RootComponent() {
   const context = useRouteContext({ from: Route.id });
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
-  });
-
-  console.log("pathName:", pathname);
   return (
     <ConvexBetterAuthProvider
       client={context.convexQueryClient.convexClient}
@@ -145,8 +140,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="bg-black text-white">
-        <Header />
-        {children}
+        <AppTourProvider>
+          <Header />
+          {children}
+        </AppTourProvider>
         <Toaster richColors />
         <TanStackDevtools
           config={{

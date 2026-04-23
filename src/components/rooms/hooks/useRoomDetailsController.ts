@@ -186,7 +186,7 @@ export function useRoomDetailsController(code: string) {
       return (
         botCharacter?.name ??
         member?.name ??
-        (handIndex !== undefined ? `Player ${handIndex + 1}` : targetPlayerId)
+        (handIndex !== undefined ? `Player ${handIndex + 1}` : "Player")
       );
     },
     [memberById],
@@ -317,7 +317,23 @@ export function useRoomDetailsController(code: string) {
         : null,
     [game?.turnClockCallerPlayerId, getPlayerName],
   );
-  const canCallClock = useMemo(() => {
+  const turnClockTargetName = useMemo(
+    () =>
+      game?.turnClockTargetPlayerId
+        ? getPlayerName(game.turnClockTargetPlayerId)
+        : null,
+    [game?.turnClockTargetPlayerId, getPlayerName],
+  );
+  const isTurnClockTarget = useMemo(
+    () =>
+      Boolean(
+        playerId &&
+          hasPendingTurnClock &&
+          game?.turnClockTargetPlayerId === playerId,
+      ),
+    [game?.turnClockTargetPlayerId, hasPendingTurnClock, playerId],
+  );
+  const callClockAvailableInMs = useMemo(() => {
     if (
       !game ||
       game.status !== "active" ||
@@ -332,10 +348,10 @@ export function useRoomDetailsController(code: string) {
       hasPendingTurnClock ||
       game.turnStartedAt === undefined
     ) {
-      return false;
+      return null;
     }
 
-    return liveNow - game.turnStartedAt >= TURN_CLOCK_GRACE_PERIOD_MS;
+    return Math.max(0, TURN_CLOCK_GRACE_PERIOD_MS - (liveNow - game.turnStartedAt));
   }, [
     currentTurnIsAutomated,
     currentTurnPlayerId,
@@ -345,6 +361,13 @@ export function useRoomDetailsController(code: string) {
     myHand,
     playerId,
   ]);
+  const canCallClock = callClockAvailableInMs === 0;
+  const isTutorialBettingPaused =
+    roomData?.room.tutorialId === "first-bot-game" &&
+    game?.status === "active" &&
+    game.stage !== "showdown" &&
+    game.stage !== "final" &&
+    game.turnStartedAt === undefined;
 
   const isMyTurn =
     currentTurnPlayerId === playerId && game?.status === "active";
@@ -505,12 +528,16 @@ export function useRoomDetailsController(code: string) {
   }, [game?.status, handleViewResults, showdownResults]);
 
   useEffect(() => {
-    if (game?.stage !== "showdown" || game?.status !== "active") {
+    if (
+      game?.stage !== "showdown" ||
+      game?.status !== "active" ||
+      game.showdownStartedAt === undefined
+    ) {
       setShowdownTimeRemaining(null);
       return;
     }
 
-    const showdownStart = game.showdownStartedAt ?? Date.now();
+    const showdownStart = game.showdownStartedAt;
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - showdownStart;
@@ -707,7 +734,8 @@ export function useRoomDetailsController(code: string) {
       showBettingControls:
         game?.status === "active" &&
         game.stage !== "final" &&
-        game.stage !== "showdown",
+        game.stage !== "showdown" &&
+        !isTutorialBettingPaused,
       showReadyButton: game?.status === "waiting",
       onReady: game?.status === "waiting" ? handleToggleReady : undefined,
       isReady: myPlayer?.readyStatus ?? false,
@@ -744,10 +772,19 @@ export function useRoomDetailsController(code: string) {
       isCallingClock,
       turnClockTimeRemaining,
       turnClockCallerName,
+      turnClockTargetName,
+      isTurnClockTarget,
+      callClockAvailableInMs,
       showdownTimeRemaining,
+      isShowdownSubmissionOpen:
+        game?.stage !== "showdown" ||
+        game.status !== "active" ||
+        game.showdownStartedAt !== undefined,
+      isTutorialBettingPaused,
     }),
     [
       availableRaiseOptions,
+      callClockAvailableInMs,
       callAmount,
       canCall,
       canCallClock,
@@ -756,6 +793,8 @@ export function useRoomDetailsController(code: string) {
       currentTurnPlayerName,
       game?.stage,
       game?.status,
+      game?.showdownStartedAt,
+      game?.turnStartedAt,
       gameMessage,
       handleBack,
       handleCall,
@@ -767,13 +806,17 @@ export function useRoomDetailsController(code: string) {
       isBetting,
       isCallingClock,
       isMyTurn,
+      isTurnClockTarget,
       isTogglingReady,
+      isTutorialBettingPaused,
       myPlayer?.readyStatus,
       raisesThisRound,
       roomData?.members,
+      roomData?.room.tutorialId,
       selectedRaiseAmount,
       showdownTimeRemaining,
       turnClockCallerName,
+      turnClockTargetName,
       turnClockTimeRemaining,
     ],
   );

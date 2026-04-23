@@ -52,10 +52,12 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           setError(result.error.message || 'Registration failed')
           return
         }
-        toast.success(
-          `Verification email sent to ${email}. Please verify before signing in.`,
-        )
-        setPassword('')
+        toast.success('Account created. Setting up your first bot table.')
+        await navigate({
+          to: '/',
+          search: { onboarding: 'bot' },
+          replace: true,
+        })
         return
       } else {
         const result = await authClient.signIn.email({ email, password })

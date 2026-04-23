@@ -1,12 +1,7 @@
 import { PhasePlayerBadge } from "../phases/PhasePlayerBadge";
 import { WordTile } from "../table/WordTile";
 import type { PlayerHand } from "./RoomHandsBoard.types";
-
-const OPPONENT_POSITION_CLASS: Record<"top" | "left" | "right", string> = {
-  top: "left-1/2 top-[11%] -translate-x-1/2 -translate-y-1/2 xs:top-[12%] sm:top-[10%]",
-  left: "left-[12%] top-1/2 -translate-x-1/2 -translate-y-1/2 xs:left-[15%] sm:left-[12%]",
-  right: "left-[88%] top-1/2 -translate-x-1/2 -translate-y-1/2 xs:left-[85%] sm:left-[88%]",
-};
+import { ROOM_OPPONENT_POSITION_CLASS } from "./roomBoardLayout";
 
 function formatPlayerActionLabel(
   lastAction?: "check" | "call" | "raise" | "fold",
@@ -82,7 +77,7 @@ export function RoomOpponentLayer({
     return (
       <div
         key={`opponent-${hand._id}`}
-        className={`absolute ${OPPONENT_POSITION_CLASS[position]} z-20`}
+        className={`absolute ${ROOM_OPPONENT_POSITION_CLASS[position]} z-20`}
       >
         <PhasePlayerBadge
           name={opponentName}

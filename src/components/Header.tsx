@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { authClient } from "@/lib/auth-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,6 +14,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { api } from "../../convex/_generated/api";
+import { SHOWDOWN_TIMER_MS } from "../../convex/gameState";
+
+function formatCountdown(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
 
 function getInitials(name: string | undefined) {
   const safe = name?.trim();
@@ -49,9 +59,33 @@ export default function Header() {
     api.games.getGameByRoom,
     roomData?.room._id ? { roomId: roomData.room._id } : "skip",
   );
+  const [showdownTimeRemaining, setShowdownTimeRemaining] = useState<
+    number | null
+  >(null);
   const isRoomView = roomCode !== null;
   const isResultsView = resultsMatch !== null;
   const isOnlineRoomsView = pathname === "/" && search.view === "online";
+
+  useEffect(() => {
+    if (
+      game?.status !== "active" ||
+      game.stage !== "showdown" ||
+      game.showdownStartedAt === undefined
+    ) {
+      setShowdownTimeRemaining(null);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const elapsed = Date.now() - game.showdownStartedAt!;
+      const remaining = Math.max(0, SHOWDOWN_TIMER_MS - elapsed);
+      setShowdownTimeRemaining(remaining);
+    };
+
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 250);
+    return () => window.clearInterval(interval);
+  }, [game?.showdownStartedAt, game?.stage, game?.status]);
 
   const eyebrow = isResultsView
     ? "PHASE 7 . RESULTS"
@@ -70,6 +104,10 @@ export default function Header() {
                 : game.stage === "final"
                   ? "PHASE 5 . FINAL"
                   : "PHASE 6 . SHOWDOWN";
+  const showdownTimerLabel =
+    isRoomView && showdownTimeRemaining !== null
+      ? formatCountdown(showdownTimeRemaining)
+      : null;
 
   const handleRoomBack = async () => {
     if (!roomCode || isLeavingRoom) return;
@@ -130,6 +168,7 @@ export default function Header() {
 
         <div className="min-w-0">
           <h1
+            id="tutorial-phase-step"
             className={
               isRoomView || isResultsView || isOnlineRoomsView
                 ? "truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]"
@@ -159,55 +198,68 @@ export default function Header() {
           </p>
         </div>
       </div>
-      {session?.user ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-white/5"
-            >
-              <Avatar className="h-8 w-8 border border-white/15">
-                <AvatarImage
-                  src={session.user.image ?? undefined}
-                  alt={`${displayName} avatar`}
-                />
-                <AvatarFallback className="bg-neutral-200 text-xs font-semibold text-neutral-700">
-                  {getInitials(session.user.name)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="hidden items-center gap-1 sm:flex">
-                <p className="max-w-40 truncate text-sm sm:max-w-xs">
-                  {displayName}
-                </p>
-                <ChevronDown className="h-4 w-4 text-white/60" />
-              </div>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel className="max-w-48 truncate">
-              {displayName}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to="/settings">Settings</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                void authClient.signOut();
-              }}
-            >
-              Logout
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <Link
-          to="/login"
-          className="rounded-md border border-white/20 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-white/5"
-        >
-          Login
-        </Link>
-      )}
+      <div className="flex items-center gap-3">
+        {showdownTimerLabel ? (
+          <div className="rounded-full border border-[#d4aa32]/30 bg-[#d4aa32]/10 px-3 py-1 text-right">
+            <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#d4aa32]">
+              Timer
+            </div>
+            <div className="text-sm font-semibold tabular-nums text-white sm:text-base">
+              {showdownTimerLabel}
+            </div>
+          </div>
+        ) : null}
+
+        {session?.user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-white/5"
+              >
+                <Avatar className="h-8 w-8 border border-white/15">
+                  <AvatarImage
+                    src={session.user.image ?? undefined}
+                    alt={`${displayName} avatar`}
+                  />
+                  <AvatarFallback className="bg-neutral-200 text-xs font-semibold text-neutral-700">
+                    {getInitials(session.user.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden items-center gap-1 sm:flex">
+                  <p className="max-w-40 truncate text-sm sm:max-w-xs">
+                    {displayName}
+                  </p>
+                  <ChevronDown className="h-4 w-4 text-white/60" />
+                </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel className="max-w-48 truncate">
+                {displayName}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/settings">Settings</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  void authClient.signOut();
+                }}
+              >
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Link
+            to="/login"
+            className="rounded-md border border-white/20 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-white/5"
+          >
+            Login
+          </Link>
+        )}
+      </div>
     </header>
   );
 }

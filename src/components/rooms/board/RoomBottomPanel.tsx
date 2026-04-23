@@ -6,12 +6,10 @@ import {
 import { motion, useAnimationControls } from "motion/react";
 import { ActionButton } from "../controls/ActionButton";
 import { ShuffleTilesButton } from "../controls/ShuffleTilesButton";
-import { WordTile } from "../table/WordTile";
+import { WordTile, type WordTileSize } from "../table/WordTile";
 import type { BuilderTile } from "./RoomHandsBoard.types";
 import { getLetterValue } from "../../../lib/letterValues";
-
-const MOBILE_COMPACT_TILE_CLASS =
-  "!h-11 !w-11 !text-[1.5rem] xs:!h-12 xs:!w-12 xs:!text-[1.75rem] sm:!h-24 sm:!w-24 sm:!text-[3rem] lg:!h-24 lg:!w-24 lg:!text-[3rem]";
+import type { ShowdownPreviewScore } from "../../../lib/showdownScore";
 
 type RoomBottomPanelProps = {
   isPhase1: boolean;
@@ -25,13 +23,16 @@ type RoomBottomPanelProps = {
   hasUnresolvedChoices: boolean;
   validationError: string | null;
   wordPreview: string;
+  wordScorePreview: ShowdownPreviewScore | null;
   shuffleTick: number;
   gameStage: "preflop" | "flop" | "turn" | "river" | "final" | "showdown";
+  isShowdownSubmissionOpen?: boolean;
   handleSubmitWord: () => void;
   renderBuilderTile: (tile: BuilderTile) => ReactNode;
   hasFolded?: boolean;
   onShuffleTiles?: () => void;
   disableShuffle?: boolean;
+  tileSize?: WordTileSize;
 };
 
 type AnimatedBuilderTileProps = {
@@ -44,7 +45,13 @@ type AnimatedBuilderTileProps = {
   shuffleTick: number;
 };
 
-function HiddenBuilderTileSlot({ tileKey }: { tileKey: string }) {
+function HiddenBuilderTileSlot({
+  tileKey,
+  tileSize,
+}: {
+  tileKey: string;
+  tileSize: WordTileSize;
+}) {
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="text-[9px] leading-none opacity-0 sm:text-xs">-</div>
@@ -52,8 +59,7 @@ function HiddenBuilderTileSlot({ tileKey }: { tileKey: string }) {
         key={tileKey}
         showValue={false}
         variant="hidden"
-        size="md"
-        className={MOBILE_COMPACT_TILE_CLASS}
+        size={tileSize}
       />
     </div>
   );
@@ -78,9 +84,6 @@ function AnimatedBuilderTile({
   const showChoicePicker =
     !tile.disabled && tile.isChoice && choiceLetters.length > 0;
   const hasSelectedChoice = Boolean(choiceSelections[tile.id]);
-  const reservesChoicePickerSpace = Boolean(
-    tile.isChoice && choiceLetters.length > 0,
-  );
 
   useEffect(() => {
     if (shuffleTick === 0) return;
@@ -101,13 +104,13 @@ function AnimatedBuilderTile({
     <motion.div
       initial={false}
       animate={controls}
-      className={`relative flex flex-col items-center transition-opacity duration-300 ${
-        reservesChoicePickerSpace ? "pt-[56px] sm:pt-[68px]" : ""
-      } ${isValidating && tile.disabled ? "opacity-30" : "opacity-100"}`}
+      className={`relative flex flex-col items-center overflow-visible transition-opacity duration-300 ${
+        isValidating && tile.disabled ? "opacity-30" : "opacity-100"
+      }`}
     >
       {showChoicePicker && (
         <div
-          className={`absolute left-1/2 top-0 flex -translate-x-1/2 gap-1.5 rounded-lg border-2 border-[#3b82f6] bg-[#0a0a0a]/90 px-2 py-1.5 shadow-md backdrop-blur-sm sm:px-3 sm:py-2 ${
+          className={`absolute bottom-full left-1/2 z-20 mb-1.5 flex -translate-x-1/2 gap-1.5 rounded-lg border-2 border-[#3b82f6] bg-[#0a0a0a]/90 px-2 py-1.5 shadow-md backdrop-blur-sm sm:mb-2 sm:px-3 sm:py-2 ${
             hasSelectedChoice ? "pointer-events-none opacity-0" : "opacity-100"
           }`}
         >
@@ -158,20 +161,26 @@ export function RoomBottomPanel({
   hasUnresolvedChoices,
   validationError,
   wordPreview,
+  wordScorePreview,
   shuffleTick,
   gameStage,
+  isShowdownSubmissionOpen = true,
   handleSubmitWord,
   renderBuilderTile,
   hasFolded,
   onShuffleTiles,
   disableShuffle,
+  tileSize = "md",
 }: RoomBottomPanelProps) {
   const hiddenTileCount = getHiddenTileCount(gameStage);
   const showSubmitAction = gameStage === "showdown" && wordPreview.length >= 2;
   const showActionRow = showSubmitAction || !!onShuffleTiles;
 
   return (
-    <div className="relative z-30 w-[95vw] text-center sm:w-[min(56vw,980px)]">
+    <div
+      id="tutorial-player-hand"
+      className="relative z-30 w-[95vw] text-center sm:w-[min(56vw,980px)]"
+    >
       <>
         {/* {!mySubmission && !isPhase1 && (
           <div className="mb-3 text-[12px] leading-none text-[#e4dece] sm:mb-4 sm:text-[34px] [@media(max-height:460px)]:hidden">
@@ -186,7 +195,7 @@ export function RoomBottomPanel({
                 key={`bottom-hidden-${index}`}
                 showValue={false}
                 variant="hidden"
-                className={MOBILE_COMPACT_TILE_CLASS}
+                size={tileSize}
               />
             ))}
           </div>
@@ -238,8 +247,7 @@ export function RoomBottomPanel({
                       baseValue={tile.baseValue}
                       multiplier={tile.multiplier}
                       showValue={true}
-                      size="md"
-                      className={MOBILE_COMPACT_TILE_CLASS}
+                      size={tileSize}
                       variant="default"
                     />
                   </div>
@@ -282,6 +290,24 @@ export function RoomBottomPanel({
           </div>
         ) : (
           <>
+            <div className="mb-1.5 flex flex-col items-center gap-1 sm:mb-2 sm:gap-1.5">
+              <div className="text-center text-sm font-bold text-white sm:text-xl">
+                <span className="tracking-[0.2em]">{wordPreview || " "}</span>{" "}
+                <span className="text-[#f4d98b]">
+                  {wordScorePreview
+                    ? `${wordScorePreview.total}pts`
+                    : hasUnresolvedChoices
+                      ? "Select letters"
+                      : "0pts"}
+                </span>
+              </div>
+              {validationError && (
+                <div className="text-xs font-medium text-[#ef4444] sm:text-sm">
+                  {validationError}
+                </div>
+              )}
+            </div>
+
             <SortableContext
               items={builderTiles.map((tile) => tile.id)}
               strategy={horizontalListSortingStrategy}
@@ -303,20 +329,13 @@ export function RoomBottomPanel({
                   <HiddenBuilderTileSlot
                     key={`bottom-stage-hidden-${gameStage}-${index}`}
                     tileKey={`bottom-stage-hidden-${gameStage}-${index}`}
+                    tileSize={tileSize}
                   />
                 ))}
               </div>
             </SortableContext>
 
-            <div className="mt-1 flex flex-col items-center gap-1.5 sm:mt-4 sm:gap-2">
-              <div className="text-center text-sm font-bold tracking-[0.2em] text-white sm:text-xl">
-                {wordPreview || " "}
-              </div>
-              {validationError && (
-                <div className="text-xs font-medium text-[#ef4444] sm:text-sm">
-                  {validationError}
-                </div>
-              )}
+            <div className="mt-2 flex flex-col items-center gap-1.5 sm:mt-4 sm:gap-2">
               {showActionRow && (
                 <div className="flex items-center justify-center gap-2">
                   {onShuffleTiles ? (
@@ -327,11 +346,18 @@ export function RoomBottomPanel({
                   ) : null}
                   {showSubmitAction ? (
                     <ActionButton
+                      id="tutorial-submit-word"
                       variant="submit"
                       onClick={handleSubmitWord}
-                      disabled={isValidating || hasUnresolvedChoices}
+                      disabled={
+                        !isShowdownSubmissionOpen ||
+                        isValidating ||
+                        hasUnresolvedChoices
+                      }
                     >
-                      {isValidating
+                      {!isShowdownSubmissionOpen
+                        ? "Finish tutorial"
+                        : isValidating
                         ? "Validating..."
                         : hasUnresolvedChoices
                           ? "Select Letters"

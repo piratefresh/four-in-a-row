@@ -1,7 +1,7 @@
 import type { CSSProperties, HTMLAttributes } from "react";
 import { getLetterValue, getLetterValues } from "../../../lib/letterValues";
 
-type WordTileSize = "xs" | "sm" | "md" | "lg";
+export type WordTileSize = "xs" | "sm" | "md" | "lg";
 type WordTileVariant = "default" | "community" | "hidden";
 
 export type WordTileProps = {
@@ -20,9 +20,9 @@ export type WordTileProps = {
 
 const sizeClasses: Record<WordTileSize, string> = {
   xs: "h-16 w-16 text-xl",
-  sm: "h-18 w-18 text-2xl",
+  sm: "h-12 w-12 text-2xl",
   md: "h-[52px] w-[52px] text-2xl",
-  lg: "h-28 w-28 text-6xl",
+  lg: "h-[90px] w-[90px] text-[48px]",
 };
 
 const valueClasses: Record<WordTileSize, string> = {
@@ -107,7 +107,10 @@ const inlineCompactChoiceValueClasses: Record<
   md: "flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px]",
 };
 
-const compactMetadataSlotClasses: Record<Exclude<WordTileSize, "lg">, string> = {
+const compactMetadataSlotClasses: Record<
+  Exclude<WordTileSize, "lg">,
+  string
+> = {
   xs: "mt-0.5 h-[22px]",
   sm: "mt-0.5 h-[22px]",
   md: "mt-0.5 h-[24px]",
@@ -265,81 +268,84 @@ export function WordTile({
     </>
   );
 
-  const tileElement = multiplier && variant !== "hidden" ? (
-    multiplier === "3L" ? (
-      <div
-        className={`relative flex items-center justify-center rounded-[6px] ${sizeClasses[size]} ${className ?? ""}`}
-        style={{
-          padding: "2px",
-        }}
-        {...divProps}
-      >
+  const tileElement =
+    multiplier && variant !== "hidden" ? (
+      multiplier === "3L" ? (
         <div
-          className="absolute inset-0 rounded-[6px] animate-[spin_2s_linear_infinite]"
+          className={`relative flex items-center justify-center rounded-[6px] ${sizeClasses[size]} ${className ?? ""}`}
           style={{
-            background: "linear-gradient(135deg, #8b5cf6, #ec4899, #f59e0b, #8b5cf6)",
-            backgroundSize: "400% 400%",
+            padding: "2px",
           }}
-        />
-        <div
-          className={`relative flex h-full w-full items-center justify-center rounded-[4px] border ${variantShellClasses[variant]}`}
-          style={variantStyle}
+          {...divProps}
         >
-          {tileContent}
-        </div>
-      </div>
-    ) : (
-      <div
-        className={`relative flex items-center justify-center rounded-[6px] ${sizeClasses[size]} ${className ?? ""}`}
-        style={{
-          padding: "3px",
-        }}
-        {...divProps}
-      >
-        <svg
-          className="absolute inset-0 h-full w-full"
-          style={{ overflow: "visible" }}
-        >
-          <rect
-            x="1.5"
-            y="1.5"
-            width="calc(100% - 3px)"
-            height="calc(100% - 3px)"
-            rx="6"
-            fill="none"
-            stroke="#f59e0b"
-            strokeWidth="3"
-            strokeDasharray="8 6"
+          <div
+            className="absolute inset-0 rounded-[6px] animate-[spin_2s_linear_infinite]"
             style={{
-              filter: "drop-shadow(0 0 10px rgba(245, 158, 11, 0.5))",
+              background:
+                "linear-gradient(135deg, #8b5cf6, #ec4899, #f59e0b, #8b5cf6)",
+              backgroundSize: "400% 400%",
             }}
           />
-        </svg>
-        <div
-          className={`relative flex h-full w-full items-center justify-center rounded-[4px] border ${variantShellClasses[variant]}`}
-          style={variantStyle}
-        >
-          {tileContent}
+          <div
+            className={`relative flex h-full w-full items-center justify-center rounded-[4px] border ${variantShellClasses[variant]}`}
+            style={variantStyle}
+          >
+            {tileContent}
+          </div>
         </div>
+      ) : (
+        <div
+          className={`relative flex items-center justify-center rounded-[6px] ${sizeClasses[size]} ${className ?? ""}`}
+          style={{
+            padding: "3px",
+          }}
+          {...divProps}
+        >
+          <svg
+            className="absolute inset-0 h-full w-full"
+            style={{ overflow: "visible" }}
+          >
+            <rect
+              x="1.5"
+              y="1.5"
+              width="calc(100% - 3px)"
+              height="calc(100% - 3px)"
+              rx="6"
+              fill="none"
+              stroke="#f59e0b"
+              strokeWidth="3"
+              strokeDasharray="8 6"
+              style={{
+                filter: "drop-shadow(0 0 10px rgba(245, 158, 11, 0.5))",
+              }}
+            />
+          </svg>
+          <div
+            className={`relative flex h-full w-full items-center justify-center rounded-[4px] border ${variantShellClasses[variant]}`}
+            style={variantStyle}
+          >
+            {tileContent}
+          </div>
+        </div>
+      )
+    ) : (
+      <div
+        className={`relative flex items-center justify-center ${variant === "hidden" ? "rounded-[6px]" : "rounded-[6px] border"} ${variantShellClasses[variant]} ${sizeClasses[size]} ${className ?? ""}`}
+        style={variantStyle}
+        {...divProps}
+      >
+        {tileContent}
       </div>
-    )
-  ) : (
-    <div
-      className={`relative flex items-center justify-center ${variant === "hidden" ? "rounded-[6px]" : "rounded-[6px] border"} ${variantShellClasses[variant]} ${sizeClasses[size]} ${className ?? ""}`}
-      style={variantStyle}
-      {...divProps}
-    >
-      {tileContent}
-    </div>
-  );
+    );
 
   const compactMetadata =
     usesInlineCompactValue && variant !== "hidden" ? (
       <div className="flex flex-col items-center gap-0.5 leading-none">
         {showValue &&
         (selectedLetter
-          ? typeof displayValues[displayLetters?.indexOf(selectedLetter) ?? 0] ===
-            "number"
+          ? typeof displayValues[
+              displayLetters?.indexOf(selectedLetter) ?? 0
+            ] === "number"
           : isChoiceCard
             ? displayValues.length > 0
             : typeof displayValues[0] === "number") ? (
@@ -422,7 +428,9 @@ export function WordTile({
     return (
       <div className="flex flex-col items-center">
         {renderedTile}
-        <div className={`${compactMetadataSlotClasses[size]} flex flex-col items-center justify-start`}>
+        <div
+          className={`${size === "lg" ? "" : compactMetadataSlotClasses[size]} flex flex-col items-center justify-start`}
+        >
           {compactMetadata}
         </div>
       </div>

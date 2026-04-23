@@ -11,6 +11,7 @@ type RoomListItem = {
 
 type OnlineRoomsProps = {
   activeRoomCode?: string | null;
+  activeRoomTutorialId?: string | null;
   joinMessage: string | null;
   joiningRoomCode: string | null;
   isRefreshingRooms: boolean;
@@ -30,6 +31,7 @@ type OnlineRoomsProps = {
 
 export function OnlineRooms({
   activeRoomCode,
+  activeRoomTutorialId,
   joinMessage,
   joiningRoomCode,
   isRefreshingRooms,
@@ -49,7 +51,9 @@ export function OnlineRooms({
               onClick={onResumeRoom}
               className="rounded-full border border-[#d7b45e]/30 bg-[#1a1509] px-4 py-2 text-sm font-medium text-[#f4d99d] transition-colors hover:border-[#d7b45e]/50 hover:text-[#fff0cb]"
             >
-              Resume room {activeRoomCode}
+              {activeRoomTutorialId
+                ? `Resume tutorial table ${activeRoomCode}`
+                : `Resume room ${activeRoomCode}`}
             </button>
           ) : null}
         </div>

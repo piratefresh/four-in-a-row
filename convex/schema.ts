@@ -13,6 +13,7 @@ export const appTables = {
     code: v.string(),
     status: v.union(v.literal("open"), v.literal("closed")),
     maxPlayers: v.number(),
+    tutorialId: v.optional(v.union(v.literal("first-bot-game"))),
     hostPlayerId: v.optional(v.id("players")),
     nextRoomId: v.optional(v.id("rooms")),
     sourceRoomId: v.optional(v.id("rooms")),

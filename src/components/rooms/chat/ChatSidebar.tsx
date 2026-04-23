@@ -155,7 +155,7 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   return (
     <>
-      <div className="hidden lg:fixed lg:right-0 lg:top-16 lg:bottom-0 lg:z-30 lg:flex lg:w-[400px] lg:min-w-[400px]">
+      <div className="hidden [@media(min-width:1441px)]:fixed [@media(min-width:1441px)]:right-0 [@media(min-width:1441px)]:top-16 [@media(min-width:1441px)]:bottom-0 [@media(min-width:1441px)]:z-30 [@media(min-width:1441px)]:flex [@media(min-width:1441px)]:w-[400px] [@media(min-width:1441px)]:min-w-[400px]">
         <ChatPanelContent
           messages={messages}
           draftMessage={draftMessage}
@@ -164,7 +164,7 @@ export function ChatSidebar({
         />
       </div>
 
-      <div className="lg:hidden">
+      <div className="[@media(min-width:1441px)]:hidden">
         <Sheet
           open={isOpen}
           onOpenChange={(open) => {
@@ -205,7 +205,7 @@ export function ChatToggleButton({
   return (
     <button
       onClick={onClick}
-      className="relative rounded-full bg-linear-to-br from-amber-600 to-amber-700 p-3 text-white shadow-lg transition-all hover:scale-105 hover:from-amber-500 hover:to-amber-600 lg:hidden"
+      className="relative rounded-full bg-linear-to-br from-amber-600 to-amber-700 p-3 text-white shadow-lg transition-all hover:scale-105 hover:from-amber-500 hover:to-amber-600 [@media(min-width:1441px)]:hidden"
     >
       <MessageCircle className="h-5 w-5" />
       {unreadCount > 0 && (

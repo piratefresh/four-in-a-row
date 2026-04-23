@@ -1,6 +1,13 @@
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { useNextStep } from "nextstepjs";
 import { ActionButton } from "./ActionButton";
 import { ShuffleTilesButton } from "./ShuffleTilesButton";
+import {
+  FIRST_BOT_GAME_TOUR,
+  getRoomCodeFromPathname,
+  getTourPausedStepStorageKey,
+} from "@/components/onboarding/wordPokerTours";
 
 type ReadyControlsProps = {
   readyCount: number;
@@ -34,6 +41,9 @@ type BettingControlsProps = {
   isCallingClock?: boolean;
   turnClockTimeRemaining?: number | null;
   turnClockCallerName?: string | null;
+  turnClockTargetName?: string | null;
+  isTurnClockTarget?: boolean;
+  callClockAvailableInMs?: number | null;
 };
 
 type UtilityControlsProps = {
@@ -61,16 +71,73 @@ export function RoomActionControls({
   betting,
   utility,
 }: RoomActionControlsProps) {
+  const {
+    closeNextStep,
+    currentStep,
+    currentTour,
+    setCurrentStep,
+    startNextStep,
+  } = useNextStep();
   const showRaiseChip = !!betting && (betting.raiseAmount ?? 0) > 0;
+  const advanceTutorialFromActionStep = () => {
+    if (currentTour === FIRST_BOT_GAME_TOUR && currentStep === 1) {
+      setCurrentStep(2, 50);
+    }
+  };
+
+  useEffect(() => {
+    if (!betting?.isMyTurn || typeof window === "undefined") {
+      return;
+    }
+
+    const roomCode = getRoomCodeFromPathname(window.location.pathname);
+    const pausedStepKey = getTourPausedStepStorageKey(
+      FIRST_BOT_GAME_TOUR,
+      roomCode,
+    );
+
+    if (window.localStorage.getItem(pausedStepKey) !== "0") {
+      return;
+    }
+
+    window.localStorage.removeItem(pausedStepKey);
+    startNextStep(FIRST_BOT_GAME_TOUR);
+    setCurrentStep(1, 50);
+  }, [betting?.isMyTurn, setCurrentStep, startNextStep]);
 
   if (ready) {
+    const handleReadyClick = () => {
+      ready.onReady?.();
+
+      if (
+        !ready.isReady &&
+        currentTour === FIRST_BOT_GAME_TOUR &&
+        currentStep === 0
+      ) {
+        if (typeof window !== "undefined") {
+          const roomCode = getRoomCodeFromPathname(window.location.pathname);
+          const pausedStepKey = getTourPausedStepStorageKey(
+            FIRST_BOT_GAME_TOUR,
+            roomCode,
+          );
+          window.localStorage.setItem(pausedStepKey, "0");
+        }
+
+        closeNextStep();
+      }
+    };
+
     return (
       <>
-        <div className="flex w-[92vw] flex-col items-stretch gap-2 sm:w-auto sm:items-center sm:gap-3">
+        <div
+          id="tutorial-room-actions"
+          className="flex w-[92vw] flex-col items-stretch gap-2 sm:w-auto sm:items-center sm:gap-3"
+        >
           <ActionButton
+            id="#tutorial-room-ready-button"
             variant={ready.isReady ? "fold" : "check"}
             size="wide"
-            onClick={() => ready.onReady?.()}
+            onClick={handleReadyClick}
             disabled={ready.isTogglingReady || ready.allPlayersReady}
           >
             {ready.isTogglingReady
@@ -90,8 +157,26 @@ export function RoomActionControls({
       betting.turnClockTimeRemaining !== undefined
         ? formatCountdown(betting.turnClockTimeRemaining)
         : null;
+    const callClockAvailableLabel =
+      betting.callClockAvailableInMs !== null &&
+      betting.callClockAvailableInMs !== undefined
+        ? formatCountdown(betting.callClockAvailableInMs)
+        : null;
+    const showCallClockButton =
+      !turnClockLabel &&
+      (betting.canCallClock ||
+        betting.isCallingClock ||
+        callClockAvailableLabel !== null);
+    const turnClockSubjectLabel = betting.isTurnClockTarget
+      ? "you"
+      : (betting.turnClockTargetName ??
+        betting.currentTurnPlayerName ??
+        "current player");
     return (
-      <div className="flex w-full items-center justify-center">
+      <div
+        id="tutorial-room-actions"
+        className="flex w-full items-center justify-center"
+      >
         <AnimatePresence initial={false} mode="wait">
           {!betting.isMyTurn ? (
             <motion.div
@@ -116,13 +201,17 @@ export function RoomActionControls({
                   transition={{ delay: 0.08, duration: 0.2 }}
                 >
                   <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8f8876]">
-                    Waiting on
+                    {betting.isTurnClockTarget && turnClockLabel
+                      ? "You're On The Clock"
+                      : "Waiting on"}
                   </div>
                   <div className="mt-1 flex items-center justify-center gap-2 text-sm font-semibold text-[#f4d37a] sm:text-base">
-                    {betting.currentTurnPlayerName
-                      ? `${betting.currentTurnPlayerName}'s turn...`
-                      : "next player's turn..."}
-                    <span className="inline-flex items-center gap-1">
+                    {betting.isTurnClockTarget && turnClockLabel
+                      ? `You have ${turnClockLabel} to decide an action.`
+                      : betting.currentTurnPlayerName
+                        ? `${betting.currentTurnPlayerName}'s turn`
+                        : "next player's turn"}
+                    <span className="relative top-px inline-flex shrink-0 items-center gap-1 self-center">
                       <span className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce" />
                       <span
                         className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce"
@@ -136,23 +225,31 @@ export function RoomActionControls({
                   </div>
                   <div className="mt-1 text-[11px] font-medium tracking-[0.12em] text-[#b8b19a]">
                     {turnClockLabel
-                      ? `clock called${betting.turnClockCallerName ? ` by ${betting.turnClockCallerName}` : ""} - ${turnClockLabel}`
+                      ? `Clock called on ${turnClockSubjectLabel}${betting.turnClockCallerName ? ` by ${betting.turnClockCallerName}` : ""} - ${turnClockLabel}`
                       : null}
                   </div>
-                  {betting.canCallClock || betting.isCallingClock ? (
+                  {showCallClockButton ? (
                     <div className="mt-3 flex justify-center">
-                      <ActionButton
-                        variant="raise"
-                        size="wide"
-                        onClick={() => betting.onCallClock?.()}
-                        disabled={
-                          betting.isCallingClock ||
-                          !betting.canCallClock ||
-                          !!turnClockLabel
+                      <div
+                        title={
+                          !betting.canCallClock && callClockAvailableLabel
+                            ? `Available after 1:00 of waiting. ${callClockAvailableLabel} remaining.`
+                            : undefined
                         }
                       >
-                        {betting.isCallingClock ? "Calling..." : "Call Clock"}
-                      </ActionButton>
+                        <ActionButton
+                          variant="raise"
+                          size="wide"
+                          onClick={() => betting.onCallClock?.()}
+                          disabled={
+                            betting.isCallingClock || !betting.canCallClock
+                          }
+                        >
+                          {betting.isCallingClock
+                            ? "Calling..."
+                            : "Call the Clock"}
+                        </ActionButton>
+                      </div>
                     </div>
                   ) : null}
                 </motion.div>
@@ -170,10 +267,18 @@ export function RoomActionControls({
             >
               {turnClockLabel ? (
                 <div className="w-full rounded-2xl border border-[#8a6630] bg-[linear-gradient(180deg,rgba(51,35,12,0.96)_0%,rgba(24,16,6,0.98)_100%)] px-4 py-2 text-center text-sm font-semibold text-[#f4d37a] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_28px_rgba(0,0,0,0.3)]">
-                  {betting.turnClockCallerName
-                    ? `${betting.turnClockCallerName} called the clock`
-                    : "Clock called"}{" "}
-                  - {turnClockLabel}
+                  <div>
+                    {betting.turnClockCallerName
+                      ? `${betting.turnClockCallerName} called the clock`
+                      : "Clock called"}{" "}
+                    - {turnClockLabel}
+                  </div>
+                  {betting.isTurnClockTarget ? (
+                    <div className="mt-1 text-xs font-medium tracking-[0.06em] text-[#f5dfab]">
+                      You have 30 seconds to decide an action or the game will
+                      auto-check or fold for you.
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -186,7 +291,10 @@ export function RoomActionControls({
                 ) : null}
                 <ActionButton
                   variant="fold"
-                  onClick={() => betting.onFold?.()}
+                  onClick={() => {
+                    betting.onFold?.();
+                    advanceTutorialFromActionStep();
+                  }}
                   disabled={betting.isBetting || !betting.canFold}
                 >
                   {betting.isBetting ? "Betting..." : "Fold"}
@@ -196,9 +304,11 @@ export function RoomActionControls({
                   onClick={() => {
                     if (betting.canCheck) {
                       betting.onCheck?.();
+                      advanceTutorialFromActionStep();
                       return;
                     }
                     betting.onCall?.();
+                    advanceTutorialFromActionStep();
                   }}
                   disabled={
                     betting.isBetting || (!betting.canCheck && !betting.canCall)
@@ -217,7 +327,10 @@ export function RoomActionControls({
                 </ActionButton>
                 <ActionButton
                   variant="raise"
-                  onClick={() => betting.onRaise?.()}
+                  onClick={() => {
+                    betting.onRaise?.();
+                    advanceTutorialFromActionStep();
+                  }}
                   disabled={betting.isBetting || !betting.canRaise}
                 >
                   {betting.isBetting ? (
@@ -243,7 +356,10 @@ export function RoomActionControls({
                   ) : null}
                   <ActionButton
                     variant="fold"
-                    onClick={() => betting.onFold?.()}
+                    onClick={() => {
+                      betting.onFold?.();
+                      advanceTutorialFromActionStep();
+                    }}
                     disabled={betting.isBetting || !betting.canFold}
                   >
                     {betting.isBetting ? "Betting..." : "Fold"}
@@ -253,9 +369,11 @@ export function RoomActionControls({
                     onClick={() => {
                       if (betting.canCheck) {
                         betting.onCheck?.();
+                        advanceTutorialFromActionStep();
                         return;
                       }
                       betting.onCall?.();
+                      advanceTutorialFromActionStep();
                     }}
                     disabled={
                       betting.isBetting ||
@@ -275,7 +393,10 @@ export function RoomActionControls({
                   </ActionButton>
                   <ActionButton
                     variant="raise"
-                    onClick={() => betting.onRaise?.()}
+                    onClick={() => {
+                      betting.onRaise?.();
+                      advanceTutorialFromActionStep();
+                    }}
                     disabled={betting.isBetting || !betting.canRaise}
                   >
                     {betting.isBetting ? (
