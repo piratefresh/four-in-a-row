@@ -9,6 +9,7 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 
 import Header from "../components/Header";
+import { VerifyEmailBanner } from "../components/verify-email-banner";
 
 import appCss from "../styles.css?url";
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
@@ -140,8 +141,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="bg-black text-white">
-        <AppTourProvider>
+<AppTourProvider>
           <Header />
+          <VerifyEmailBanner />
           {children}
         </AppTourProvider>
         <Toaster richColors />

@@ -13,6 +13,7 @@ import {
 import { createGameForRoomHandler, internalRedealGameForRoomHandler, internalStartGameHandler, redealGameForRoomHandler, startGameHandler } from "./games/gamesSetup";
 import { getGameByRoomHandler, getPlayerHandsHandler, internalGetGameRuntimeStateHandler } from "./games/gamesRuntime";
 import { forfeitShowdownHandler, getShowdownResultsHandler, getWordSubmissionsHandler, internalProcessBotShowdownHandler, internalResolveExpiredShowdownHandler, resolveShowdownHandler, submitWordHandler, submitWordInternalHandler } from "./games/gamesShowdown";
+import { requireVerifiedUser } from "./verifyUser";
 
 const submitWordTileValidator = v.object({
   letter: v.string(),
@@ -30,17 +31,26 @@ const choiceResolutionsValidator = v.object({
 
 export const createGameForRoom = mutation({
   args: { roomId: v.string(), deck: v.optional(v.array(gameDeckTileValidator)) },
-  handler: createGameForRoomHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return createGameForRoomHandler(ctx, args);
+  },
 });
 
 export const startGame = mutation({
   args: { gameId: v.id("games") },
-  handler: startGameHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return startGameHandler(ctx, args);
+  },
 });
 
 export const redealGameForRoom = mutation({
   args: { roomId: v.string() },
-  handler: redealGameForRoomHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return redealGameForRoomHandler(ctx, args);
+  },
 });
 
 export const internalStartGame = internalMutation({
@@ -75,27 +85,42 @@ export const internalGetGameRuntimeState = internalQuery({
 
 export const check = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: checkHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return checkHandler(ctx, args);
+  },
 });
 
 export const call = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: callHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return callHandler(ctx, args);
+  },
 });
 
 export const raise = mutation({
   args: { gameId: v.id("games"), playerId: v.string(), raiseToAmount: v.number() },
-  handler: raiseHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return raiseHandler(ctx, args);
+  },
 });
 
 export const fold = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: foldHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return foldHandler(ctx, args);
+  },
 });
 
 export const callClock = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: callClockHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return callClockHandler(ctx, args);
+  },
 });
 
 export const internalResolveExpiredTurnClock = internalMutation({
@@ -121,7 +146,10 @@ export const submitWordInternal = internalMutation({
 
 export const forfeitShowdown = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: forfeitShowdownHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return forfeitShowdownHandler(ctx, args);
+  },
 });
 
 export const submitWord = action({
@@ -137,7 +165,10 @@ export const submitWord = action({
 
 export const resolveShowdown = mutation({
   args: { gameId: v.id("games") },
-  handler: resolveShowdownHandler,
+  handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
+    return resolveShowdownHandler(ctx, args);
+  },
 });
 
 export const internalResolveExpiredShowdown = internalMutation({
