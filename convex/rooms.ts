@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { buildDevBotAuthUserId, getBotCharacterForSeatIndex } from "./aiStrategy";
 import { authComponent, createAuth } from "./auth";
+import { requireVerifiedUser } from "./verifyUser";
 import {
   createGameForRoomHandler,
   resetTutorialGameForRoomHandler,
@@ -788,6 +789,7 @@ export const createRoom = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
     return createRoomWithHost(ctx, args.name);
   },
 });
@@ -797,6 +799,7 @@ export const createTutorialBotRoom = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireVerifiedUser(ctx);
     const room = await createRoomWithHostOptions(ctx, args.name, {
       tutorialId: FIRST_BOT_GAME_TUTORIAL_ID,
     });
@@ -1040,13 +1043,7 @@ export const joinRoom = mutation({
       });
     }
 
-    const authUserId = await getAuthenticatedUserId(ctx);
-    if (!authUserId) {
-      throw new ConvexError({
-        code: "UNAUTHORIZED",
-        message: "Authentication required.",
-      });
-    }
+    const { authUserId } = await requireVerifiedUser(ctx);
 
     let room = await getRoomByCode(ctx, args.code);
     await reapInactivePlayersForRoom(ctx, room, Date.now());
@@ -1899,13 +1896,7 @@ export const toggleReady = mutation({
   },
   handler: async (ctx, args) => {
     const code = normalizeRoomCode(args.code);
-    const authUserId = await getAuthenticatedUserId(ctx);
-    if (!authUserId) {
-      throw new ConvexError({
-        code: "UNAUTHORIZED",
-        message: "Authentication required.",
-      });
-    }
+    const { authUserId } = await requireVerifiedUser(ctx);
 
     const room = await ctx.db
       .query("rooms")

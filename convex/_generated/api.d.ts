@@ -20,6 +20,7 @@ import type * as clearOldGames from "../clearOldGames.js";
 import type * as constants from "../constants.js";
 import type * as csw24 from "../csw24.js";
 import type * as debugBots from "../debugBots.js";
+import type * as emails from "../emails.js";
 import type * as gameRules from "../gameRules.js";
 import type * as gameState from "../gameState.js";
 import type * as games from "../games.js";
@@ -40,6 +41,7 @@ import type * as simpleBots from "../simpleBots.js";
 import type * as stats from "../stats.js";
 import type * as testDeck from "../testDeck.js";
 import type * as validateWord from "../validateWord.js";
+import type * as verifyUser from "../verifyUser.js";
 
 import type {
   ApiFromModules,
@@ -60,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   constants: typeof constants;
   csw24: typeof csw24;
   debugBots: typeof debugBots;
+  emails: typeof emails;
   gameRules: typeof gameRules;
   gameState: typeof gameState;
   games: typeof games;
@@ -80,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   stats: typeof stats;
   testDeck: typeof testDeck;
   validateWord: typeof validateWord;
+  verifyUser: typeof verifyUser;
 }>;
 
 /**

@@ -1,7 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { authClient } from '@/lib/auth-client'
-import { toast } from 'sonner'
 
 type AuthMode = 'login' | 'register'
 
@@ -10,16 +9,36 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const { data: session, isPending } = authClient.useSession()
   const isRegister = mode === 'register'
 
-  const [email, setEmail] = useState('')
+const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [registered, setRegistered] = useState(false)
 
   if (isPending) {
     return (
       <div className="flex items-center justify-center py-10">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#29533a] border-t-[#4caf73]" />
+      </div>
+    )
+  }
+
+  if (registered) {
+    return (
+      <div className="w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
+        <h1 className="text-2xl font-bold text-white">Check your email</h1>
+        <p className="mt-2 text-sm text-slate-300">
+          We&apos;ve sent a verification email to <span className="text-white">{email}</span>.
+          Please verify your email to unlock all features.
+        </p>
+        <button
+          type="button"
+          className="mt-6 w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636]"
+          onClick={() => navigate({ to: '/login' })}
+        >
+          Go to login
+        </button>
       </div>
     )
   }
@@ -52,12 +71,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           setError(result.error.message || 'Registration failed')
           return
         }
-        toast.success('Account created. Setting up your first bot table.')
-        await navigate({
-          to: '/',
-          search: { onboarding: 'bot' },
-          replace: true,
-        })
+        setRegistered(true)
         return
       } else {
         const result = await authClient.signIn.email({ email, password })
@@ -138,6 +152,17 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
           <p className="rounded-md border border-rose-700 bg-rose-900/30 px-3 py-2 text-sm text-rose-300">
             {error}
           </p>
+        )}
+
+        {!isRegister && (
+          <div className="text-right">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-[#7ed8a2] hover:text-[#9ee6ba]"
+            >
+              Forgot password?
+            </Link>
+          </div>
         )}
 
         <button
