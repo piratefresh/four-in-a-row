@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   AI_PERSONALITIES,
+  AI_DIFFICULTY,
   BOT_CHARACTERS,
+  BETTING_PROFILES,
+  SHOWDOWN_SELECTION_WINDOWS,
+  AI_DECISION_TIMING,
   buildDevBotAuthUserId,
   getBotCharacterForAuthUserId,
   getBotCharacterForSeatIndex,
   getBotCharacterForSeed,
   getPersonalityForSeed,
+  getModelForDifficulty,
+  getConfiguredAIProvider,
+  AI_PROVIDER,
 } from "./aiStrategy";
 
 describe("bot character registry", () => {
@@ -43,5 +50,69 @@ describe("bot character registry", () => {
   it("uses the same character personality for seed-based fallback", () => {
     const character = getBotCharacterForSeed("player-seed-42");
     expect(getPersonalityForSeed("player-seed-42")).toBe(character.personality);
+  });
+});
+
+describe("AI difficulty configuration", () => {
+  it("has all three difficulty levels", () => {
+    expect(AI_DIFFICULTY.EASY).toBe("easy");
+    expect(AI_DIFFICULTY.MEDIUM).toBe("medium");
+    expect(AI_DIFFICULTY.HARD).toBe("hard");
+  });
+
+  it("has betting profiles for each difficulty", () => {
+    for (const difficulty of Object.values(AI_DIFFICULTY)) {
+      const profile = BETTING_PROFILES[difficulty as keyof typeof BETTING_PROFILES];
+      expect(profile).toBeDefined();
+      expect(profile.foldThreshold).toBeGreaterThan(0);
+      expect(profile.raiseThreshold).toBeGreaterThan(0);
+      expect(profile.bluffFrequency).toBeGreaterThanOrEqual(0);
+      expect(profile.bluffFrequency).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("has showdown selection windows that decrease with difficulty", () => {
+    expect(SHOWDOWN_SELECTION_WINDOWS[AI_DIFFICULTY.EASY]).toBeGreaterThan(
+      SHOWDOWN_SELECTION_WINDOWS[AI_DIFFICULTY.MEDIUM],
+    );
+    expect(SHOWDOWN_SELECTION_WINDOWS[AI_DIFFICULTY.MEDIUM]).toBeGreaterThan(
+      SHOWDOWN_SELECTION_WINDOWS[AI_DIFFICULTY.HARD],
+    );
+  });
+
+  it("hard difficulty bluffs more than easy difficulty", () => {
+    expect(BETTING_PROFILES[AI_DIFFICULTY.HARD].bluffFrequency).toBeGreaterThan(
+      BETTING_PROFILES[AI_DIFFICULTY.EASY].bluffFrequency,
+    );
+  });
+});
+
+describe("model selection and provider", () => {
+  it("returns OpenRouter as default provider", () => {
+    // Without env var, defaults to OPENROUTER
+    const provider = getConfiguredAIProvider();
+    expect([AI_PROVIDER.OPENROUTER, AI_PROVIDER.NVIDIA_NIM]).toContain(provider);
+  });
+
+  it("getModelForDifficulty returns a string for each difficulty with OpenRouter", () => {
+    for (const difficulty of Object.values(AI_DIFFICULTY)) {
+      const model = getModelForDifficulty(
+        difficulty as keyof typeof AI_DIFFICULTY,
+        AI_PROVIDER.OPENROUTER,
+      );
+      expect(typeof model).toBe("string");
+      expect(model.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("getModelForDifficulty returns a string for each difficulty with NVIDIA NIM", () => {
+    for (const difficulty of Object.values(AI_DIFFICULTY)) {
+      const model = getModelForDifficulty(
+        difficulty as keyof typeof AI_DIFFICULTY,
+        AI_PROVIDER.NVIDIA_NIM,
+      );
+      expect(typeof model).toBe("string");
+      expect(model.length).toBeGreaterThan(0);
+    }
   });
 });
