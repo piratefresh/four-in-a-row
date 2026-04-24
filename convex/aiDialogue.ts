@@ -23,6 +23,7 @@ import {
   getRandomReaction,
   type DialogueTrigger,
 } from "./aiPersonalities";
+export type { DialogueTrigger };
 import { PROMPT_DIALOGUE } from "./aiPrompts";
 
 // ---------------------------------------------------------------------------
@@ -93,7 +94,6 @@ export function tryTemplateReaction(
   request: DialogueRequest,
 ): DialogueResult | null {
   const character = getCharacter(request.botCharacterId);
-  const profile = getDialogueProfile(character.personality);
   const randomFn = request.randomFn ?? Math.random;
 
   if (!shouldGenerateDialogue(character.personality, request.trigger, randomFn())) {

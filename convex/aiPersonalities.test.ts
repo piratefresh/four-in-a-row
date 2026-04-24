@@ -7,11 +7,9 @@ import {
   shouldGenerateDialogue,
   getRandomReaction,
   ALL_DIALOGUE_TRIGGERS,
-  type DialogueTrigger,
 } from "./aiPersonalities";
 import {
   AI_PERSONALITIES,
-  BOT_CHARACTERS,
 } from "./aiStrategy";
 
 describe("aiPersonalities", () => {

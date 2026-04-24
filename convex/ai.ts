@@ -1,22 +1,20 @@
 /**
  * AI Decision-Making Actions for Word Poker
  *
- * Betting decisions use NVIDIA NIM. Showdown word generation is deterministic.
+ * Betting decisions use tool-calling LLM with prompt registry.
+ * Showdown word generation uses a deterministic solver (fallback planned for LLM).
  */
 
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import type { GameStage } from "./gameState";
 import {
-  getGameRulesForAI,
-  getStageStrategy,
   estimateHandStrength,
   getQuickRecommendation,
 } from "./gameRules";
 import {
   type AIPersonality,
   type AIDifficulty,
-  type AIProvider,
   AI_DIFFICULTY,
   AI_PERSONALITIES,
   AI_PROVIDER,
@@ -39,6 +37,15 @@ import {
   serializeAvailableShowdownTiles,
   solveDeterministicShowdownWord,
 } from "./showdownSolver";
+import { PROMPT_BETTING_TOOLUSE } from "./aiPrompts";
+import {
+  BETTING_TOOLS,
+  type ToolCallResult,
+  isBettingToolName,
+  parseBettingToolCall,
+  parseStructuredTextResponse,
+  fixActionForBetState,
+} from "./aiTools";
 
 /**
  * AI Betting Decision Result
@@ -141,7 +148,6 @@ export const aiDecideBet = internalAction({
     // Determine which AI provider to use
     const provider = getConfiguredAIProvider();
     const useOpenRouter = provider === AI_PROVIDER.OPENROUTER;
-    const useNvidiaNim = provider === AI_PROVIDER.NVIDIA_NIM;
 
     // Check if the selected provider is configured
     const isProviderConfigured = useOpenRouter
@@ -220,10 +226,6 @@ export const aiDecideBet = internalAction({
         timeoutMs,
       });
 
-      // Build prompt for AI
-      const gameRules = getGameRulesForAI();
-      const stageStrategy = getStageStrategy(args.stage as GameStage);
-
       const handDescription = args.handTiles
         .map((t) => {
           if (t.kind === "single") {
@@ -245,53 +247,53 @@ export const aiDecideBet = internalAction({
         })
         .join(", ");
 
-      const prompt = `${gameRules}
+      const nextRaiseStep = args.raiseLadder.find((amt) => amt > args.currentBet);
 
-${stageStrategy}
+      const prompt = PROMPT_BETTING_TOOLUSE.build({
+        handTiles: handDescription,
+        communityTilesRevealed: communityDescription || "None yet",
+        stage: args.stage as GameStage,
+        currentBet: args.currentBet,
+        chips: args.chips,
+        pot: args.pot,
+        currentRaises: args.currentRaises,
+        maxRaises: args.maxRaises,
+        raiseLadderNext: nextRaiseStep ? String(nextRaiseStep) : "MAX",
+        personality: difficulty,
+        personalityDescription: `A ${difficulty} difficulty Word Poker player`,
+        handStrength,
+        quickRecommendation: quickRec,
+        isBluffing,
+      });
 
-## Current Situation
-Your hand (private): ${handDescription}
-Community tiles (revealed): ${communityDescription || "None yet"}
-Stage: ${args.stage}
-Current bet: ${args.currentBet} chips
-Your chips: ${args.chips}
-Pot size: ${args.pot}
-Raises this round: ${args.currentRaises}/${args.maxRaises}
+      const toolsJson = JSON.stringify(BETTING_TOOLS);
+      const toolInstructions = `You have access to the following tools. Choose exactly one tool to call based on the game state.
 
-## Your Task
-Decide your betting action. Your options:
-${args.currentBet === 0 ? "- CHECK (pass, no cost)" : ""}
-${args.currentBet > 0 ? `- CALL (pay ${args.currentBet} chips to stay in)` : ""}
-${args.currentRaises < args.maxRaises ? `- RAISE (increase bet to next level: ${args.raiseLadder.find((amt) => amt > args.currentBet) || "MAX"})` : ""}
-- FOLD (exit round, lose bets already made)
+Available tools:
+- check: Pass without betting (only when no bet is owed)
+- call: Match the current bet to stay in
+- raise: Increase the bet (provide the amount parameter)
+- fold: Exit the round and forfeit bets
 
-Analyze:
-1. Can you form a strong word with these tiles?
-2. Is the pot worth competing for?
-3. What's your hand strength?
-4. Should you fold, call, or raise?
+Respond by calling one of these tools. For example, to call: {"name": "call", "arguments": {}}`;
 
-Respond in this EXACT format:
-ACTION: [FOLD/CHECK/CALL/RAISE]
-RAISE_AMOUNT: [number if ACTION is RAISE, otherwise omit]
-CONFIDENCE: [0.0-1.0]
-REASONING: [Brief explanation]
+      const fullPrompt = `${prompt}
 
-Example:
-ACTION: CALL
-CONFIDENCE: 0.7
-REASONING: I have E and A in hand with T and R in community, can likely form RATE or TEAR. Pot odds are good.`;
+${toolInstructions}
+
+Tool definitions:
+${toolsJson}`;
 
       // Call the appropriate AI provider
       const response = useOpenRouter
         ? await callOpenRouterChat({
             model,
-            prompt,
+            prompt: fullPrompt,
             timeoutMs,
           })
         : await callNvidiaNimChat({
             model,
-            prompt,
+            prompt: fullPrompt,
             timeoutMs,
           });
 
@@ -299,40 +301,56 @@ REASONING: I have E and A in hand with T and R in community, can likely form RAT
         provider,
         model,
         timeoutMs,
-        response,
+        responseLength: response.length,
       });
 
-      // Parse AI response
-      const actionMatch = response.match(/ACTION:\s*(FOLD|CHECK|CALL|RAISE)/i);
-      const raiseMatch = response.match(/RAISE_AMOUNT:\s*(\d+)/i);
-      const confidenceMatch = response.match(/CONFIDENCE:\s*([\d.]+)/i);
-      const reasoningMatch = response.match(/REASONING:\s*(.+)/i);
+      let toolCall: ToolCallResult | null = null;
 
-      const action = (actionMatch?.[1]?.toLowerCase() || quickRec) as AIBettingDecision["action"];
-      const confidence = parseFloat(confidenceMatch?.[1] || "0.5");
-      const reasoning = reasoningMatch?.[1]?.trim() || "AI strategic decision";
-
-      let raiseAmount: number | undefined;
-      if (action === "raise") {
-        raiseAmount = parseInt(raiseMatch?.[1] || "0", 10);
-        if (!raiseAmount || raiseAmount <= args.currentBet) {
-          // Find next valid raise amount
-          raiseAmount = args.raiseLadder.find((amt) => amt > args.currentBet);
+      // Try to parse as tool call (JSON response)
+      try {
+        const jsonMatch = response.match(/\{[\s\S]*"name"\s*:\s*"(check|call|raise|fold)"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          toolCall = { name: parsed.name, arguments: parsed.arguments || parsed.params || {} };
         }
+      } catch {
+        // Not valid JSON, try structured text
       }
 
+      // Fall back to structured text parsing
+      if (!toolCall || !isBettingToolName(toolCall.name)) {
+        toolCall = parseStructuredTextResponse(response);
+      }
+
+      const fallbackDecision: AIBettingDecision = {
+        action: quickRec,
+        raiseAmount: quickRec === "raise"
+          ? args.raiseLadder.find((amt) => amt > args.currentBet)
+          : undefined,
+        reasoning: "Fallback strategy (API parsing failed)",
+        confidence: handStrength,
+      };
+
+      const rawDecision = parseBettingToolCall(toolCall, fallbackDecision, args.currentBet, args.raiseLadder);
+
+      // Fix check/call mismatches
+      const action = fixActionForBetState(rawDecision.action, args.currentBet);
+      const raiseAmount = action === "raise" ? rawDecision.raiseAmount : undefined;
+
       logAIDebug("betting", "parsed betting response", {
+        rawAction: rawDecision.action,
         action,
         raiseAmount,
-        confidence,
-        reasoning,
+        confidence: rawDecision.confidence,
+        reasoning: rawDecision.reasoning,
+        toolCallUsed: toolCall !== null,
       });
 
       return {
         action,
         raiseAmount,
-        reasoning,
-        confidence,
+        reasoning: rawDecision.reasoning,
+        confidence: rawDecision.confidence,
       };
     } catch (error) {
       console.error("AI betting decision error:", error);

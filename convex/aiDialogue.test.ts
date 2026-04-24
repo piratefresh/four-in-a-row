@@ -5,9 +5,6 @@ import {
   cleanDialogueResponse,
   buildGameStateDescription,
 } from "./aiDialogue";
-import {
-  AI_PERSONALITIES,
-} from "./aiStrategy";
 
 describe("aiDialogue", () => {
   // ---------------------------------------------------------------------------

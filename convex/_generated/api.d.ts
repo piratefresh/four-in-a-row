@@ -10,7 +10,11 @@
 
 import type * as ai from "../ai.js";
 import type * as aiClient from "../aiClient.js";
+import type * as aiDialogue from "../aiDialogue.js";
+import type * as aiPersonalities from "../aiPersonalities.js";
+import type * as aiPrompts from "../aiPrompts.js";
 import type * as aiStrategy from "../aiStrategy.js";
+import type * as aiTools from "../aiTools.js";
 import type * as auth from "../auth.js";
 import type * as clearOldGames from "../clearOldGames.js";
 import type * as constants from "../constants.js";
@@ -46,7 +50,11 @@ import type {
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   aiClient: typeof aiClient;
+  aiDialogue: typeof aiDialogue;
+  aiPersonalities: typeof aiPersonalities;
+  aiPrompts: typeof aiPrompts;
   aiStrategy: typeof aiStrategy;
+  aiTools: typeof aiTools;
   auth: typeof auth;
   clearOldGames: typeof clearOldGames;
   constants: typeof constants;

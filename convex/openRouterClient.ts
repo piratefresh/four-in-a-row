@@ -8,7 +8,7 @@
 import OpenAI from "openai";
 
 const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_OPENROUTER_MODEL = "z-ai/glm-4.5-air:free";
+const DEFAULT_OPENROUTER_MODEL = "google/gemma-4-26b-a4b-it:free";
 
 export function getRequiredOpenRouterApiKey(): string {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();

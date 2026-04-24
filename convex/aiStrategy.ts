@@ -45,9 +45,9 @@ export const NVIDIA_NIM_MODELS = {
 
 // Model selection for OpenRouter
 export const OPENROUTER_MODELS = {
-  [AI_DIFFICULTY.EASY]: "z-ai/glm-4.5-air:free",
-  [AI_DIFFICULTY.MEDIUM]: "z-ai/glm-4.5-air:free",
-  [AI_DIFFICULTY.HARD]: "z-ai/glm-4.5-air:free",
+  [AI_DIFFICULTY.EASY]: "google/gemma-4-26b-a4b-it:free",
+  [AI_DIFFICULTY.MEDIUM]: "google/gemma-4-26b-a4b-it:free",
+  [AI_DIFFICULTY.HARD]: "google/gemma-4-26b-a4b-it:free",
 } as const;
 
 // Legacy export for backwards compatibility

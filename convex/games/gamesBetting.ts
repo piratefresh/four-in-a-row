@@ -8,7 +8,7 @@ import {
   TURN_CLOCK_CALLED_DURATION_MS,
   TURN_CLOCK_GRACE_PERIOD_MS,
 } from "../gameState";
-import { isNvidiaNimConfigured } from "../aiClient";
+import { isNvidiaNimConfigured, callNvidiaNimChat } from "../aiClient";
 import {
   advanceTurn,
   handlePostActionProgression,
@@ -19,6 +19,16 @@ import {
   DEV_BOT_AUTH_PREFIX,
   sortHandsByTurnOrder,
 } from "./gamesShared";
+import { getBotCharacterForAuthUserId, getConfiguredAIProvider, AI_PROVIDER, getModelForDifficulty } from "../aiStrategy";
+import {
+  type DialogueTrigger,
+  prepareDialoguePrompt,
+  tryTemplateReaction,
+  buildGameStateDescription,
+  cleanDialogueResponse,
+} from "../aiDialogue";
+import { getDialogueProfile } from "../aiPersonalities";
+import { isOpenRouterConfigured, callOpenRouterChat } from "../openRouterClient";
 
 const BOT_AI_TIMEOUT_MS = 4_000;
 
@@ -517,5 +527,99 @@ export async function internalProcessBotTurnHandler(
     await runFold();
     logBotTurn("error fallback resolved to fold", { playerId: currentTurnHand.playerId, amountToCall, chips: currentTurnHand.chips });
     return { ok: true, action: "fold", playerId: currentTurnHand.playerId };
+  }
+}
+
+/**
+ * Map a bot betting action to a dialogue trigger.
+ */
+function mapActionToDialogueTrigger(action: string): DialogueTrigger | null {
+  switch (action) {
+    case "fold": return "botFolds";
+    case "raise": return "botRaises";
+    case "call": return "playerCall";
+    case "check": return "playerCheck";
+    default: return null;
+  }
+}
+
+/**
+ * Attempt to generate and send AI dialogue after a bot takes an action.
+ * This is a best-effort side effect — failures are logged but don't affect game flow.
+ */
+export async function maybeSendBotDialogue(
+  ctx: ActionCtx,
+  args: {
+    gameId: Doc<"games">["_id"];
+    roomId: Doc<"rooms">["_id"];
+    playerId: string;
+    botAuthUserId: string;
+    action: string;
+    gameStage: string;
+    pot: number;
+    botChips: number;
+    currentBet: number;
+  },
+): Promise<void> {
+  try {
+    const character = getBotCharacterForAuthUserId(args.botAuthUserId);
+    if (!character) return;
+
+    const trigger = mapActionToDialogueTrigger(args.action);
+    if (!trigger) return;
+
+    const templateResult = tryTemplateReaction({
+      botCharacterId: character.id as any,
+      trigger,
+      gameState: "",
+      recentMessages: "",
+    });
+
+    if (templateResult) {
+      await ctx.runMutation(api.messages.sendAsAI, {
+        roomId: args.roomId,
+        playerId: args.playerId as any,
+        text: templateResult.message,
+      });
+      return;
+    }
+
+    const { shouldSpeak, prompt } = prepareDialoguePrompt({
+      botCharacterId: character.id as any,
+      trigger,
+      gameState: buildGameStateDescription({
+        stage: args.gameStage,
+        pot: args.pot,
+        botChips: args.botChips,
+        currentBet: args.currentBet,
+        isBotTurn: false,
+      }),
+      recentMessages: "",
+    });
+
+    if (!shouldSpeak) return;
+
+    const provider = getConfiguredAIProvider();
+    const useOpenRouter = provider === AI_PROVIDER.OPENROUTER;
+    const isConfigured = useOpenRouter ? isOpenRouterConfigured() : isNvidiaNimConfigured();
+    if (!isConfigured) return;
+
+    const model = getModelForDifficulty("medium", provider);
+    const profile = getDialogueProfile(character.personality);
+
+    const callChat = useOpenRouter ? callOpenRouterChat : callNvidiaNimChat;
+
+    const rawResponse = await callChat({ model, prompt, timeoutMs: 3000 });
+    const cleaned = cleanDialogueResponse(rawResponse, profile.maxTokens);
+
+    if (!cleaned) return;
+
+    await ctx.runMutation(api.messages.sendAsAI, {
+      roomId: args.roomId,
+      playerId: args.playerId as any,
+      text: cleaned,
+    });
+  } catch (error) {
+    console.warn("[bot-dialogue] Failed to generate dialogue", { error: String(error) });
   }
 }

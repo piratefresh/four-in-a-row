@@ -17,6 +17,24 @@ type ChatMessage = {
   isCurrentPlayer?: boolean;
 };
 
+const BOT_PERSONALITY_STYLES: Record<string, { color: string; border: string; bg: string; label: string }> = {
+  cautious: { color: "text-sky-400", border: "border-sky-500/30", bg: "bg-sky-600/20", label: "🛡️" },
+  balanced: { color: "text-emerald-400", border: "border-emerald-500/30", bg: "bg-emerald-600/20", label: "📊" },
+  aggressive: { color: "text-red-400", border: "border-red-500/30", bg: "bg-red-600/20", label: "⚔️" },
+  creative: { color: "text-violet-400", border: "border-violet-500/30", bg: "bg-violet-600/20", label: "✨" },
+};
+
+function getBotMessageStyle(senderId: string) {
+  if (!senderId.startsWith("dev-bot:")) return null;
+  const parts = senderId.split(":");
+  if (parts.length < 2) return null;
+  const characterId = parts[1];
+  const personalityMap: Record<string, string> = { nora: "cautious", ellis: "balanced", jax: "aggressive", mira: "creative" };
+  const personality = personalityMap[characterId];
+  if (!personality) return null;
+  return BOT_PERSONALITY_STYLES[personality] ?? null;
+}
+
 type ChatSidebarProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -72,7 +90,9 @@ function ChatPanelContent({
             </p>
           </div>
         ) : (
-          messages.map((msg) => (
+          messages.map((msg) => {
+            const botStyle = msg.type === "ai" ? getBotMessageStyle(msg.senderId) : null;
+            return (
             <div key={msg.id} className="space-y-1">
               {msg.type === "system" ? (
                 <div className="rounded-lg bg-blue-500/10 px-3 py-2 text-center">
@@ -83,8 +103,8 @@ function ChatPanelContent({
                   className={`rounded-lg border px-3 py-2 ${
                     msg.isCurrentPlayer
                       ? "ml-8 border-amber-500/30 bg-amber-600/20"
-                      : msg.type === "ai"
-                        ? "mr-8 border-purple-500/30 bg-purple-600/20"
+                      : botStyle
+                        ? `mr-8 ${botStyle.border} ${botStyle.bg}`
                         : "mr-8 border-white/10 bg-slate-800/50"
                   }`}
                 >
@@ -93,13 +113,18 @@ function ChatPanelContent({
                       className={`text-xs font-semibold ${
                         msg.isCurrentPlayer
                           ? "text-amber-400"
-                          : msg.type === "ai"
-                            ? "text-purple-400"
-                            : "text-slate-300"
+                          : botStyle
+                            ? botStyle.color
+                            : msg.type === "ai"
+                              ? "text-purple-400"
+                              : "text-slate-300"
                       }`}
                     >
                       {msg.senderName}
-                      {msg.type === "ai" && (
+                      {botStyle && (
+                        <span className="ml-1 opacity-60">{botStyle.label}</span>
+                      )}
+                      {msg.type === "ai" && !botStyle && (
                         <span className="ml-1 text-purple-300/60">(AI)</span>
                       )}
                       {msg.isCurrentPlayer && (
@@ -114,7 +139,8 @@ function ChatPanelContent({
                 </div>
               )}
             </div>
-          ))
+            );
+          })
         )}
       </div>
 

@@ -8,7 +8,6 @@ import {
   parseStructuredTextResponse,
   isValidActionForBetState,
   fixActionForBetState,
-  type ToolCallResult,
 } from "./aiTools";
 import { RAISE_LADDER } from "./gameState";
 import type { AIBettingDecision } from "./ai";
@@ -39,8 +38,10 @@ describe("aiTools", () => {
 
     it("raise tool requires an amount parameter", () => {
       const raiseTool = BETTING_TOOLS.find((t) => t.function.name === "raise")!;
-      expect(raiseTool.function.parameters.required).toContain("amount");
-      expect(raiseTool.function.parameters.properties.amount).toBeDefined();
+      const params = raiseTool.function.parameters as { required: string[]; properties: Record<string, { description?: string; type?: string }> };
+      expect(params.required).toContain("amount");
+      expect(params.properties.amount).toBeDefined();
+      expect(params.properties.amount.type).toBe("number");
     });
 
     it("check and call tools have no required parameters", () => {

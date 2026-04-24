@@ -5,7 +5,6 @@ import {
   BOT_CHARACTERS,
   BETTING_PROFILES,
   SHOWDOWN_SELECTION_WINDOWS,
-  AI_DECISION_TIMING,
   buildDevBotAuthUserId,
   getBotCharacterForAuthUserId,
   getBotCharacterForSeatIndex,
@@ -62,7 +61,8 @@ describe("AI difficulty configuration", () => {
 
   it("has betting profiles for each difficulty", () => {
     for (const difficulty of Object.values(AI_DIFFICULTY)) {
-      const profile = BETTING_PROFILES[difficulty as keyof typeof BETTING_PROFILES];
+      const key = difficulty as keyof typeof BETTING_PROFILES;
+      const profile = BETTING_PROFILES[key];
       expect(profile).toBeDefined();
       expect(profile.foldThreshold).toBeGreaterThan(0);
       expect(profile.raiseThreshold).toBeGreaterThan(0);
@@ -94,10 +94,10 @@ describe("model selection and provider", () => {
     expect([AI_PROVIDER.OPENROUTER, AI_PROVIDER.NVIDIA_NIM]).toContain(provider);
   });
 
-  it("getModelForDifficulty returns a string for each difficulty with OpenRouter", () => {
+  it("returns a string for each difficulty with OpenRouter", () => {
     for (const difficulty of Object.values(AI_DIFFICULTY)) {
       const model = getModelForDifficulty(
-        difficulty as keyof typeof AI_DIFFICULTY,
+        difficulty,
         AI_PROVIDER.OPENROUTER,
       );
       expect(typeof model).toBe("string");
@@ -105,10 +105,10 @@ describe("model selection and provider", () => {
     }
   });
 
-  it("getModelForDifficulty returns a string for each difficulty with NVIDIA NIM", () => {
+  it("returns a string for each difficulty with NVIDIA NIM", () => {
     for (const difficulty of Object.values(AI_DIFFICULTY)) {
       const model = getModelForDifficulty(
-        difficulty as keyof typeof AI_DIFFICULTY,
+        difficulty,
         AI_PROVIDER.NVIDIA_NIM,
       );
       expect(typeof model).toBe("string");
