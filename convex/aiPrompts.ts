@@ -29,6 +29,7 @@ export type BettingPromptVars = {
   handStrength: number;
   quickRecommendation: string;
   isBluffing: boolean;
+  believesPlayer: boolean | null;
 };
 
 export type ShowdownPromptVars = {
@@ -39,6 +40,7 @@ export type ShowdownPromptVars = {
   personality: string;
   personalityDescription: string;
   strategyHint: string;
+  believesPlayer: boolean | null;
 };
 
 export type DialoguePromptVars = {
@@ -52,6 +54,7 @@ export type DialoguePromptVars = {
   gameState: string;
   recentMessages: string;
   maxTokens: number;
+  believesPlayer: boolean | null;
 };
 
 export type PromptEntry<TVars> = {
@@ -144,6 +147,7 @@ Raises this round: ${vars.currentRaises}/${vars.maxRaises}
 Hand strength: ${Math.round(vars.handStrength * 100)}%
 Quick recommendation: ${vars.quickRecommendation}
 Bluffing: ${vars.isBluffing ? "Yes — act more confident than your hand warrants" : "No — play honestly"}
+${vars.believesPlayer === true ? "Player read: You believe the player's recent confident claims. Consider playing more cautiously — slight bias toward calling or folding over raising." : ""}${vars.believesPlayer === false ? "Player read: You think the player is bluffing. Consider playing more aggressively — slight bias toward raising over folding." : ""}${vars.believesPlayer === null ? "Player read: No recent player claims to evaluate." : ""}
 
 ## Available Actions
 ${vars.currentBet === 0 ? "- CHECK (pass, no cost)" : ""}
@@ -151,7 +155,9 @@ ${vars.currentBet > 0 ? `- CALL (pay ${vars.currentBet} chips to stay in)` : ""}
 ${vars.currentRaises < vars.maxRaises ? `- RAISE (next ladder step: ${vars.raiseLadderNext})` : ""}
 - FOLD (exit round, lose bets already made)
 
-Choose exactly one action from the available actions above.`;
+Choose exactly one action from the available actions above.
+
+IMPORTANT: If no bet is owed (current bet is 0), you can CHECK for free — never fold when checking is an option. Folding when you could check for free is always a bad play.`;
   },
 };
 
@@ -161,7 +167,7 @@ Choose exactly one action from the available actions above.`;
 
 export const PROMPT_SHOWDOWN_TOOLUSE: PromptEntry<ShowdownPromptVars> = {
   id: "showdown-tooluse",
-  version: "1.0.0",
+  version: "2.0.0",
   description: "Tool-use showdown prompt for LLM word-building attempt",
   build(vars) {
     return `${gameRulesSection()}
@@ -176,6 +182,7 @@ All available: ${vars.allTilesAvailable}
 
 ## Strategy Hint
 ${vars.strategyHint}
+${vars.believesPlayer === true ? "\n## Mental State\nYou are distracted by the player's bold claims. Your focus is slightly impaired — you might not find the absolute best word." : ""}${vars.believesPlayer === false ? "\n## Mental State\nYou are confident the player is bluffing. You feel energized and focused on finding a strong word." : ""}
 
 Build the best word you can from the available tiles. The word must be 2-7 letters and a valid English word (CSW24 dictionary). Using all 7 tiles gives a +10 bonus.`;
   },
@@ -187,7 +194,7 @@ Build the best word you can from the available tiles. The word must be 2-7 lette
 
 export const PROMPT_DIALOGUE: PromptEntry<DialoguePromptVars> = {
   id: "dialogue",
-  version: "1.0.0",
+  version: "1.1.0",
   description: "Personality-driven dialogue generation for bot characters",
   build(vars) {
     return `You are ${vars.botName}, "${vars.botTitle}", a ${vars.personalityDescription} poker player in a word game called Word Poker.
@@ -205,7 +212,14 @@ ${vars.gameState}
 ## Recent Chat
 ${vars.recentMessages || "No recent messages."}
 
-Respond in character as ${vars.botName}. Only output your message, nothing else.`;
+${vars.believesPlayer === true ? "You believe the player's recent claims. You may express cautious trust or slight nervousness." : ""}${vars.believesPlayer === false ? "You think the player is bluffing. You may express skepticism or playful defiance." : ""}${vars.believesPlayer === null ? "" : ""}
+
+If there are recent player messages in the chat, you may briefly acknowledge or respond to them ONLY if no other bot has already done so. Player messages marked as "replied by" other bots have already been acknowledged — don't pile on unless you have something genuinely new to add. Focus on the game action instead.
+
+Respond in character as ${vars.botName}. Return ONLY a JSON object with this exact structure:
+{"message": "your dialogue text here"}
+
+Do not include any other text, explanations, or markdown. Only the JSON object.`;
   },
 };
 
@@ -216,9 +230,9 @@ Respond in character as ${vars.botName}. Only output your message, nothing else.
 function getStageAdvice(stage: GameStage): string {
   switch (stage) {
     case "preflop":
-      return "Only 2 private tiles visible — evaluate vowel-consonant balance and tile values. Fold weak hands early.";
+      return "Only 2 private tiles visible — you have very little information. It's cheap to see the flop. Call most hands unless your tiles are truly terrible. Don't fold early.";
     case "flop":
-      return "2 community tiles now visible (4 total). Look for word potential. Strong vowel-consonant mix = call/raise.";
+      return "2 community tiles now visible (4 total). You can start seeing word potential. If you have a reasonable mix, call to see more tiles. Only fold if your tiles are clearly poor.";
     case "turn":
       return "3 community tiles visible (5 total). You should have a 5-letter word in mind. Consider pot odds.";
     case "river":

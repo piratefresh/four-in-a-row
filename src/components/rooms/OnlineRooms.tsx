@@ -7,6 +7,7 @@ type RoomListItem = {
   activePlayers: number;
   maxPlayers: number;
   lastActiveAt: number;
+  createdAt: number;
 };
 
 type OnlineRoomsProps = {

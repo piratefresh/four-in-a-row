@@ -198,28 +198,36 @@ export function getQuickRecommendation(
   potSize: number,
   stage: GameStage
 ): "fold" | "call" | "raise" {
+  // If no bet to call, always check (never fold for free)
+  if (currentBet <= 0) {
+    if (handStrength > 0.65) {
+      return "raise";
+    }
+    return "call"; // checks when no bet
+  }
+
   const potOdds = currentBet > 0 ? potSize / currentBet : 0;
   const chipRisk = currentBet / chips;
 
-  // Early stages (preflop, flop) - be more conservative
-  const earlyStage = stage === "preflop" || stage === "flop";
-  const threshold = earlyStage ? 0.5 : 0.4;
-
-  // Fold if hand is weak and bet is significant
-  if (handStrength < threshold && chipRisk > 0.2) {
+  // Only fold truly terrible hands when the bet is expensive relative to stack
+  if (handStrength < 0.25 && chipRisk > 0.15) {
     return "fold";
   }
 
-  // Raise if hand is strong and pot odds are good
-  if (handStrength > 0.7 && potOdds > 2) {
+  // Raise strong hands with good pot odds
+  if (handStrength > 0.65 && potOdds > 1.5) {
     return "raise";
   }
 
-  // Call if hand is decent
-  if (handStrength > threshold) {
+  // Call with decent or better hands - calling is cheap and preserves options
+  if (handStrength >= 0.3) {
     return "call";
   }
 
-  // Default: fold weak hands
+  // Weak hand but bet is small relative to chips - still call, it's cheap to see more tiles
+  if (chipRisk < 0.1) {
+    return "call";
+  }
+
   return "fold";
 }

@@ -19,6 +19,17 @@ import {
 
 const FIRST_BOT_GAME_TUTORIAL_ID = "first-bot-game" as const;
 
+function describeRevealedTiles(tiles: GameTile[]) {
+  return tiles
+    .filter((tile) => tile.revealed)
+    .map((tile) =>
+      tile.kind === "single"
+        ? tile.letter
+        : `[${tile.options.join("/")}]`,
+    )
+    .join(" ");
+}
+
 export async function advanceTurn(
   ctx: MutationCtx,
   game: { _id: Id<"games">; currentPlayerIndex: number },
@@ -138,6 +149,21 @@ async function advanceStage(
   }
 
   await ctx.db.patch(game._id, updateData);
+  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+    gameId: game._id,
+    roomId,
+    category: "stage_change",
+    previousStage: game.stage,
+    stage: targetStage,
+    tilesRevealed: describeRevealedTiles(updatedCommunityTiles),
+    potAfter: orderedHands.reduce((sum, hand) => sum + hand.totalBet, 0),
+    metadata: {
+      revealCount,
+      activePlayerIds: orderedHands
+        .filter((hand) => !hand.hasFolded)
+        .map((hand) => hand.playerId),
+    },
+  });
 
   return true;
 }
@@ -346,6 +372,9 @@ export async function scheduleBotTurnIfNeeded(
     {
       gameId,
       playerId: currentTurnHand.playerId,
+      expectedStage: game.stage,
+      expectedCurrentPlayerIndex: game.currentPlayerIndex,
+      expectedTurnStartedAt: game.turnStartedAt,
     },
   );
 }
@@ -370,19 +399,7 @@ export async function handlePostActionProgression(
   if (onlyOnePlayerRemains(orderedHands)) {
     const winner = orderedHands.find((hand) => !hand.hasFolded);
 
-    if (winner) {
-      await ctx.db.patch(game._id, {
-        stage: "showdown",
-        status: "completed",
-        winnerId: winner.playerId,
-        winningWord: undefined,
-        winningScore: undefined,
-        winningScoreBreakdown: undefined,
-        turnStartedAt: undefined,
-        ...getClearedTurnClockFields(),
-        updatedAt: now,
-      });
-    } else {
+    if (!winner) {
       await ctx.db.patch(game._id, {
         stage: "showdown",
         status: "completed",
@@ -390,7 +407,61 @@ export async function handlePostActionProgression(
         ...getClearedTurnClockFields(),
         updatedAt: now,
       });
+      await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+        gameId: game._id,
+        roomId: game.roomId as Id<"rooms">,
+        category: "game_complete",
+        stage: "showdown",
+        metadata: { reason: "no_remaining_players" },
+      });
+      await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: game._id });
+      return;
     }
+
+    const updatedCommunityTiles = game.communityTiles.map((tile) => ({
+      ...tile,
+      revealed: true,
+    }));
+
+    for (const hand of orderedHands) {
+      if (!hand.hasFolded) {
+        await ctx.db.patch(hand._id, {
+          hasActed: true,
+          betThisRound: 0,
+          lastAction: undefined,
+          updatedAt: now,
+        });
+      }
+    }
+
+    await ctx.db.patch(game._id, {
+      stage: "showdown",
+      status: "active",
+      communityTiles: updatedCommunityTiles,
+      currentBet: 0,
+      raisesThisRound: 0,
+      showdownStartedAt: now,
+      turnStartedAt: undefined,
+      ...getClearedTurnClockFields(),
+      updatedAt: now,
+    });
+
+    await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+      gameId: game._id,
+      roomId: game.roomId as Id<"rooms">,
+      category: "stage_change",
+      previousStage: game.stage,
+      stage: "showdown",
+      tilesRevealed: describeRevealedTiles(updatedCommunityTiles),
+      potAfter: orderedHands.reduce((sum, hand) => sum + hand.totalBet, 0),
+      metadata: {
+        revealCount: updatedCommunityTiles.filter((t) => t.revealed).length - game.communityTiles.filter((t) => t.revealed).length,
+        activePlayerIds: orderedHands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId),
+        reason: "only_one_player_remains",
+      },
+    });
+
+    await scheduleBotTurnIfNeeded(ctx, game._id);
     return;
   }
 
@@ -404,6 +475,14 @@ export async function handlePostActionProgression(
         ...getClearedTurnClockFields(),
         updatedAt: now,
       });
+      await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+        gameId: game._id,
+        roomId: game.roomId as Id<"rooms">,
+        category: "game_complete",
+        stage: game.stage,
+        metadata: { reason: "no_next_stage" },
+      });
+      await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: game._id });
       return;
     }
   } else {

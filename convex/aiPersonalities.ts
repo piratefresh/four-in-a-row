@@ -52,6 +52,10 @@ export type PersonalityDialogueProfile = {
   greeting: string;
   /** Reaction templates by trigger type */
   reactions: Partial<Record<DialogueTrigger, string[]>>;
+  /** Probability (0-1) that the bot believes a player's bluff-like claims */
+  foolRate: number;
+  /** Human-readable description of the bot's gullibility */
+  foolRateDescription: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -82,7 +86,10 @@ const CAUTIOUS_PROFILE: PersonalityDialogueProfile = {
     botWins: ["Patience pays off.", "Steady and sure.", "As expected."],
     botLoses: ["I'll recalibrate.", "Next time.", "Noted."],
     playerFold: ["Wise choice.", "Sensible.", "Sometimes folding is the right call."],
+    playerChats: ["I'll take your word for it... for now.", "We'll see about that.", "Confidence doesn't guarantee anything."],
   },
+  foolRate: 0.3,
+  foolRateDescription: "You are skeptical of bold claims. You tend to see through bluffs.",
 };
 
 const BALANCED_PROFILE: PersonalityDialogueProfile = {
@@ -109,7 +116,10 @@ const BALANCED_PROFILE: PersonalityDialogueProfile = {
     botWins: ["Good game. The tiles were in my favor.", "Calculated risk paid off.", "Well played, everyone."],
     botLoses: ["Well played. I'll adjust.", "The math didn't work out that time.", "You earned that one."],
     showdownStart: ["Time to find the best word.", "Let's see what we can do with these tiles."],
+    playerChats: ["Maybe. Maybe not.", "I'll weigh the evidence.", "Could be true, could be a bluff."],
   },
+  foolRate: 0.5,
+  foolRateDescription: "You weigh claims evenly. Sometimes you believe, sometimes you don't.",
 };
 
 const AGGRESSIVE_PROFILE: PersonalityDialogueProfile = {
@@ -138,7 +148,10 @@ const AGGRESSIVE_PROFILE: PersonalityDialogueProfile = {
     botLoses: ["Lucky break.", "That won't happen again.", "You got lucky."],
     showdownStart: ["Watch this.", "Time to end this."],
     gameStart: ["Ready to lose?", "This'll be quick."],
+    playerChats: ["Nice try, not buying it.", "You think I'm falling for that?", "Bluff me and I'll call you out."],
   },
+  foolRate: 0.2,
+  foolRateDescription: "You rarely believe bold claims. You trust your own reads over what players say.",
 };
 
 const CREATIVE_PROFILE: PersonalityDialogueProfile = {
@@ -166,7 +179,10 @@ const CREATIVE_PROFILE: PersonalityDialogueProfile = {
     botLoses: ["Your word was better? That's just, like, your opinion.", "Next time I'll find something weirder.", "Well that was an adventure."],
     showdownStart: ["What wonderful letters!", "Time to find a hidden gem."],
     gameStart: ["Ready for some word magic?", "Let's get creative!"],
+    playerChats: ["Hmm, maybe you're right~", "I want to believe you!", "Or are you just being clever?"],
   },
+  foolRate: 0.6,
+  foolRateDescription: "You are dreamy and trusting. You tend to take bold claims at face value.",
 };
 
 // ---------------------------------------------------------------------------

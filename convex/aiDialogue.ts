@@ -25,10 +25,18 @@ import {
 } from "./aiPersonalities";
 export type { DialogueTrigger };
 import { PROMPT_DIALOGUE } from "./aiPrompts";
+import { z } from "zod";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** Zod schema for structured LLM dialogue output */
+export const DialogueResponseSchema = z.object({
+  message: z.string().min(1).max(300),
+});
+
+export type DialogueResponse = z.infer<typeof DialogueResponseSchema>;
 
 export type DialogueRequest = {
   botCharacterId: BotCharacterId;
@@ -36,6 +44,7 @@ export type DialogueRequest = {
   gameState: string;
   recentMessages: string;
   randomFn?: () => number;
+  believesPlayer?: boolean | null;
 };
 
 export type DialogueResult = {
@@ -81,6 +90,7 @@ export function prepareDialoguePrompt(
     gameState: request.gameState,
     recentMessages: request.recentMessages,
     maxTokens: profile.maxTokens,
+    believesPlayer: request.believesPlayer ?? null,
   });
 
   return { shouldSpeak: true, prompt };
@@ -120,7 +130,22 @@ export function tryTemplateReaction(
 }
 
 /**
- * Clean and validate an LLM-generated dialogue response.
+ * Parse and validate a structured JSON dialogue response from the LLM.
+ * Returns the cleaned message string or null if parsing fails.
+ */
+export function parseDialogueResponse(raw: string): string | null {
+  try {
+    const parsed = JSON.parse(raw);
+    const result = DialogueResponseSchema.safeParse(parsed);
+    if (!result.success) return null;
+    return result.data.message.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clean and validate a raw text dialogue response (fallback path).
  * Strips quotes, truncates to max length, etc.
  */
 export function cleanDialogueResponse(
@@ -135,12 +160,6 @@ export function cleanDialogueResponse(
     (cleaned.startsWith("'") && cleaned.endsWith("'"))
   ) {
     cleaned = cleaned.slice(1, -1);
-  }
-
-  // Strip "Jax:" or "Nora:" prefix if the LLM included it
-  const namePrefixMatch = cleaned.match(/^(?:Jax|Nora|Ellis|Mira)(?:\s+\w*)?:\s*/i);
-  if (namePrefixMatch) {
-    cleaned = cleaned.slice(namePrefixMatch[0].length);
   }
 
   // Truncate at first newline (we want one-liners)

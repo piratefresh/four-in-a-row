@@ -2,10 +2,11 @@
  * AI Decision-Making Actions for Word Poker
  *
  * Betting decisions use tool-calling LLM with prompt registry.
- * Showdown word generation uses a deterministic solver (fallback planned for LLM).
+ * Showdown word generation uses LLM-first with deterministic solver fallback.
  */
 
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import type { GameStage } from "./gameState";
 import {
@@ -17,15 +18,11 @@ import {
   type AIDifficulty,
   AI_DIFFICULTY,
   AI_PERSONALITIES,
-  AI_PROVIDER,
   getModelForDifficulty,
-  getConfiguredAIProvider,
   shouldBluff,
+  AI_SHOWDOWN_MODE,
+  SHOWDOWN_MODE,
 } from "./aiStrategy";
-import {
-  callNvidiaNimChat,
-  isNvidiaNimConfigured,
-} from "./aiClient";
 import {
   callOpenRouterChat,
   isOpenRouterConfigured,
@@ -36,10 +33,13 @@ import {
   type SolveShowdownHandTile,
   serializeAvailableShowdownTiles,
   solveDeterministicShowdownWord,
+  tryBuildWordFromAvailableTiles,
 } from "./showdownSolver";
-import { PROMPT_BETTING_TOOLUSE } from "./aiPrompts";
+import { isValidCsw24Word } from "./csw24";
+import { PROMPT_BETTING_TOOLUSE, PROMPT_SHOWDOWN_TOOLUSE, getShowdownStrategyHint } from "./aiPrompts";
 import {
   BETTING_TOOLS,
+  SHOWDOWN_TOOLS,
   type ToolCallResult,
   isBettingToolName,
   parseBettingToolCall,
@@ -92,6 +92,63 @@ function logAIDebug(
   console.log(`[ai:${scope}] ${message}`, details);
 }
 
+async function insertAITrace(
+  ctx: any,
+  args: {
+    gameId?: any;
+    roomId?: any;
+    playerId?: string;
+    playerName?: string;
+    characterId?: string;
+    category: "ai_betting" | "ai_showdown";
+    action?: string;
+    stage?: string;
+    raiseAmount?: number;
+    wordSubmitted?: string;
+    wordScore?: number;
+    model?: string;
+    difficulty?: string;
+    personality?: string;
+    handStrength?: number;
+    isBluffing?: boolean;
+    inputPrompt?: string;
+    outputRaw?: string;
+    outputParsed?: string;
+    usedFallback?: boolean;
+    success?: boolean;
+    error?: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  if (!args.gameId) return;
+  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+    gameId: args.gameId,
+    roomId: args.roomId,
+    playerId: args.playerId,
+    playerName: args.playerName,
+    characterId: args.characterId,
+    isBot: true,
+    category: args.category,
+    action: args.action,
+    stage: args.stage,
+    raiseAmount: args.raiseAmount,
+    wordSubmitted: args.wordSubmitted,
+    wordScore: args.wordScore,
+    model: args.model,
+    difficulty: args.difficulty,
+    personality: args.personality,
+    handStrength: args.handStrength,
+    isBluffing: args.isBluffing,
+    inputPrompt: args.inputPrompt,
+    outputRaw: args.outputRaw,
+    outputParsed: args.outputParsed,
+    usedFallback: args.usedFallback,
+    success: args.success ?? true,
+    error: args.error,
+    metadata: args.metadata,
+  });
+}
+
 /**
  * Internal action: AI decides how to bet
  */
@@ -140,26 +197,21 @@ export const aiDecideBet = internalAction({
     maxRaises: v.number(),
     currentRaises: v.number(),
     timeoutMs: v.optional(v.number()),
+    believesPlayer: v.optional(v.union(v.literal(true), v.literal(false), v.null())),
+    gameId: v.optional(v.id("games")),
+    roomId: v.optional(v.id("rooms")),
+    playerId: v.optional(v.string()),
+    playerName: v.optional(v.string()),
+    characterId: v.optional(v.string()),
   },
-  handler: async (_ctx, args): Promise<AIBettingDecision> => {
+  handler: async (ctx, args): Promise<AIBettingDecision> => {
     const difficulty = (args.difficulty as AIDifficulty) || AI_DIFFICULTY.MEDIUM;
     const timeoutMs = normalizeAiTimeoutMs(args.timeoutMs);
+    const believesPlayer = (args.believesPlayer as boolean | null) ?? null;
 
-    // Determine which AI provider to use
-    const provider = getConfiguredAIProvider();
-    const useOpenRouter = provider === AI_PROVIDER.OPENROUTER;
-
-    // Check if the selected provider is configured
-    const isProviderConfigured = useOpenRouter
-      ? isOpenRouterConfigured()
-      : isNvidiaNimConfigured();
-
-    if (!isProviderConfigured) {
-      const providerName = useOpenRouter ? "OpenRouter" : "NVIDIA NIM";
-      const apiKeyName = useOpenRouter ? "OPENROUTER_API_KEY" : "NVIDIA_NIM_API_KEY";
-      console.warn(`${apiKeyName} not set, using fallback strategy`);
-      logAIDebug("betting", `${providerName} not configured, using fallback strategy`, {
-        provider,
+    if (!isOpenRouterConfigured()) {
+      console.warn("OPENROUTER_API_KEY not set, using fallback strategy");
+      logAIDebug("betting", "OpenRouter not configured, using fallback strategy", {
         difficulty,
         stage: args.stage,
         currentBet: args.currentBet,
@@ -168,11 +220,22 @@ export const aiDecideBet = internalAction({
         currentRaises: args.currentRaises,
         timeoutMs,
       });
-      return fallbackBettingDecision(args);
+      const decision = fallbackBettingDecision(args);
+      await insertAITrace(ctx, {
+        ...args,
+        category: "ai_betting",
+        action: decision.action,
+        difficulty,
+        handStrength: decision.confidence,
+        outputParsed: JSON.stringify(decision),
+        usedFallback: true,
+        metadata: { reason: "openrouter_not_configured" },
+      });
+      return decision;
     }
 
     try {
-      const model = getModelForDifficulty(difficulty, provider);
+      const model = getModelForDifficulty(difficulty);
       // Filter revealed community tiles
       const revealedCommunity = args.communityTiles
         .filter((t) => t.revealed)
@@ -212,7 +275,6 @@ export const aiDecideBet = internalAction({
       );
 
       logAIDebug("betting", "prepared betting prompt inputs", {
-        provider,
         difficulty,
         model,
         handStrength,
@@ -264,6 +326,7 @@ export const aiDecideBet = internalAction({
         handStrength,
         quickRecommendation: quickRec,
         isBluffing,
+        believesPlayer,
       });
 
       const toolsJson = JSON.stringify(BETTING_TOOLS);
@@ -284,21 +347,13 @@ ${toolInstructions}
 Tool definitions:
 ${toolsJson}`;
 
-      // Call the appropriate AI provider
-      const response = useOpenRouter
-        ? await callOpenRouterChat({
-            model,
-            prompt: fullPrompt,
-            timeoutMs,
-          })
-        : await callNvidiaNimChat({
-            model,
-            prompt: fullPrompt,
-            timeoutMs,
-          });
+      const { content: response, latencyMs } = await callOpenRouterChat({
+        model,
+        prompt: fullPrompt,
+        timeoutMs,
+      });
 
       logAIDebug("betting", "received raw betting response", {
-        provider,
         model,
         timeoutMs,
         responseLength: response.length,
@@ -346,15 +401,50 @@ ${toolsJson}`;
         toolCallUsed: toolCall !== null,
       });
 
-      return {
+      const decision = {
         action,
         raiseAmount,
         reasoning: rawDecision.reasoning,
         confidence: rawDecision.confidence,
       };
+
+      await insertAITrace(ctx, {
+        ...args,
+        category: "ai_betting",
+        action,
+        raiseAmount,
+        difficulty,
+        model,
+        handStrength,
+        isBluffing,
+        inputPrompt: fullPrompt,
+        outputRaw: response,
+        outputParsed: JSON.stringify(decision),
+        usedFallback: false,
+        metadata: {
+          latencyMs,
+          quickRecommendation: quickRec,
+          toolCall,
+          currentRaises: args.currentRaises,
+        },
+      });
+
+      return decision;
     } catch (error) {
       console.error("AI betting decision error:", error);
-      return fallbackBettingDecision(args);
+      const decision = fallbackBettingDecision(args);
+      await insertAITrace(ctx, {
+        ...args,
+        category: "ai_betting",
+        action: decision.action,
+        difficulty,
+        handStrength: decision.confidence,
+        outputParsed: JSON.stringify(decision),
+        usedFallback: true,
+        success: false,
+        error: String(error),
+      });
+      return decision;
     }
   },
 });
@@ -409,6 +499,10 @@ function fallbackBettingDecision(args: any): AIBettingDecision {
 
 /**
  * Internal action: AI builds best word during showdown
+ *
+ * LLM-first approach: the LLM picks a word, which is then validated
+ * against the CSW24 dictionary and available tiles. If the LLM's word
+ * is invalid, the deterministic solver is used as a fallback.
  */
 export const aiSubmitWord = internalAction({
   args: {
@@ -449,12 +543,20 @@ export const aiSubmitWord = internalAction({
       )
     ),
     timeoutMs: v.optional(v.number()),
+    believesPlayer: v.optional(v.union(v.literal(true), v.literal(false), v.null())),
+    gameId: v.optional(v.id("games")),
+    roomId: v.optional(v.id("rooms")),
+    playerId: v.optional(v.string()),
+    playerName: v.optional(v.string()),
+    characterId: v.optional(v.string()),
   },
-  handler: async (_ctx, args): Promise<AIWordResult> => {
+  handler: async (ctx, args): Promise<AIWordResult> => {
     const difficulty = (args.difficulty as AIDifficulty) || AI_DIFFICULTY.MEDIUM;
     const personality =
       (args.personality as AIPersonality | undefined) || AI_PERSONALITIES.BALANCED;
     const timeoutMs = normalizeAiTimeoutMs(args.timeoutMs);
+    const believesPlayer = (args.believesPlayer as boolean | null) ?? null;
+
     const availableShowdownTiles = buildAvailableShowdownTiles(
       args.handTiles as SolveShowdownHandTile[],
       args.communityTiles as SolveShowdownCommunityTile[],
@@ -469,45 +571,305 @@ export const aiSubmitWord = internalAction({
       availableTiles: serializeAvailableShowdownTiles(availableShowdownTiles),
     });
 
-    const selection = solveDeterministicShowdownWord({
-      difficulty,
-      personality,
-      handTiles: args.handTiles as SolveShowdownHandTile[],
-      communityTiles: args.communityTiles as SolveShowdownCommunityTile[],
-    });
-
-    if (!selection) {
-      logAIDebug("showdown", "deterministic showdown solver found no valid candidates", {
+    if (SHOWDOWN_MODE === AI_SHOWDOWN_MODE.DETERMINISTIC || !isOpenRouterConfigured()) {
+      const result = useDeterministicShowdown(
         difficulty,
         personality,
-        availableTiles: serializeAvailableShowdownTiles(availableShowdownTiles),
+        args.handTiles as SolveShowdownHandTile[],
+        args.communityTiles as SolveShowdownCommunityTile[],
+        availableShowdownTiles,
+      );
+      await insertAITrace(ctx, {
+        ...args,
+        category: "ai_showdown",
+        difficulty,
+        personality,
+        wordSubmitted: result.word,
+        wordScore: result.estimatedScore,
+        outputParsed: JSON.stringify(result),
+        usedFallback: true,
+        metadata: {
+          reason:
+            SHOWDOWN_MODE === AI_SHOWDOWN_MODE.DETERMINISTIC
+              ? "deterministic_mode"
+              : "openrouter_not_configured",
+        },
       });
-
-      return {
-        word: "",
-        tiles: [],
-        choiceResolutions: undefined,
-        reasoning: "No valid deterministic showdown candidates found",
-        estimatedScore: 0,
-      };
+      return result;
     }
 
-    logAIDebug("showdown", "deterministic showdown solver selected word", {
+    try {
+      const model = getModelForDifficulty(difficulty);
+      const strategyHint = getShowdownStrategyHint(difficulty);
+
+      const handDescription = args.handTiles
+        .map((t) => {
+          if (t.kind === "single") {
+            return `${t.letter}(${t.baseValue})`;
+          } else {
+            return `[${t.options.join("/")}](${t.baseValues.join("/")})`;
+          }
+        })
+        .join(", ");
+
+      const communityDescription = args.communityTiles
+        .filter((t) => t.revealed)
+        .map((t) => {
+          if (t.kind === "single") {
+            return `${t.letter}(${t.baseValue})`;
+          } else {
+            return `[${t.options.join("/")}](${t.baseValues.join("/")})`;
+          }
+        })
+        .join(", ");
+
+      const allAvailableDescription = serializeAvailableShowdownTiles(availableShowdownTiles)
+        .map((t) => `${t.choices.map((c) => c.letter).join("/")}${t.choices[0]?.baseValue ? `(${t.choices[0].baseValue})` : ""}`)
+        .join(", ");
+
+      const prompt = PROMPT_SHOWDOWN_TOOLUSE.build({
+        handTiles: handDescription,
+        communityTilesRevealed: communityDescription || "None yet",
+        allTilesAvailable: allAvailableDescription,
+        difficulty,
+        personality,
+        personalityDescription: `A ${personality} player who ${personality === "cautious" ? "prefers safe, common words" : personality === "aggressive" ? "goes for high-scoring words" : personality === "creative" ? "enjoys unusual and creative words" : "finds balanced, solid words"}. ${believesPlayer === true ? "You are distracted by the player's bold claims and might not find your best word." : ""}`,
+        strategyHint,
+        believesPlayer,
+      });
+
+      const toolsJson = JSON.stringify(SHOWDOWN_TOOLS);
+      const toolInstructions = `You have access to the following tools. Choose exactly one tool to call based on the available tiles.
+
+Available tools:
+- submit_word: Submit your chosen word (provide the "word" parameter)
+
+Respond by calling one of these tools. For example: {"name": "submit_word", "arguments": {"word": "HELLO", "reasoning": "Good use of high-value tiles"}}`;
+
+      const fullPrompt = `${prompt}
+
+${toolInstructions}
+
+Tool definitions:
+${toolsJson}`;
+
+      const { content: response, latencyMs } = await callOpenRouterChat({
+        model,
+        prompt: fullPrompt,
+        timeoutMs,
+      });
+
+      logAIDebug("showdown", "received LLM showdown response", {
+        model,
+        responseLength: response.length,
+      });
+
+      let toolCall: ToolCallResult | null = null;
+
+      try {
+        const jsonMatch = response.match(/\{[\s\S]*"name"\s*:\s*"submit_word"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          toolCall = { name: parsed.name, arguments: parsed.arguments || parsed.params || {} };
+        }
+      } catch {
+        // Not valid JSON, try structured text
+      }
+
+      if (!toolCall) {
+        toolCall = parseStructuredTextResponse(response);
+      }
+
+      const llmWord = (toolCall?.arguments as Record<string, unknown> | undefined)?.word as string | undefined;
+
+      if (llmWord && typeof llmWord === "string") {
+        const validated = validateLlmWord(
+          llmWord,
+          availableShowdownTiles,
+        );
+
+        if (validated) {
+          logAIDebug("showdown", "LLM word validated successfully", {
+            word: llmWord,
+            tileCount: validated.tiles.length,
+            estimatedScore: validated.estimatedScore,
+          });
+
+          const result = {
+            word: validated.word,
+            tiles: validated.tiles,
+            choiceResolutions: validated.choiceResolutions,
+            reasoning: validated.reasoning,
+            estimatedScore: validated.estimatedScore,
+          };
+          await insertAITrace(ctx, {
+            ...args,
+            category: "ai_showdown",
+            difficulty,
+            personality,
+            model,
+            wordSubmitted: result.word,
+            wordScore: result.estimatedScore,
+            inputPrompt: fullPrompt,
+            outputRaw: response,
+            outputParsed: JSON.stringify(result),
+            usedFallback: false,
+            metadata: { latencyMs, llmWord },
+          });
+          return result;
+        }
+
+        logAIDebug("showdown", "LLM word failed validation, falling back to deterministic", {
+          word: llmWord,
+        });
+      }
+
+      const result = useDeterministicShowdown(
+        difficulty,
+        personality,
+        args.handTiles as SolveShowdownHandTile[],
+        args.communityTiles as SolveShowdownCommunityTile[],
+        availableShowdownTiles,
+      );
+      await insertAITrace(ctx, {
+        ...args,
+        category: "ai_showdown",
+        difficulty,
+        personality,
+        model,
+        wordSubmitted: result.word,
+        wordScore: result.estimatedScore,
+        inputPrompt: fullPrompt,
+        outputRaw: response,
+        outputParsed: JSON.stringify(result),
+        usedFallback: true,
+        metadata: { latencyMs, reason: "llm_word_failed_validation", llmWord },
+      });
+      return result;
+    } catch (error) {
+      console.error("AI showdown LLM error, falling back to deterministic:", error);
+      const result = useDeterministicShowdown(
+        difficulty,
+        personality,
+        args.handTiles as SolveShowdownHandTile[],
+        args.communityTiles as SolveShowdownCommunityTile[],
+        buildAvailableShowdownTiles(
+          args.handTiles as SolveShowdownHandTile[],
+          args.communityTiles as SolveShowdownCommunityTile[],
+        ),
+      );
+      await insertAITrace(ctx, {
+        ...args,
+        category: "ai_showdown",
+        difficulty,
+        personality,
+        wordSubmitted: result.word,
+        wordScore: result.estimatedScore,
+        outputParsed: JSON.stringify(result),
+        usedFallback: true,
+        success: false,
+        error: String(error),
+      });
+      return result;
+    }
+  },
+});
+
+function validateLlmWord(
+  word: string,
+  availableTiles: ReturnType<typeof buildAvailableShowdownTiles>,
+): {
+  word: string;
+  tiles: Array<{ letter: string; baseValue: number; multiplier?: "2L" | "3L"; source: "hand" | "community"; cardIndex?: number; wasChoice?: boolean }>;
+  choiceResolutions?: { hand?: Record<string, string>; community?: Record<string, string> };
+  reasoning: string;
+  estimatedScore: number;
+} | null {
+  const normalized = word.trim().toUpperCase();
+  if (normalized.length < 2 || normalized.length > 7) return null;
+  if (!isValidCsw24Word(normalized)) return null;
+
+  const reconstruction = tryBuildWordFromAvailableTiles(normalized, availableTiles, [], {});
+  if (!reconstruction) return null;
+
+  const score = calculateShowdownScore(reconstruction.tiles);
+
+  return {
+    word: normalized,
+    tiles: reconstruction.tiles.map((t) => ({
+      letter: t.letter,
+      baseValue: t.baseValue,
+      multiplier: t.multiplier,
+      source: t.source,
+      cardIndex: t.cardIndex,
+      wasChoice: t.wasChoice,
+    })),
+    choiceResolutions: reconstruction.choiceResolutions
+      ? {
+          hand: reconstruction.choiceResolutions.hand,
+          community: reconstruction.choiceResolutions.community,
+        }
+      : undefined,
+    reasoning: `LLM selected "${normalized}" and it passed dictionary + tile validation.`,
+    estimatedScore: score,
+  };
+}
+
+function calculateShowdownScore(tiles: Array<{ baseValue: number; multiplier?: "2L" | "3L" }>): number {
+  let total = 0;
+  for (const tile of tiles) {
+    total += tile.baseValue;
+    if (tile.multiplier === "2L") total += tile.baseValue;
+    if (tile.multiplier === "3L") total += tile.baseValue * 2;
+  }
+  return total;
+}
+
+function useDeterministicShowdown(
+  difficulty: AIDifficulty,
+  personality: AIPersonality,
+  handTiles: SolveShowdownHandTile[],
+  communityTiles: SolveShowdownCommunityTile[],
+  availableTiles: ReturnType<typeof buildAvailableShowdownTiles>,
+): AIWordResult {
+  const selection = solveDeterministicShowdownWord({
+    difficulty,
+    personality,
+    handTiles,
+    communityTiles,
+  });
+
+  if (!selection) {
+    logAIDebug("showdown", "deterministic showdown solver found no valid candidates", {
       difficulty,
-      personality: selection.personality,
-      word: selection.word,
-      tileCount: selection.tiles.length,
-      estimatedScore: selection.estimatedScore,
-      candidateCount: selection.evaluation.candidateCount,
-      topCandidates: selection.evaluation.topCandidates,
+      personality,
+      availableTiles: serializeAvailableShowdownTiles(availableTiles),
     });
 
     return {
-      word: selection.word,
-      tiles: selection.tiles,
-      choiceResolutions: selection.choiceResolutions,
-      reasoning: selection.reasoning,
-      estimatedScore: selection.estimatedScore,
+      word: "",
+      tiles: [],
+      choiceResolutions: undefined,
+      reasoning: "No valid deterministic showdown candidates found",
+      estimatedScore: 0,
     };
-  },
-});
+  }
+
+  logAIDebug("showdown", "deterministic showdown solver selected word", {
+    difficulty,
+    personality: selection.personality,
+    word: selection.word,
+    tileCount: selection.tiles.length,
+    estimatedScore: selection.estimatedScore,
+    candidateCount: selection.evaluation.candidateCount,
+    topCandidates: selection.evaluation.topCandidates,
+  });
+
+  return {
+    word: selection.word,
+    tiles: selection.tiles,
+    choiceResolutions: selection.choiceResolutions,
+    reasoning: selection.reasoning,
+    estimatedScore: selection.estimatedScore,
+  };
+}

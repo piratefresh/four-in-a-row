@@ -88,29 +88,14 @@ describe("AI difficulty configuration", () => {
 });
 
 describe("model selection and provider", () => {
-  it("returns OpenRouter as default provider", () => {
-    // Without env var, defaults to OPENROUTER
+  it("returns OpenRouter as the provider", () => {
     const provider = getConfiguredAIProvider();
-    expect([AI_PROVIDER.OPENROUTER, AI_PROVIDER.NVIDIA_NIM]).toContain(provider);
+    expect(provider).toBe(AI_PROVIDER.OPENROUTER);
   });
 
-  it("returns a string for each difficulty with OpenRouter", () => {
+  it("returns a string for each difficulty", () => {
     for (const difficulty of Object.values(AI_DIFFICULTY)) {
-      const model = getModelForDifficulty(
-        difficulty,
-        AI_PROVIDER.OPENROUTER,
-      );
-      expect(typeof model).toBe("string");
-      expect(model.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("returns a string for each difficulty with NVIDIA NIM", () => {
-    for (const difficulty of Object.values(AI_DIFFICULTY)) {
-      const model = getModelForDifficulty(
-        difficulty,
-        AI_PROVIDER.NVIDIA_NIM,
-      );
+      const model = getModelForDifficulty(difficulty as any);
       expect(typeof model).toBe("string");
       expect(model.length).toBeGreaterThan(0);
     }

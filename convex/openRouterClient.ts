@@ -8,7 +8,7 @@
 import OpenAI from "openai";
 
 const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_OPENROUTER_MODEL = "google/gemma-4-26b-a4b-it:free";
+const DEFAULT_OPENROUTER_MODEL = "mistralai/devstral-small:nitro";
 
 export function getRequiredOpenRouterApiKey(): string {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
@@ -40,7 +40,8 @@ export async function callOpenRouterChat(args: {
   temperature?: number;
   maxTokens?: number;
   timeoutMs?: number;
-}): Promise<string> {
+  responseFormat?: { type: "json_object" };
+}): Promise<{ content: string; latencyMs: number }> {
   const apiKey = getRequiredOpenRouterApiKey();
   const model = getConfiguredOpenRouterModel(args.model);
   const baseUrl = getConfiguredOpenRouterBaseUrl();
@@ -80,6 +81,7 @@ export async function callOpenRouterChat(args: {
       temperature: args.temperature ?? 0.7,
       max_tokens: args.maxTokens ?? 500,
       stream: false,
+      response_format: args.responseFormat,
     });
   } catch (error) {
     console.error("[openRouterClient] OpenRouter chat completion request failed", {
@@ -120,7 +122,7 @@ export async function callOpenRouterChat(args: {
 
   const content = response.choices[0]?.message?.content;
   if (typeof content === "string" && content.trim()) {
-    return content;
+    return { content, latencyMs: Date.now() - startedAt };
   }
 
   if (Array.isArray(content)) {
@@ -129,7 +131,7 @@ export async function callOpenRouterChat(args: {
       .join("\n")
       .trim();
     if (text) {
-      return text;
+      return { content: text, latencyMs: Date.now() - startedAt };
     }
   }
 

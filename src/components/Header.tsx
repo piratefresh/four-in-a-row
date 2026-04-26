@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { authClient } from "@/lib/auth-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,16 +14,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { api } from "../../convex/_generated/api";
-import { SHOWDOWN_TIMER_MS } from "../../convex/gameState";
-
-function formatCountdown(milliseconds: number) {
-  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
 
 function getInitials(name: string | undefined) {
   const safe = name?.trim();
@@ -59,33 +49,9 @@ export default function Header() {
     api.games.getGameByRoom,
     roomData?.room._id ? { roomId: roomData.room._id } : "skip",
   );
-  const [showdownTimeRemaining, setShowdownTimeRemaining] = useState<
-    number | null
-  >(null);
   const isRoomView = roomCode !== null;
   const isResultsView = resultsMatch !== null;
   const isOnlineRoomsView = pathname === "/" && search.view === "online";
-
-  useEffect(() => {
-    if (
-      game?.status !== "active" ||
-      game.stage !== "showdown" ||
-      game.showdownStartedAt === undefined
-    ) {
-      setShowdownTimeRemaining(null);
-      return;
-    }
-
-    const updateRemaining = () => {
-      const elapsed = Date.now() - game.showdownStartedAt!;
-      const remaining = Math.max(0, SHOWDOWN_TIMER_MS - elapsed);
-      setShowdownTimeRemaining(remaining);
-    };
-
-    updateRemaining();
-    const interval = window.setInterval(updateRemaining, 250);
-    return () => window.clearInterval(interval);
-  }, [game?.showdownStartedAt, game?.stage, game?.status]);
 
   const eyebrow = isResultsView
     ? "PHASE 7 . RESULTS"
@@ -104,10 +70,6 @@ export default function Header() {
                 : game.stage === "final"
                   ? "PHASE 5 . FINAL"
                   : "PHASE 6 . SHOWDOWN";
-  const showdownTimerLabel =
-    isRoomView && showdownTimeRemaining !== null
-      ? formatCountdown(showdownTimeRemaining)
-      : null;
 
   const handleRoomBack = async () => {
     if (!roomCode || isLeavingRoom) return;
@@ -199,16 +161,6 @@ export default function Header() {
         </div>
       </div>
       <div className="flex items-center gap-3">
-        {showdownTimerLabel ? (
-          <div className="rounded-full border border-[#d4aa32]/30 bg-[#d4aa32]/10 px-3 py-1 text-right">
-            <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#d4aa32]">
-              Timer
-            </div>
-            <div className="text-sm font-semibold tabular-nums text-white sm:text-base">
-              {showdownTimerLabel}
-            </div>
-          </div>
-        ) : null}
 
         {session?.user ? (
           <DropdownMenu>

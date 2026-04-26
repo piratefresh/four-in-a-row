@@ -8,6 +8,7 @@ import {
   getRoomCodeFromPathname,
   getTourPausedStepStorageKey,
 } from "@/components/onboarding/wordPokerTours";
+import { useRoomGameContext } from "../context/RoomGameContext";
 
 type ReadyControlsProps = {
   readyCount: number;
@@ -71,6 +72,9 @@ export function RoomActionControls({
   betting,
   utility,
 }: RoomActionControlsProps) {
+  const { showdownTimeRemaining } = useRoomGameContext();
+  const showdownTimerLabel =
+    showdownTimeRemaining !== null ? formatCountdown(showdownTimeRemaining) : null;
   const {
     closeNextStep,
     currentStep,
@@ -188,6 +192,16 @@ export function RoomActionControls({
               transition={{ duration: 0.24, ease: "easeOut" }}
               className="flex flex-wrap items-center justify-center gap-3"
             >
+              {showdownTimerLabel ? (
+                <div className="hidden flex-col items-center rounded-lg border-2 border-[#d4aa32] bg-[#1e1e1e]/90 px-3.5 py-1 shadow-[0_0_10px_rgba(212,175,55,0.3)] sm:flex">
+                  <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#d4aa32]">
+                    Timer
+                  </div>
+                  <div className="text-sm font-semibold tabular-nums text-white sm:text-base">
+                    {showdownTimerLabel}
+                  </div>
+                </div>
+              ) : null}
               {utility?.onShuffleTiles ? (
                 <ShuffleTilesButton
                   onClick={() => utility.onShuffleTiles?.()}
@@ -283,6 +297,16 @@ export function RoomActionControls({
               ) : null}
 
               <div className="hidden w-full flex-wrap items-center justify-center gap-1.5 xs:gap-2 sm:flex">
+                {showdownTimerLabel ? (
+                  <div className="hidden flex-col items-center rounded-lg border-2 border-[#d4aa32] bg-[#1e1e1e]/90 px-3.5 py-1 shadow-[0_0_10px_rgba(212,175,55,0.3)] sm:flex">
+                    <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#d4aa32]">
+                      Timer
+                    </div>
+                    <div className="text-sm font-semibold tabular-nums text-white sm:text-base">
+                      {showdownTimerLabel}
+                    </div>
+                  </div>
+                ) : null}
                 {utility?.onShuffleTiles ? (
                   <ShuffleTilesButton
                     onClick={() => utility.onShuffleTiles?.()}
@@ -423,6 +447,16 @@ export function RoomActionControls({
     return (
       <div className="flex w-full items-center justify-center">
         <div className="flex w-full max-w-[42rem] flex-wrap items-center justify-center gap-2">
+          {showdownTimerLabel ? (
+            <div className="hidden flex-col items-center rounded-lg border-2 border-[#d4aa32] bg-[#1e1e1e]/90 px-3.5 py-1 shadow-[0_0_10px_rgba(212,175,55,0.3)] sm:flex">
+              <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-[#d4aa32]">
+                Timer
+              </div>
+              <div className="text-sm font-semibold tabular-nums text-white sm:text-base">
+                {showdownTimerLabel}
+              </div>
+            </div>
+          ) : null}
           <ShuffleTilesButton
             onClick={() => utility.onShuffleTiles?.()}
             disabled={utility.disableShuffle}

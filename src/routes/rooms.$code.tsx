@@ -156,6 +156,19 @@ function RoomDetailsPage() {
     );
   }
 
+  if (roomData.room.status === "closed") {
+    return (
+      <StatusScreen
+        message="This room has been closed."
+        showSpinner={false}
+        actionLabel="Go home"
+        onAction={() => {
+          void navigate({ to: "/" });
+        }}
+      />
+    );
+  }
+
   if (!game || displayHands.length === 0) {
     return (
       <StatusScreen

@@ -21,6 +21,8 @@ import { Route as ResultsCodeRouteImport } from './routes/results.$code'
 import { Route as DevTileShowcaseRouteImport } from './routes/dev.tile-showcase'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as DemoBetterAuthRouteImport } from './routes/demo/better-auth'
+import { Route as AdminTracesRouteImport } from './routes/admin/traces'
+import { Route as AdminStatsRouteImport } from './routes/admin/stats'
 import { Route as DemoStartServerFuncsRouteImport } from './routes/demo/start.server-funcs'
 import { Route as DemoStartApiRequestRouteImport } from './routes/demo/start.api-request'
 import { Route as DemoApiNamesRouteImport } from './routes/demo/api.names'
@@ -90,6 +92,16 @@ const DemoBetterAuthRoute = DemoBetterAuthRouteImport.update({
   path: '/demo/better-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminTracesRoute = AdminTracesRouteImport.update({
+  id: '/admin/traces',
+  path: '/admin/traces',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminStatsRoute = AdminStatsRouteImport.update({
+  id: '/admin/stats',
+  path: '/admin/stats',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DemoStartServerFuncsRoute = DemoStartServerFuncsRouteImport.update({
   id: '/demo/start/server-funcs',
   path: '/demo/start/server-funcs',
@@ -139,6 +151,8 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/admin/stats': typeof AdminStatsRoute
+  '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
@@ -161,6 +175,8 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/admin/stats': typeof AdminStatsRoute
+  '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
@@ -184,6 +200,8 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/admin/stats': typeof AdminStatsRoute
+  '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
@@ -208,6 +226,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/verify-email'
+    | '/admin/stats'
+    | '/admin/traces'
     | '/demo/better-auth'
     | '/demo/convex'
     | '/dev/tile-showcase'
@@ -230,6 +250,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/verify-email'
+    | '/admin/stats'
+    | '/admin/traces'
     | '/demo/better-auth'
     | '/demo/convex'
     | '/dev/tile-showcase'
@@ -252,6 +274,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/verify-email'
+    | '/admin/stats'
+    | '/admin/traces'
     | '/demo/better-auth'
     | '/demo/convex'
     | '/dev/tile-showcase'
@@ -275,6 +299,8 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  AdminStatsRoute: typeof AdminStatsRoute
+  AdminTracesRoute: typeof AdminTracesRoute
   DemoBetterAuthRoute: typeof DemoBetterAuthRoute
   DemoConvexRoute: typeof DemoConvexRoute
   DevTileShowcaseRoute: typeof DevTileShowcaseRoute
@@ -376,6 +402,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoBetterAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/traces': {
+      id: '/admin/traces'
+      path: '/admin/traces'
+      fullPath: '/admin/traces'
+      preLoaderRoute: typeof AdminTracesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/stats': {
+      id: '/admin/stats'
+      path: '/admin/stats'
+      fullPath: '/admin/stats'
+      preLoaderRoute: typeof AdminStatsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demo/start/server-funcs': {
       id: '/demo/start/server-funcs'
       path: '/demo/start/server-funcs'
@@ -443,6 +483,8 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  AdminStatsRoute: AdminStatsRoute,
+  AdminTracesRoute: AdminTracesRoute,
   DemoBetterAuthRoute: DemoBetterAuthRoute,
   DemoConvexRoute: DemoConvexRoute,
   DevTileShowcaseRoute: DevTileShowcaseRoute,

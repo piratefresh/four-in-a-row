@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import {
   clearDismissedRoomRejoin,
@@ -484,6 +485,25 @@ export function useRoomDetailsController(code: string) {
 
     void autoCreateGame();
   }, [createGameForRoom, game, isCreatingGame, roomData?.room._id]);
+
+  const wasRoomOpenRef = useRef(false);
+  useEffect(() => {
+    if (roomData === undefined) return;
+
+    const isCurrentlyOpen = roomData !== null && roomData.room.status === "open";
+
+    if (wasRoomOpenRef.current && !isCurrentlyOpen) {
+      toast.warning("Room closed due to inactivity", {
+        description: "You will be redirected to the lobby.",
+        duration: 5000,
+      });
+      setTimeout(() => {
+        void navigate({ to: "/" });
+      }, 1500);
+    }
+
+    wasRoomOpenRef.current = isCurrentlyOpen;
+  }, [roomData, navigate, code]);
 
   const handleLeaveRoom = useCallback(async () => {
     if (!myPlayerRef.current) {

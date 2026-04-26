@@ -1,4 +1,5 @@
 import { ConvexError } from "convex/values";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
@@ -409,6 +410,22 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
     ...getNewTurnStateFields(now),
     updatedAt: now,
   });
+  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+    gameId: game._id,
+    roomId: room._id,
+    category: "game_start",
+    stage: "preflop",
+    potAfter: totalBlinds,
+    metadata: {
+      participantIds,
+      playersDealt: participantIds.length,
+      dealerButtonIndex,
+      smallBlindIndex,
+      bigBlindIndex,
+      communityChoiceTileCount: roundDeal.communityChoiceTileCount,
+      handChoiceTileCounts: roundDeal.handChoiceTileCounts,
+    },
+  });
   await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
   await scheduleBotTurnIfNeeded(ctx, game._id);
 
@@ -480,6 +497,23 @@ export async function internalStartGameHandler(
     raisesThisRound: 0,
     ...getNewTurnStateFields(now),
     updatedAt: now,
+  });
+  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+    gameId: game._id,
+    roomId: room._id,
+    category: "game_start",
+    stage: "preflop",
+    potAfter: totalBlinds,
+    metadata: {
+      participantIds,
+      playersDealt: participantIds.length,
+      dealerButtonIndex,
+      smallBlindIndex,
+      bigBlindIndex,
+      communityChoiceTileCount: roundDeal.communityChoiceTileCount,
+      handChoiceTileCounts: roundDeal.handChoiceTileCounts,
+      source: "internal_start",
+    },
   });
   await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
   await scheduleBotTurnIfNeeded(ctx, game._id);

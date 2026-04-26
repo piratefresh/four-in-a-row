@@ -73,6 +73,7 @@ describe("aiPrompts", () => {
       handStrength: 0.65,
       quickRecommendation: "call",
       isBluffing: false,
+      believesPlayer: null,
     };
 
     it("produces a prompt with all required sections", () => {
@@ -102,7 +103,7 @@ describe("aiPrompts", () => {
     it("shows CALL when current bet is greater than 0", () => {
       const result = AI_PROMPTS.bettingTooluse.build(fullVars);
       expect(result).toContain("CALL (pay 20 chips to stay in)");
-      expect(result).not.toContain("CHECK");
+      expect(result).not.toContain("- CHECK");
     });
 
     it("omits RAISE when max raises reached", () => {
@@ -133,6 +134,7 @@ describe("aiPrompts", () => {
       personality: "balanced",
       personalityDescription: "Ellis March, a methodical and balanced player",
       strategyHint: getShowdownStrategyHint("medium"),
+      believesPlayer: null,
     };
 
     it("produces a prompt with showdown context", () => {
@@ -179,6 +181,7 @@ describe("aiPrompts", () => {
       gameState: "Stage: flop, Pot: 60, Your chips: 800",
       recentMessages: "Player: I'm feeling lucky!",
       maxTokens: 50,
+      believesPlayer: null,
     };
 
     it("produces a prompt with personality context", () => {

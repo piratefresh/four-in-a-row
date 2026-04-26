@@ -9,22 +9,13 @@ import { DEV_BOT_AUTH_PREFIX } from "./games/gamesShared";
 
 // AI Provider Selection
 export const AI_PROVIDER = {
-  NVIDIA_NIM: "nvidia_nim",
   OPENROUTER: "openrouter",
 } as const;
 
 export type AIProvider = (typeof AI_PROVIDER)[keyof typeof AI_PROVIDER];
 
-/**
- * Get the configured AI provider from environment
- * Defaults to OpenRouter if not specified
- */
 export function getConfiguredAIProvider(): AIProvider {
-  const provider = process.env.AI_PROVIDER?.trim().toLowerCase();
-  if (provider === "nvidia_nim") {
-    return AI_PROVIDER.NVIDIA_NIM;
-  }
-  return AI_PROVIDER.OPENROUTER; // Default to OpenRouter
+  return AI_PROVIDER.OPENROUTER;
 }
 
 // AI Difficulty Levels
@@ -36,22 +27,15 @@ export const AI_DIFFICULTY = {
 
 export type AIDifficulty = (typeof AI_DIFFICULTY)[keyof typeof AI_DIFFICULTY];
 
-// Model selection for NVIDIA NIM
-export const NVIDIA_NIM_MODELS = {
-  [AI_DIFFICULTY.EASY]: "google/gemma-3-27b-it",
-  [AI_DIFFICULTY.MEDIUM]: "google/gemma-3-27b-it",
-  [AI_DIFFICULTY.HARD]: "google/gemma-3-27b-it",
-} as const;
-
 // Model selection for OpenRouter
 export const OPENROUTER_MODELS = {
-  [AI_DIFFICULTY.EASY]: "google/gemma-4-26b-a4b-it:free",
-  [AI_DIFFICULTY.MEDIUM]: "google/gemma-4-26b-a4b-it:free",
-  [AI_DIFFICULTY.HARD]: "google/gemma-4-26b-a4b-it:free",
+  [AI_DIFFICULTY.EASY]: "mistralai/devstral-small:nitro",
+  [AI_DIFFICULTY.MEDIUM]: "mistralai/devstral-small:nitro",
+  [AI_DIFFICULTY.HARD]: "mistralai/devstral-small:nitro",
 } as const;
 
-// Legacy export for backwards compatibility
-export const AI_MODELS = NVIDIA_NIM_MODELS;
+// Alias for backwards compatibility
+export const AI_MODELS = OPENROUTER_MODELS;
 
 export const SHOWDOWN_SELECTION_WINDOWS = {
   [AI_DIFFICULTY.EASY]: 12,
@@ -63,26 +47,26 @@ export const SHOWDOWN_SELECTION_WINDOWS = {
 export const BETTING_PROFILES = {
   [AI_DIFFICULTY.EASY]: {
     name: "Conservative",
-    foldThreshold: 0.3, // Fold if hand strength < 30%
-    raiseThreshold: 0.8, // Raise if hand strength > 80%
-    bluffFrequency: 0.05, // 5% chance to bluff
-    maxRaiseRatio: 0.5, // Max raise = 50% of pot
-    riskTolerance: 0.3,
+    foldThreshold: 0.15,
+    raiseThreshold: 0.75,
+    bluffFrequency: 0.08,
+    maxRaiseRatio: 0.5,
+    riskTolerance: 0.4,
   },
   [AI_DIFFICULTY.MEDIUM]: {
     name: "Balanced",
-    foldThreshold: 0.25,
-    raiseThreshold: 0.7,
-    bluffFrequency: 0.15, // 15% chance to bluff
+    foldThreshold: 0.2,
+    raiseThreshold: 0.65,
+    bluffFrequency: 0.15,
     maxRaiseRatio: 0.75,
     riskTolerance: 0.5,
   },
   [AI_DIFFICULTY.HARD]: {
     name: "Aggressive",
     foldThreshold: 0.2,
-    raiseThreshold: 0.6,
-    bluffFrequency: 0.25, // 25% chance to bluff
-    maxRaiseRatio: 1.0, // Can raise full pot
+    raiseThreshold: 0.55,
+    bluffFrequency: 0.25,
+    maxRaiseRatio: 1.0,
     riskTolerance: 0.7,
   },
 } as const;
@@ -116,14 +100,8 @@ export function getAIDecisionDelay(difficulty: AIDifficulty): number {
  * Get model identifier for AI difficulty level
  * Routes to correct provider based on configuration
  */
-export function getModelForDifficulty(difficulty: AIDifficulty, provider?: AIProvider): string {
-  const activeProvider = provider || getConfiguredAIProvider();
-
-  if (activeProvider === AI_PROVIDER.OPENROUTER) {
-    return OPENROUTER_MODELS[difficulty];
-  }
-
-  return NVIDIA_NIM_MODELS[difficulty];
+export function getModelForDifficulty(difficulty: AIDifficulty, _provider?: AIProvider): string {
+  return OPENROUTER_MODELS[difficulty];
 }
 
 /**
@@ -219,6 +197,7 @@ export type DeterministicBettingPersonalityProfile = {
   foldThreshold: number;
   tiltChance: number;
   readsPotOdds: boolean;
+  foolRate: number;
 };
 
 export const FUTURE_BETTING_PERSONALITY_PROFILES: Record<
@@ -231,6 +210,7 @@ export const FUTURE_BETTING_PERSONALITY_PROFILES: Record<
     foldThreshold: 0.4,
     tiltChance: 0.02,
     readsPotOdds: true,
+    foolRate: 0.3,
   },
   [AI_PERSONALITIES.BALANCED]: {
     aggression: 0.45,
@@ -238,6 +218,7 @@ export const FUTURE_BETTING_PERSONALITY_PROFILES: Record<
     foldThreshold: 0.3,
     tiltChance: 0.05,
     readsPotOdds: true,
+    foolRate: 0.5,
   },
   [AI_PERSONALITIES.AGGRESSIVE]: {
     aggression: 0.6,
@@ -245,6 +226,7 @@ export const FUTURE_BETTING_PERSONALITY_PROFILES: Record<
     foldThreshold: 0.22,
     tiltChance: 0.04,
     readsPotOdds: true,
+    foolRate: 0.2,
   },
   [AI_PERSONALITIES.CREATIVE]: {
     aggression: 0.5,
@@ -252,6 +234,7 @@ export const FUTURE_BETTING_PERSONALITY_PROFILES: Record<
     foldThreshold: 0.28,
     tiltChance: 0.06,
     readsPotOdds: false,
+    foolRate: 0.6,
   },
 };
 
@@ -309,5 +292,48 @@ export const DEFAULT_AI_CONFIG = {
   difficulty: AI_DIFFICULTY.MEDIUM,
   personality: AI_PERSONALITIES.BALANCED,
   enableBluffing: true,
-  adaptiveStrategy: false, // Future: learn from player behavior
+  adaptiveStrategy: false,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Showdown mode selection
+// ---------------------------------------------------------------------------
+
+export const AI_SHOWDOWN_MODE = {
+  LLM_FIRST: "llm-first",
+  DETERMINISTIC: "deterministic",
+} as const;
+
+export type AIShowdownMode = (typeof AI_SHOWDOWN_MODE)[keyof typeof AI_SHOWDOWN_MODE];
+
+export const SHOWDOWN_MODE: AIShowdownMode = AI_SHOWDOWN_MODE.LLM_FIRST;
+
+// ---------------------------------------------------------------------------
+// Player message analysis (bluff detection + belief)
+// ---------------------------------------------------------------------------
+
+const BLUFF_KEYWORDS = [
+  "great hand", "strong hand", "good hand", "amazing hand", "perfect hand",
+  "watch out", "watch this", "you're going down", "i'm confident",
+  "all in", "all-in energy", "big hand", "huge hand", "monster hand",
+  "unbeatable", "can't beat this", "you can't win", "i've got this",
+  "trust me", "believe me", "i guarantee",
+  "💪", "🔥", "😎", "👊", "💯",
+];
+
+export function isBluffLikely(messages: string[]): boolean {
+  if (messages.length === 0) return false;
+  const combined = messages.join(" ").toLowerCase();
+  return BLUFF_KEYWORDS.some((keyword) => combined.includes(keyword));
+}
+
+export function shouldBelievePlayer(
+  personality: AIPersonality,
+  isBluffLikely: boolean,
+  randomFn?: () => number,
+): boolean | null {
+  if (!isBluffLikely) return null;
+  const roll = randomFn ? randomFn() : Math.random();
+  const foolRate = FUTURE_BETTING_PERSONALITY_PROFILES[personality]?.foolRate ?? 0.5;
+  return roll < foolRate;
+}

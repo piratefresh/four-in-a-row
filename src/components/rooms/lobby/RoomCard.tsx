@@ -1,8 +1,11 @@
+import { formatDistanceToNow } from "date-fns";
+
 interface RoomCardProps {
   roomCode: string;
   activePlayers: number;
   maxPlayers: number;
   lastActiveAt: number;
+  createdAt: number;
   disabled?: boolean;
   isJoining?: boolean;
   onClick: () => void;
@@ -16,13 +19,14 @@ type RoomState = {
 };
 
 export const roomCardGridColumnsClassName =
-  "grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_auto_auto]";
+  "grid-cols-[minmax(11rem,1fr)_minmax(6rem,0.42fr)_4rem_7.25rem_7.25rem]";
 
 export function RoomCard({
   roomCode,
   activePlayers,
   maxPlayers,
   lastActiveAt,
+  createdAt,
   disabled = false,
   isJoining = false,
   onClick,
@@ -68,6 +72,12 @@ export function RoomCard({
       <div className="text-right">
         <div className="text-sm font-medium text-[#d8c28a]">
           {isJoining ? "..." : formatLastActive(lastActiveAt)}
+        </div>
+      </div>
+
+      <div className="text-right">
+        <div className="text-sm font-medium text-slate-400">
+          {formatCreatedAt(createdAt)}
         </div>
       </div>
     </button>
@@ -137,16 +147,15 @@ function formatLastActive(lastActiveAt: number) {
     return "Live";
   }
 
-  const minutes = Math.floor(elapsedMs / 60_000);
-  if (minutes < 60) {
-    return `${minutes.toString().padStart(2, "0")}m`;
+  return formatDistanceToNow(lastActiveAt, { addSuffix: true });
+}
+
+function formatCreatedAt(createdAt: number) {
+  const elapsedMs = Date.now() - createdAt;
+
+  if (elapsedMs < 60_000) {
+    return "Just now";
   }
 
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours.toString().padStart(2, "0")}h`;
-  }
-
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
+  return formatDistanceToNow(createdAt, { addSuffix: true });
 }

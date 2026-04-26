@@ -8,9 +8,11 @@ describe("HomeModeMenu", () => {
       <HomeModeMenu
         activeRoomCode={null}
         isStartingOffline={true}
+        isStartingTutorial={false}
         statusMessage={null}
         onSelectOnline={vi.fn()}
         onStartOffline={vi.fn()}
+        onPlayTutorial={vi.fn()}
       />,
     );
 

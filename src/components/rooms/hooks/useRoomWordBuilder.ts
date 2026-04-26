@@ -289,6 +289,11 @@ export function useRoomWordBuilder({
       return;
     }
 
+    if (bottomHand.hasFolded) {
+      setValidationError("Cannot submit word after folding");
+      return;
+    }
+
     setIsValidating(true);
     setValidationError(null);
 

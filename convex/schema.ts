@@ -8,12 +8,17 @@ import {
   gameTileValidator,
 } from "./gameState";
 
+export const EMBEDDING_DIMENSIONS = 1024;
+export const RAG_SIMILARITY_THRESHOLD = 0.9;
+export const RAG_TOP_K = 5;
+
 export const appTables = {
   rooms: defineTable({
     code: v.string(),
     status: v.union(v.literal("open"), v.literal("closed")),
     maxPlayers: v.number(),
     tutorialId: v.optional(v.union(v.literal("first-bot-game"))),
+    isBotGame: v.optional(v.boolean()),
     hostPlayerId: v.optional(v.id("players")),
     nextRoomId: v.optional(v.id("rooms")),
     sourceRoomId: v.optional(v.id("rooms")),
@@ -45,8 +50,8 @@ export const appTables = {
     text: v.string(),
     type: v.union(v.literal("player"), v.literal("ai"), v.literal("system")),
     createdAt: v.number(),
-  })
-    .index("roomId_createdAt", ["roomId", "createdAt"]),
+    repliedByBots: v.optional(v.array(v.string())),
+  }).index("roomId_createdAt", ["roomId", "createdAt"]),
   games: defineTable({
     roomId: v.string(),
     stage: gameStageValidator,
@@ -68,7 +73,7 @@ export const appTables = {
         basePoints: v.number(),
         multiplierBonus: v.number(),
         fullRackBonus: v.number(),
-      })
+      }),
     ),
     showdownStartedAt: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),
@@ -76,6 +81,7 @@ export const appTables = {
     turnClockExpiresAt: v.optional(v.number()),
     turnClockCallerPlayerId: v.optional(v.string()),
     turnClockTargetPlayerId: v.optional(v.string()),
+    lastBotTurnScheduledAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -117,14 +123,14 @@ export const appTables = {
         // For resolved choice cards - which card index and which option was chosen
         cardIndex: v.optional(v.number()),
         wasChoice: v.optional(v.boolean()),
-      })
+      }),
     ),
     // Map of card indices to selected letter choices (for choice cards used in submission)
     choiceResolutions: v.optional(
       v.object({
         hand: v.optional(v.record(v.string(), v.string())), // handCardIndex -> selectedLetter
         community: v.optional(v.record(v.string(), v.string())), // communityCardIndex -> selectedLetter
-      })
+      }),
     ),
     score: v.number(),
     scoreBreakdown: v.object({
@@ -137,6 +143,109 @@ export const appTables = {
     .index("by_game", ["gameId"])
     .index("by_game_player", ["gameId", "playerId"])
     .index("by_player", ["playerId"]),
+  playerStats: defineTable({
+    authUserId: v.optional(v.string()),
+    characterId: v.optional(v.string()),
+    playerName: v.string(),
+    isBot: v.boolean(),
+    // Game outcomes
+    gamesPlayed: v.number(),
+    gamesWon: v.number(),
+    winRate: v.number(),
+    // Chips
+    totalChipsWon: v.number(),
+    totalChipsLost: v.number(),
+    bestChipFinish: v.number(),
+    // Showdown
+    showdownsReached: v.number(),
+    showdownsWon: v.number(),
+    wordsSubmitted: v.number(),
+    avgWordScore: v.number(),
+    bestWord: v.optional(v.string()),
+    bestWordScore: v.optional(v.number()),
+    longestWord: v.optional(v.string()),
+    // Betting actions
+    totalChecks: v.number(),
+    totalCalls: v.number(),
+    totalRaises: v.number(),
+    totalFolds: v.number(),
+    // AI-specific
+    totalBluffs: v.optional(v.number()),
+    totalFallbacks: v.optional(v.number()),
+    avgHandStrength: v.optional(v.number()),
+    // Timestamps
+    lastGameAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_authUserId", ["authUserId"])
+    .index("by_characterId", ["characterId"])
+    .index("by_isBot", ["isBot"])
+    .index("by_winRate", ["winRate"]),
+  gameTraces: defineTable({
+    gameId: v.id("games"),
+    roomId: v.optional(v.id("rooms")),
+    category: v.union(
+      v.literal("game_start"),
+      v.literal("game_action"),
+      v.literal("stage_change"),
+      v.literal("showdown_submit"),
+      v.literal("game_complete"),
+      v.literal("ai_betting"),
+      v.literal("ai_showdown"),
+      v.literal("ai_dialogue"),
+    ),
+    playerId: v.optional(v.string()),
+    playerName: v.optional(v.string()),
+    characterId: v.optional(v.string()),
+    isBot: v.optional(v.boolean()),
+    action: v.optional(v.string()),
+    stage: v.optional(v.string()),
+    previousStage: v.optional(v.string()),
+    tilesRevealed: v.optional(v.string()),
+    potBefore: v.optional(v.number()),
+    potAfter: v.optional(v.number()),
+    chipsBefore: v.optional(v.number()),
+    chipsAfter: v.optional(v.number()),
+    raiseAmount: v.optional(v.number()),
+    wordSubmitted: v.optional(v.string()),
+    wordScore: v.optional(v.number()),
+    wordScoreBreakdown: v.optional(v.string()),
+    winnerId: v.optional(v.string()),
+    winnerWord: v.optional(v.string()),
+    winnerScore: v.optional(v.number()),
+    model: v.optional(v.string()),
+    difficulty: v.optional(v.string()),
+    personality: v.optional(v.string()),
+    handStrength: v.optional(v.number()),
+    isBluffing: v.optional(v.boolean()),
+    inputPrompt: v.optional(v.string()),
+    outputRaw: v.optional(v.string()),
+    outputParsed: v.optional(v.string()),
+    usedFallback: v.optional(v.boolean()),
+    dialogueTrigger: v.optional(v.string()),
+    dialogueMessage: v.optional(v.string()),
+    success: v.boolean(),
+    error: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_gameId_createdAt", ["gameId", "createdAt"])
+    .index("by_category_createdAt", ["category", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
+  aiDialogueCache: defineTable({
+    personality: v.string(),
+    trigger: v.string(),
+    contextText: v.string(),
+    embedding: v.array(v.float64()),
+    responseText: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_personality_trigger", ["personality", "trigger"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1024,
+      filterFields: ["personality", "trigger"],
+    }),
 };
 
 export const tables = {

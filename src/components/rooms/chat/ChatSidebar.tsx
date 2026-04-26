@@ -50,11 +50,13 @@ function ChatPanelContent({
   onDraftMessageChange,
   onSendMessage,
   className = "",
+  hidePlayerBubbles = false,
 }: Pick<
   ChatSidebarProps,
   "messages" | "draftMessage" | "onDraftMessageChange" | "onSendMessage"
 > & {
   className?: string;
+  hidePlayerBubbles?: boolean;
 }) {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -92,6 +94,7 @@ function ChatPanelContent({
         ) : (
           messages.map((msg) => {
             const botStyle = msg.type === "ai" ? getBotMessageStyle(msg.senderId) : null;
+            if (hidePlayerBubbles && msg.isCurrentPlayer) return null;
             return (
             <div key={msg.id} className="space-y-1">
               {msg.type === "system" ? (
@@ -212,6 +215,7 @@ export function ChatSidebar({
               draftMessage={draftMessage}
               onDraftMessageChange={onDraftMessageChange}
               onSendMessage={onSendMessage}
+              hidePlayerBubbles
             />
           </SheetContent>
         </Sheet>

@@ -142,9 +142,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="bg-black text-white">
 <AppTourProvider>
-          <Header />
-          <VerifyEmailBanner />
-          {children}
+          <div className="flex min-h-dvh flex-col">
+            <Header />
+            <VerifyEmailBanner />
+            <div className="flex-1">{children}</div>
+          </div>
         </AppTourProvider>
         <Toaster richColors />
         <TanStackDevtools

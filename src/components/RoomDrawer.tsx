@@ -1,5 +1,6 @@
 import { useQuery } from "convex/react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { ANTE_AMOUNT } from "../../convex/gameState";
 import { INITIAL_CHIPS } from "../../convex/games/gamesShared";
@@ -39,6 +40,29 @@ export function RoomDrawer({
     api.rooms.getRoomMembers,
     roomCode ? { code: roomCode } : "skip",
   );
+
+  const wasDrawerOpenRef = useRef(false);
+  useEffect(() => {
+    if (!roomCode) {
+      wasDrawerOpenRef.current = false;
+      return;
+    }
+
+    if (roomData === undefined) return;
+
+    const isRoomAvailable =
+      roomData !== null && roomData.room.status === "open";
+
+    if (wasDrawerOpenRef.current && !isRoomAvailable) {
+      toast.warning(`Room ${roomCode} is no longer available`, {
+        description: "This room was closed due to inactivity.",
+        duration: 4000,
+      });
+      onClose();
+    }
+
+    wasDrawerOpenRef.current = true;
+  }, [roomCode, roomData, onClose]);
 
   const maxPlayers = roomData?.room.maxPlayers ?? 4;
   const members = roomData?.members ?? [];

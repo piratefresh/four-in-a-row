@@ -3,7 +3,7 @@ import { api, internal } from "../_generated/api";
 import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import type { GameTile } from "../gameState";
-import { getBotCharacterForAuthUserId, getBotCharacterForSeed } from "../aiStrategy";
+import { getBotCharacterForAuthUserId, getBotCharacterForSeed, isBluffLikely, shouldBelievePlayer } from "../aiStrategy";
 import { calculateScore, getHighestScoringTileValue } from "./gamesScoring";
 
 export type SubmitWordArgs = {
@@ -30,6 +30,48 @@ function logBotShowdown(
   details: Record<string, unknown>,
 ) {
   console.log(`[bot-showdown] ${message}`, details);
+}
+
+async function getShowdownTracePlayer(
+  ctx: MutationCtx,
+  game: Doc<"games">,
+  playerId: string,
+) {
+  const normalizedPlayerId = ctx.db.normalizeId("players", playerId);
+  if (!normalizedPlayerId) {
+    return { playerName: playerId, isBot: playerId === "ai_dealer", characterId: undefined };
+  }
+
+  const player = await ctx.db.get(normalizedPlayerId);
+  const character = getBotCharacterForAuthUserId(player?.authUserId) ?? undefined;
+  return {
+    playerName: character?.name ?? player?.name ?? playerId,
+    isBot: !!character || playerId === "ai_dealer",
+    characterId: character?.id,
+    roomMatches: player?.roomId === game.roomId,
+  };
+}
+
+async function insertGameCompleteTrace(
+  ctx: MutationCtx,
+  game: Doc<"games">,
+  args: {
+    winnerId?: string;
+    winnerWord?: string;
+    winnerScore?: number;
+    reason: string;
+  },
+) {
+  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+    gameId: game._id,
+    roomId: game.roomId as Doc<"rooms">["_id"],
+    category: "game_complete",
+    stage: "showdown",
+    winnerId: args.winnerId,
+    winnerWord: args.winnerWord,
+    winnerScore: args.winnerScore,
+    metadata: { reason: args.reason },
+  });
 }
 
 function getTileIdentityKey(
@@ -252,10 +294,32 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
     },
     createdAt: now,
   });
+  const tracePlayer = await getShowdownTracePlayer(ctx, game, normalizedPlayerId);
+  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+    gameId,
+    roomId: game.roomId as Doc<"rooms">["_id"],
+    category: "showdown_submit",
+    playerId: normalizedPlayerId,
+    playerName: tracePlayer.playerName,
+    characterId: tracePlayer.characterId,
+    isBot: tracePlayer.isBot,
+    stage: game.stage,
+    wordSubmitted: normalizedWord,
+    wordScore: score.total,
+    wordScoreBreakdown: JSON.stringify(score),
+    success: !invalidWord,
+    metadata: {
+      forfeited: !!invalidWord,
+      tileCount: tiles.length,
+      choiceResolutions,
+    },
+  });
 
   const eligiblePlayerIds = hands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
   if (eligiblePlayerIds.length === 0) {
     await ctx.db.patch(game._id, { status: "completed", updatedAt: now });
+    await insertGameCompleteTrace(ctx, game, { reason: "no_eligible_players_after_submit" });
+    await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: gameId });
   } else {
     const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", gameId)).collect();
     const submissionsByPlayer = new Map<string, (typeof allSubmissions)[number]>();
@@ -267,6 +331,13 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
     if (eligiblePlayerIds.every((id) => submissionsByPlayer.has(id)) && !game.winnerId) {
       const winningSubmission = [...submissionsByPlayer.values()].sort(compareRankedSubmissions)[0];
       await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
+      await insertGameCompleteTrace(ctx, game, {
+        winnerId: winningSubmission.playerId,
+        winnerWord: winningSubmission.word,
+        winnerScore: winningSubmission.score,
+        reason: "all_showdown_submissions_received",
+      });
+      await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: gameId });
     }
   }
 
@@ -295,19 +366,38 @@ export async function forfeitShowdownHandler(ctx: MutationCtx, args: ShowdownArg
   }
   if (eligiblePlayerIds.length === 0) {
     await ctx.db.patch(game._id, { status: "completed", updatedAt: now });
+    await insertGameCompleteTrace(ctx, game, { reason: "all_players_forfeited" });
+    await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
     return { ok: true, forfeited: true, resolved: true, hasWinner: false };
   }
   if (eligiblePlayerIds.length === 1) {
     const winnerId = eligiblePlayerIds[0];
     const winnerSubmission = submissionsByPlayer.get(winnerId);
-    await ctx.db.patch(game._id, { winnerId, winningWord: winnerSubmission?.word, winningScore: winnerSubmission?.score, winningScoreBreakdown: winnerSubmission?.scoreBreakdown, status: "completed", updatedAt: now });
-    return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId };
+    if (winnerSubmission) {
+      await ctx.db.patch(game._id, { winnerId, winningWord: winnerSubmission.word, winningScore: winnerSubmission.score, winningScoreBreakdown: winnerSubmission.scoreBreakdown, status: "completed", updatedAt: now });
+      await insertGameCompleteTrace(ctx, game, {
+        winnerId,
+        winnerWord: winnerSubmission.word,
+        winnerScore: winnerSubmission.score,
+        reason: "one_player_left_after_forfeit",
+      });
+      await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
+      return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId };
+    }
+    return { ok: true, forfeited: true, resolved: false, hasWinner: false };
   }
   if (!eligiblePlayerIds.every((playerId) => submissionsByPlayer.has(playerId))) {
     return { ok: true, forfeited: true, resolved: false, hasWinner: false };
   }
   const winningSubmission = [...submissionsByPlayer.values()].sort(compareRankedSubmissions)[0];
   await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
+  await insertGameCompleteTrace(ctx, game, {
+    winnerId: winningSubmission.playerId,
+    winnerWord: winningSubmission.word,
+    winnerScore: winningSubmission.score,
+    reason: "forfeit_completed_remaining_showdown",
+  });
+  await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
   return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId: winningSubmission.playerId };
 }
 
@@ -332,6 +422,8 @@ export async function resolveShowdownHandler(ctx: MutationCtx, args: { gameId: D
   const eligiblePlayerIds = hands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
   if (eligiblePlayerIds.length === 0) {
     await ctx.db.patch(game._id, { status: "completed", updatedAt: Date.now() });
+    await insertGameCompleteTrace(ctx, game, { reason: "resolve_no_eligible_players" });
+    await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
     return { ok: true, hasWinner: false, message: "No eligible players for showdown." };
   }
   const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
@@ -344,12 +436,21 @@ export async function resolveShowdownHandler(ctx: MutationCtx, args: { gameId: D
   const eligibleSubmissions = Array.from(submissionsByPlayer.values());
   if (eligibleSubmissions.length === 0) {
     await ctx.db.patch(game._id, { status: "completed", updatedAt: Date.now() });
+    await insertGameCompleteTrace(ctx, game, { reason: "resolve_no_valid_submissions" });
+    await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
     return { ok: true, hasWinner: false, message: "No valid submissions for showdown." };
   }
   const sortedSubmissions = [...eligibleSubmissions].sort(compareRankedSubmissions);
   const winningSubmission = sortedSubmissions[0];
   const now = Date.now();
   await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
+  await insertGameCompleteTrace(ctx, game, {
+    winnerId: winningSubmission.playerId,
+    winnerWord: winningSubmission.word,
+    winnerScore: winningSubmission.score,
+    reason: "manual_or_timer_resolution",
+  });
+  await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
   return { ok: true, hasWinner: true, winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, allSubmissions: sortedSubmissions.map((submission) => ({ playerId: submission.playerId, word: submission.word, score: submission.score, scoreBreakdown: submission.scoreBreakdown })) };
 }
 
@@ -452,6 +553,19 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
     const botCharacter =
       getBotCharacterForAuthUserId(botPlayer?.authUserId) ?? getBotCharacterForSeed(args.playerId);
     const personality = botCharacter.personality;
+
+    const recentMessages = await ctx.runQuery(api.messages.getRecentMessages, {
+      roomId: game.roomId as any,
+      limit: 10,
+    });
+
+    const playerMessages = recentMessages
+      .filter((m) => m.type === "player")
+      .map((m) => m.text);
+
+    const bluffDetected = isBluffLikely(playerMessages);
+    const believesPlayer = shouldBelievePlayer(personality, bluffDetected);
+
     logBotShowdown("requesting AI showdown word", {
       playerId: args.playerId,
       botName: botCharacter.name,
@@ -459,6 +573,8 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
       personality,
       revealedCommunityCount: game.communityTiles.filter((tile) => tile.revealed).length,
       handTileCount: botHand.tiles.length,
+      bluffDetected,
+      believesPlayer,
     });
     const wordResult = await ctx.runAction(internal.ai.aiSubmitWord, {
       difficulty: "medium",
@@ -466,6 +582,12 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
       handTiles: botHand.tiles,
       communityTiles: game.communityTiles,
       timeoutMs: 15_000,
+      believesPlayer: believesPlayer ?? undefined,
+      gameId: args.gameId,
+      roomId: game.roomId as any,
+      playerId: args.playerId,
+      playerName: botCharacter.name,
+      characterId: botCharacter.id,
     });
     if (!wordResult.word || wordResult.tiles.length === 0) {
       const emergencySubmission = buildEmergencyBotSubmission(

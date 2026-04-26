@@ -1,6 +1,6 @@
 import { ConvexError } from "convex/values";
 import { api, internal } from "../_generated/api";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../_generated/server";
 import {
   MAX_RAISES_PER_ROUND,
@@ -8,7 +8,6 @@ import {
   TURN_CLOCK_CALLED_DURATION_MS,
   TURN_CLOCK_GRACE_PERIOD_MS,
 } from "../gameState";
-import { isNvidiaNimConfigured, callNvidiaNimChat } from "../aiClient";
 import {
   advanceTurn,
   handlePostActionProgression,
@@ -16,16 +15,18 @@ import {
 } from "./gamesProgression";
 import {
   AI_DEALER_PLAYER_ID,
+  BOT_DIALOGUE_PILE_ON_REDUCTION,
   DEV_BOT_AUTH_PREFIX,
   sortHandsByTurnOrder,
 } from "./gamesShared";
-import { getBotCharacterForAuthUserId, getConfiguredAIProvider, AI_PROVIDER, getModelForDifficulty } from "../aiStrategy";
+import { getBotCharacterForAuthUserId, getModelForDifficulty, AI_PERSONALITIES, isBluffLikely, shouldBelievePlayer } from "../aiStrategy";
 import {
   type DialogueTrigger,
   prepareDialoguePrompt,
   tryTemplateReaction,
   buildGameStateDescription,
   cleanDialogueResponse,
+  parseDialogueResponse,
 } from "../aiDialogue";
 import { getDialogueProfile } from "../aiPersonalities";
 import { isOpenRouterConfigured, callOpenRouterChat } from "../openRouterClient";
@@ -33,6 +34,11 @@ import { isOpenRouterConfigured, callOpenRouterChat } from "../openRouterClient"
 const BOT_AI_TIMEOUT_MS = 4_000;
 
 type PlayerActionArgs = { gameId: Doc<"games">["_id"]; playerId: string };
+type ScheduledBotTurnArgs = PlayerActionArgs & {
+  expectedStage?: string;
+  expectedCurrentPlayerIndex?: number;
+  expectedTurnStartedAt?: number;
+};
 
 function logBotTurn(
   message: string,
@@ -96,6 +102,64 @@ async function isAutomatedTurnPlayer(
   );
 }
 
+async function getTracePlayerInfo(
+  ctx: MutationCtx,
+  game: Doc<"games">,
+  playerId: string,
+) {
+  if (playerId === AI_DEALER_PLAYER_ID) {
+    return { playerName: "AI Dealer", isBot: true, characterId: undefined };
+  }
+
+  const normalizedPlayerId = ctx.db.normalizeId("players", playerId);
+  if (!normalizedPlayerId) {
+    return { playerName: playerId, isBot: false, characterId: undefined };
+  }
+
+  const player = await ctx.db.get(normalizedPlayerId);
+  const character = getBotCharacterForAuthUserId(player?.authUserId ?? "");
+  return {
+    playerName: character?.name ?? player?.name ?? playerId,
+    isBot:
+      !!player &&
+      player.roomId === game.roomId &&
+      player.authUserId.startsWith(DEV_BOT_AUTH_PREFIX),
+    characterId: character?.id,
+  };
+}
+
+async function insertGameActionTrace(
+  ctx: MutationCtx,
+  args: {
+    game: Doc<"games">;
+    playerId: string;
+    action: string;
+    potBefore: number;
+    potAfter: number;
+    chipsBefore: number;
+    chipsAfter: number;
+    raiseAmount?: number;
+  },
+) {
+  const player = await getTracePlayerInfo(ctx, args.game, args.playerId);
+  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+    gameId: args.game._id,
+    roomId: args.game.roomId as Id<"rooms">,
+    category: "game_action",
+    playerId: args.playerId,
+    playerName: player.playerName,
+    characterId: player.characterId,
+    isBot: player.isBot,
+    action: args.action,
+    stage: args.game.stage,
+    potBefore: args.potBefore,
+    potAfter: args.potAfter,
+    chipsBefore: args.chipsBefore,
+    chipsAfter: args.chipsAfter,
+    raiseAmount: args.raiseAmount,
+  });
+}
+
 export async function checkHandler(ctx: MutationCtx, args: PlayerActionArgs) {
   const game = assertActiveBettingGame(await ctx.db.get(args.gameId));
   const playerId = args.playerId.trim();
@@ -108,6 +172,15 @@ export async function checkHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     hasActed: true,
     lastAction: "check",
     updatedAt: now,
+  });
+  await insertGameActionTrace(ctx, {
+    game,
+    playerId,
+    action: "check",
+    potBefore: game.pot,
+    potAfter: game.pot,
+    chipsBefore: currentTurnHand.chips,
+    chipsAfter: currentTurnHand.chips,
   });
   const updatedHands = orderedHands.map((hand) => ({
     _id: hand._id, playerId: hand.playerId, hasFolded: hand.hasFolded,
@@ -135,6 +208,15 @@ export async function callHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     updatedAt: now,
   });
   await ctx.db.patch(game._id, { pot: game.pot + amountToCall, updatedAt: now });
+  await insertGameActionTrace(ctx, {
+    game,
+    playerId,
+    action: "call",
+    potBefore: game.pot,
+    potAfter: game.pot + amountToCall,
+    chipsBefore: currentTurnHand.chips,
+    chipsAfter: currentTurnHand.chips - amountToCall,
+  });
   const updatedHands = orderedHands.map((hand) => ({
     _id: hand._id, playerId: hand.playerId, hasFolded: hand.hasFolded,
     hasActed: hand._id === currentTurnHand._id ? true : hand.hasActed,
@@ -166,6 +248,16 @@ export async function raiseHandler(
   await ctx.db.patch(currentTurnHand._id, { chips: currentTurnHand.chips - additionalChipsNeeded, betThisRound: raiseToAmount, totalBet: currentTurnHand.totalBet + additionalChipsNeeded, hasActed: true, lastAction: "raise", updatedAt: now });
   for (const hand of orderedHands) if (hand._id !== currentTurnHand._id && !hand.hasFolded) await ctx.db.patch(hand._id, { hasActed: false, updatedAt: now });
   await ctx.db.patch(game._id, { pot: game.pot + additionalChipsNeeded, currentBet: raiseToAmount, raisesThisRound: raisesThisRound + 1, updatedAt: now });
+  await insertGameActionTrace(ctx, {
+    game,
+    playerId,
+    action: "raise",
+    potBefore: game.pot,
+    potAfter: game.pot + additionalChipsNeeded,
+    chipsBefore: currentTurnHand.chips,
+    chipsAfter: currentTurnHand.chips - additionalChipsNeeded,
+    raiseAmount: raiseToAmount,
+  });
   const updatedHands = orderedHands.map((hand) => ({
     _id: hand._id, playerId: hand.playerId, hasFolded: hand.hasFolded,
     hasActed: hand._id === currentTurnHand._id ? true : false,
@@ -184,6 +276,15 @@ export async function foldHandler(ctx: MutationCtx, args: PlayerActionArgs) {
   const { orderedHands, currentTurnHand } = await getCurrentTurnHand(ctx, game, playerId);
   const now = Date.now();
   await ctx.db.patch(currentTurnHand._id, { hasFolded: true, hasActed: true, lastAction: "fold", updatedAt: now });
+  await insertGameActionTrace(ctx, {
+    game,
+    playerId,
+    action: "fold",
+    potBefore: game.pot,
+    potAfter: game.pot,
+    chipsBefore: currentTurnHand.chips,
+    chipsAfter: currentTurnHand.chips,
+  });
   const updatedHands = orderedHands.map((hand) => ({
     _id: hand._id, playerId: hand.playerId,
     hasFolded: hand._id === currentTurnHand._id ? true : hand.hasFolded,
@@ -320,7 +421,7 @@ export async function internalResolveExpiredTurnClockHandler(
 
 export async function internalProcessBotTurnHandler(
   ctx: ActionCtx,
-  args: PlayerActionArgs,
+  args: ScheduledBotTurnArgs,
 ): Promise<
   | { ok: true; action: "check" | "call" | "fold"; playerId: string; reasoning?: string }
   | { ok: true; action: "raise"; playerId: string; raiseAmount: number; reasoning?: string }
@@ -345,6 +446,22 @@ export async function internalProcessBotTurnHandler(
       stage: game.stage,
     });
     return { ok: false, reason: `Bots do not act during ${game.stage}` };
+  }
+  if (
+    args.expectedStage !== undefined &&
+    (game.stage !== args.expectedStage ||
+      game.currentPlayerIndex !== args.expectedCurrentPlayerIndex ||
+      game.turnStartedAt !== args.expectedTurnStartedAt)
+  ) {
+    logBotTurn("aborting bot turn because the scheduled turn is stale", {
+      expectedStage: args.expectedStage,
+      actualStage: game.stage,
+      expectedCurrentPlayerIndex: args.expectedCurrentPlayerIndex,
+      actualCurrentPlayerIndex: game.currentPlayerIndex,
+      expectedTurnStartedAt: args.expectedTurnStartedAt,
+      actualTurnStartedAt: game.turnStartedAt,
+    });
+    return { ok: false, reason: "Scheduled bot turn is stale" };
   }
   const hands = runtimeState.hands;
   if (hands.length === 0) {
@@ -375,8 +492,48 @@ export async function internalProcessBotTurnHandler(
   const runCheck = () => ctx.runMutation(api.games.check, { gameId: args.gameId, playerId: args.playerId });
   const runCall = () => ctx.runMutation(api.games.call, { gameId: args.gameId, playerId: args.playerId });
   const runFold = () => ctx.runMutation(api.games.fold, { gameId: args.gameId, playerId: args.playerId });
-  if (!isNvidiaNimConfigured()) {
-    logBotTurn("NVIDIA_NIM_API_KEY missing, using betting fallback", {
+
+  const botPlayer = runtimeState.players.find((p) => String(p._id) === args.playerId);
+  const botAuthUserId = botPlayer?.authUserId ?? "";
+  const roomId = game.roomId as Id<"rooms">;
+
+  const sendDialogue = async (action: string) => {
+    if (!botAuthUserId) return;
+    try {
+      const character = getBotCharacterForAuthUserId(botAuthUserId);
+      const personality = character?.personality ?? AI_PERSONALITIES.BALANCED;
+
+      const recentMessages = await ctx.runQuery(api.messages.getRecentMessages, {
+        roomId,
+        limit: 10,
+      });
+
+      const playerMessages = recentMessages
+        .filter((m) => m.type === "player")
+        .map((m) => m.text);
+
+      const bluffDetected = isBluffLikely(playerMessages);
+      const believesPlayer = shouldBelievePlayer(personality, bluffDetected);
+
+      await maybeSendBotDialogue(ctx, {
+        gameId: args.gameId,
+        roomId,
+        playerId: args.playerId,
+        botAuthUserId,
+        action,
+        gameStage: game.stage,
+        pot: game.pot,
+        botChips: currentTurnHand.chips,
+        currentBet: game.currentBet,
+        believesPlayer,
+      });
+    } catch {
+      // best-effort: never block the game
+    }
+  };
+
+  if (!isOpenRouterConfigured()) {
+    logBotTurn("OPENROUTER_API_KEY missing, using betting fallback", {
       gameId: args.gameId,
       playerId: args.playerId,
       stage: game.stage,
@@ -387,18 +544,36 @@ export async function internalProcessBotTurnHandler(
     if (game.currentBet === 0 || amountToCall <= 0) {
       await runCheck();
       logBotTurn("fallback action resolved to check", { playerId: currentTurnHand.playerId });
+      await sendDialogue("check");
       return { ok: true, action: "check", playerId: currentTurnHand.playerId };
     }
     if (currentTurnHand.chips >= amountToCall) {
       await runCall();
       logBotTurn("fallback action resolved to call", { playerId: currentTurnHand.playerId, amountToCall });
+      await sendDialogue("call");
       return { ok: true, action: "call", playerId: currentTurnHand.playerId };
     }
     await runFold();
     logBotTurn("fallback action resolved to fold", { playerId: currentTurnHand.playerId, amountToCall, chips: currentTurnHand.chips });
+    await sendDialogue("fold");
     return { ok: true, action: "fold", playerId: currentTurnHand.playerId };
   }
   try {
+    const character = getBotCharacterForAuthUserId(botAuthUserId);
+    const personality = character?.personality ?? AI_PERSONALITIES.BALANCED;
+
+    const recentMessages = await ctx.runQuery(api.messages.getRecentMessages, {
+      roomId,
+      limit: 10,
+    });
+
+    const playerMessages = recentMessages
+      .filter((m) => m.type === "player")
+      .map((m) => m.text);
+
+    const bluffDetected = isBluffLikely(playerMessages);
+    const believesPlayer = shouldBelievePlayer(personality, bluffDetected);
+
     logBotTurn("requesting AI betting decision", {
       gameId: args.gameId,
       playerId: args.playerId,
@@ -409,6 +584,8 @@ export async function internalProcessBotTurnHandler(
       chips: currentTurnHand.chips,
       pot: game.pot,
       raisesThisRound: game.raisesThisRound ?? 0,
+      bluffDetected,
+      believesPlayer,
     });
     const decision = await ctx.runAction(internal.ai.aiDecideBet, {
       difficulty: "medium",
@@ -422,6 +599,12 @@ export async function internalProcessBotTurnHandler(
       maxRaises: MAX_RAISES_PER_ROUND,
       currentRaises: game.raisesThisRound ?? 0,
       timeoutMs: BOT_AI_TIMEOUT_MS,
+      believesPlayer: believesPlayer ?? undefined,
+      gameId: args.gameId,
+      roomId,
+      playerId: args.playerId,
+      playerName: botPlayer?.name ?? character?.name,
+      characterId: character?.id,
     });
     logBotTurn("received AI betting decision", {
       playerId: currentTurnHand.playerId,
@@ -430,13 +613,22 @@ export async function internalProcessBotTurnHandler(
       reasoning: decision.reasoning,
     });
     if (decision.action === "fold") {
+      // Never fold when checking is free
+      if (amountToCall <= 0) {
+        await runCheck();
+        logBotTurn("overrode AI fold to check (no bet to call)", { playerId: currentTurnHand.playerId, reasoning: decision.reasoning });
+        await sendDialogue("check");
+        return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: `Overrode fold: ${decision.reasoning}` };
+      }
       await runFold();
       logBotTurn("executed AI fold", { playerId: currentTurnHand.playerId, reasoning: decision.reasoning });
+      await sendDialogue("fold");
       return { ok: true, action: "fold", playerId: currentTurnHand.playerId, reasoning: decision.reasoning };
     }
     if (decision.action === "check" && amountToCall <= 0) {
       await runCheck();
       logBotTurn("executed AI check", { playerId: currentTurnHand.playerId, reasoning: decision.reasoning });
+      await sendDialogue("check");
       return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: decision.reasoning };
     }
     if (decision.action === "call") {
@@ -446,6 +638,7 @@ export async function internalProcessBotTurnHandler(
           playerId: currentTurnHand.playerId,
           reasoning: decision.reasoning,
         });
+        await sendDialogue("check");
         return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: decision.reasoning };
       }
       if (currentTurnHand.chips < amountToCall) {
@@ -455,10 +648,12 @@ export async function internalProcessBotTurnHandler(
           amountToCall,
           chips: currentTurnHand.chips,
         });
+        await sendDialogue("fold");
         return { ok: true, action: "fold", playerId: currentTurnHand.playerId, reasoning: "Insufficient chips" };
       }
       await runCall();
       logBotTurn("executed AI call", { playerId: currentTurnHand.playerId, amountToCall, reasoning: decision.reasoning });
+      await sendDialogue("call");
       return { ok: true, action: "call", playerId: currentTurnHand.playerId, reasoning: decision.reasoning };
     }
     if (decision.action === "raise" && decision.raiseAmount) {
@@ -472,6 +667,7 @@ export async function internalProcessBotTurnHandler(
           additionalChipsNeeded,
           reasoning: decision.reasoning,
         });
+        await sendDialogue("raise");
         return { ok: true, action: "raise", playerId: currentTurnHand.playerId, raiseAmount: raiseToAmount, reasoning: decision.reasoning };
       }
       logBotTurn("AI raise was invalid, using fallback resolution", {
@@ -484,15 +680,18 @@ export async function internalProcessBotTurnHandler(
       if (amountToCall > 0 && currentTurnHand.chips >= amountToCall) {
         await runCall();
         logBotTurn("invalid AI raise downgraded to call", { playerId: currentTurnHand.playerId, amountToCall });
+        await sendDialogue("call");
         return { ok: true, action: "call", playerId: currentTurnHand.playerId, reasoning: "Insufficient chips to raise" };
       }
       if (amountToCall <= 0) {
         await runCheck();
         logBotTurn("invalid AI raise downgraded to check", { playerId: currentTurnHand.playerId });
+        await sendDialogue("check");
         return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: "AI fallback" };
       }
       await runFold();
       logBotTurn("invalid AI raise downgraded to fold", { playerId: currentTurnHand.playerId, amountToCall, chips: currentTurnHand.chips });
+      await sendDialogue("fold");
       return { ok: true, action: "fold", playerId: currentTurnHand.playerId, reasoning: "Insufficient chips" };
     }
     logBotTurn("AI returned an unusable decision, applying generic fallback", {
@@ -503,10 +702,12 @@ export async function internalProcessBotTurnHandler(
     if (amountToCall <= 0) {
       await runCheck();
       logBotTurn("generic fallback resolved to check", { playerId: currentTurnHand.playerId });
+      await sendDialogue("check");
       return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: "AI fallback" };
     }
     await runFold();
     logBotTurn("generic fallback resolved to fold", { playerId: currentTurnHand.playerId, amountToCall });
+    await sendDialogue("fold");
     return { ok: true, action: "fold", playerId: currentTurnHand.playerId, reasoning: "AI fallback" };
   } catch (error) {
     console.error("[bot-turn] AI betting execution failed", {
@@ -517,15 +718,18 @@ export async function internalProcessBotTurnHandler(
     if (game.currentBet === 0 || amountToCall <= 0) {
       await runCheck();
       logBotTurn("error fallback resolved to check", { playerId: currentTurnHand.playerId });
+      await sendDialogue("check");
       return { ok: true, action: "check", playerId: currentTurnHand.playerId };
     }
     if (currentTurnHand.chips >= amountToCall) {
       await runCall();
       logBotTurn("error fallback resolved to call", { playerId: currentTurnHand.playerId, amountToCall });
+      await sendDialogue("call");
       return { ok: true, action: "call", playerId: currentTurnHand.playerId };
     }
     await runFold();
     logBotTurn("error fallback resolved to fold", { playerId: currentTurnHand.playerId, amountToCall, chips: currentTurnHand.chips });
+    await sendDialogue("fold");
     return { ok: true, action: "fold", playerId: currentTurnHand.playerId };
   }
 }
@@ -547,6 +751,25 @@ function mapActionToDialogueTrigger(action: string): DialogueTrigger | null {
  * Attempt to generate and send AI dialogue after a bot takes an action.
  * This is a best-effort side effect — failures are logged but don't affect game flow.
  */
+function formatRecentMessages(
+  messages: Array<{ senderName: string; text: string; type: string; repliedByBots?: string[] }>,
+  _botName: string,
+): string {
+  if (messages.length === 0) return "";
+  return messages
+    .map((msg) => {
+      if (msg.type === "system") return `[System] ${msg.text}`;
+      if (msg.type === "ai") {
+        return `[${msg.senderName} (bot)] ${msg.text}`;
+      }
+      const repliedTag = msg.repliedByBots?.length
+        ? ` (replied by: ${msg.repliedByBots.join(", ")})`
+        : "";
+      return `${msg.senderName}: ${msg.text}${repliedTag}`;
+    })
+    .join("\n");
+}
+
 export async function maybeSendBotDialogue(
   ctx: ActionCtx,
   args: {
@@ -559,6 +782,7 @@ export async function maybeSendBotDialogue(
     pot: number;
     botChips: number;
     currentBet: number;
+    believesPlayer?: boolean | null;
   },
 ): Promise<void> {
   try {
@@ -568,11 +792,36 @@ export async function maybeSendBotDialogue(
     const trigger = mapActionToDialogueTrigger(args.action);
     if (!trigger) return;
 
+    const recentMessages = await ctx.runQuery(api.messages.getRecentMessages, {
+      roomId: args.roomId,
+      limit: 10,
+    });
+
+    // Find the most recent player message to track pile-on responses
+    let latestPlayerMsg: (typeof recentMessages)[number] | undefined;
+    for (let i = recentMessages.length - 1; i >= 0; i--) {
+      if (recentMessages[i].type === "player") {
+        latestPlayerMsg = recentMessages[i];
+        break;
+      }
+    }
+    const alreadyRepliedCount = latestPlayerMsg?.repliedByBots?.length ?? 0;
+
+    // If other bots already replied to the latest player message, dramatically reduce
+    // the chance of this bot also responding
+    if (alreadyRepliedCount > 0) {
+      const reductionFactor = Math.pow(BOT_DIALOGUE_PILE_ON_REDUCTION, alreadyRepliedCount);
+      if (Math.random() > reductionFactor) return;
+    }
+
+    const recentMessagesStr = formatRecentMessages(recentMessages, character.name);
+
     const templateResult = tryTemplateReaction({
       botCharacterId: character.id as any,
       trigger,
       gameState: "",
-      recentMessages: "",
+      recentMessages: recentMessagesStr,
+      believesPlayer: args.believesPlayer ?? null,
     });
 
     if (templateResult) {
@@ -581,44 +830,175 @@ export async function maybeSendBotDialogue(
         playerId: args.playerId as any,
         text: templateResult.message,
       });
+      await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+        gameId: args.gameId,
+        roomId: args.roomId,
+        category: "ai_dialogue",
+        playerId: args.playerId,
+        playerName: character.name,
+        characterId: character.id,
+        isBot: true,
+        stage: args.gameStage,
+        action: args.action,
+        personality: character.personality,
+        dialogueTrigger: trigger,
+        dialogueMessage: templateResult.message,
+        usedFallback: true,
+        metadata: { source: "template" },
+      });
+      if (latestPlayerMsg && alreadyRepliedCount < 3) {
+        try {
+          await ctx.runMutation(api.messages.markPlayerMessageReplied, {
+            messageId: latestPlayerMsg._id,
+            botName: character.name,
+          });
+        } catch {}
+      }
       return;
     }
+
+    const gameStateDesc = buildGameStateDescription({
+      stage: args.gameStage,
+      pot: args.pot,
+      botChips: args.botChips,
+      currentBet: args.currentBet,
+      isBotTurn: false,
+    });
 
     const { shouldSpeak, prompt } = prepareDialoguePrompt({
       botCharacterId: character.id as any,
       trigger,
-      gameState: buildGameStateDescription({
-        stage: args.gameStage,
-        pot: args.pot,
-        botChips: args.botChips,
-        currentBet: args.currentBet,
-        isBotTurn: false,
-      }),
-      recentMessages: "",
+      gameState: gameStateDesc,
+      recentMessages: recentMessagesStr,
+      believesPlayer: args.believesPlayer ?? null,
     });
 
     if (!shouldSpeak) return;
 
-    const provider = getConfiguredAIProvider();
-    const useOpenRouter = provider === AI_PROVIDER.OPENROUTER;
-    const isConfigured = useOpenRouter ? isOpenRouterConfigured() : isNvidiaNimConfigured();
-    if (!isConfigured) return;
+    if (!isOpenRouterConfigured()) return;
 
-    const model = getModelForDifficulty("medium", provider);
+    // RAG: try to find a cached response for similar context
+    const contextText = `Trigger: ${trigger}. ${gameStateDesc} Chat: ${recentMessagesStr || "none"}`;
+
+    let cachedResponse: string | null = null;
+    try {
+      const embedding = await ctx.runAction(internal.embeddings.generateEmbedding, {
+        text: contextText,
+      });
+
+      cachedResponse = await ctx.runAction(internal.aiCache.searchDialogueCache, {
+        embedding,
+        personality: character.personality,
+        trigger,
+      });
+    } catch (embedError) {
+      console.warn("[bot-dialogue] RAG lookup failed, falling through to LLM", {
+        error: String(embedError),
+      });
+    }
+
+    if (cachedResponse) {
+      await ctx.runMutation(api.messages.sendAsAI, {
+        roomId: args.roomId,
+        playerId: args.playerId as any,
+        text: cachedResponse,
+      });
+      await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+        gameId: args.gameId,
+        roomId: args.roomId,
+        category: "ai_dialogue",
+        playerId: args.playerId,
+        playerName: character.name,
+        characterId: character.id,
+        isBot: true,
+        stage: args.gameStage,
+        action: args.action,
+        personality: character.personality,
+        dialogueTrigger: trigger,
+        dialogueMessage: cachedResponse,
+        inputPrompt: prompt,
+        usedFallback: true,
+        metadata: { source: "rag_cache", contextText },
+      });
+      if (latestPlayerMsg && alreadyRepliedCount < 3) {
+        try {
+          await ctx.runMutation(api.messages.markPlayerMessageReplied, {
+            messageId: latestPlayerMsg._id,
+            botName: character.name,
+          });
+        } catch {}
+      }
+      return;
+    }
+
+    // Cache miss: generate via LLM
+    const model = getModelForDifficulty("medium");
     const profile = getDialogueProfile(character.personality);
 
-    const callChat = useOpenRouter ? callOpenRouterChat : callNvidiaNimChat;
-
-    const rawResponse = await callChat({ model, prompt, timeoutMs: 3000 });
-    const cleaned = cleanDialogueResponse(rawResponse, profile.maxTokens);
+    const { content: rawResponse, latencyMs } = await callOpenRouterChat({
+      model,
+      prompt,
+      timeoutMs: 3000,
+      responseFormat: { type: "json_object" },
+    });
+    const cleaned = parseDialogueResponse(rawResponse) ?? cleanDialogueResponse(rawResponse, profile.maxTokens);
 
     if (!cleaned) return;
+
+    // Store in cache for future reuse (best-effort)
+    try {
+      const embedding = await ctx.runAction(internal.embeddings.generateEmbedding, {
+        text: contextText,
+      });
+
+      await ctx.runMutation(internal.aiCache.insertDialogueCacheEntry, {
+        personality: character.personality,
+        trigger,
+        contextText,
+        embedding,
+        responseText: cleaned,
+      });
+    } catch (cacheError) {
+      console.warn("[bot-dialogue] Failed to cache dialogue response", {
+        error: String(cacheError),
+      });
+    }
 
     await ctx.runMutation(api.messages.sendAsAI, {
       roomId: args.roomId,
       playerId: args.playerId as any,
       text: cleaned,
     });
+
+    await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+      gameId: args.gameId,
+      roomId: args.roomId,
+      category: "ai_dialogue",
+      playerId: args.playerId,
+      playerName: character.name,
+      characterId: character.id,
+      isBot: true,
+      stage: args.gameStage,
+      action: args.action,
+      model,
+      personality: character.personality,
+      dialogueTrigger: trigger,
+      dialogueMessage: cleaned,
+      inputPrompt: prompt,
+      outputRaw: rawResponse,
+      outputParsed: cleaned,
+      usedFallback: false,
+      metadata: { latencyMs, contextText },
+    });
+
+    if (latestPlayerMsg && alreadyRepliedCount < 3) {
+      try {
+        await ctx.runMutation(api.messages.markPlayerMessageReplied, {
+          messageId: latestPlayerMsg._id,
+          botName: character.name,
+        });
+      } catch {}
+    }
   } catch (error) {
     console.warn("[bot-dialogue] Failed to generate dialogue", { error: String(error) });
   }

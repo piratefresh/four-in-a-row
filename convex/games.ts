@@ -13,7 +13,6 @@ import {
 import { createGameForRoomHandler, internalRedealGameForRoomHandler, internalStartGameHandler, redealGameForRoomHandler, startGameHandler } from "./games/gamesSetup";
 import { getGameByRoomHandler, getPlayerHandsHandler, internalGetGameRuntimeStateHandler } from "./games/gamesRuntime";
 import { forfeitShowdownHandler, getShowdownResultsHandler, getWordSubmissionsHandler, internalProcessBotShowdownHandler, internalResolveExpiredShowdownHandler, resolveShowdownHandler, submitWordHandler, submitWordInternalHandler } from "./games/gamesShowdown";
-import { requireVerifiedUser } from "./verifyUser";
 
 const submitWordTileValidator = v.object({
   letter: v.string(),
@@ -31,26 +30,17 @@ const choiceResolutionsValidator = v.object({
 
 export const createGameForRoom = mutation({
   args: { roomId: v.string(), deck: v.optional(v.array(gameDeckTileValidator)) },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return createGameForRoomHandler(ctx, args);
-  },
+  handler: createGameForRoomHandler,
 });
 
 export const startGame = mutation({
   args: { gameId: v.id("games") },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return startGameHandler(ctx, args);
-  },
+  handler: startGameHandler,
 });
 
 export const redealGameForRoom = mutation({
   args: { roomId: v.string() },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return redealGameForRoomHandler(ctx, args);
-  },
+  handler: redealGameForRoomHandler,
 });
 
 export const internalStartGame = internalMutation({
@@ -64,7 +54,13 @@ export const internalRedealGameForRoom = internalMutation({
 });
 
 export const internalProcessBotTurn = internalAction({
-  args: { gameId: v.id("games"), playerId: v.string() },
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    expectedStage: v.optional(v.string()),
+    expectedCurrentPlayerIndex: v.optional(v.number()),
+    expectedTurnStartedAt: v.optional(v.number()),
+  },
   handler: internalProcessBotTurnHandler,
 });
 
@@ -85,42 +81,27 @@ export const internalGetGameRuntimeState = internalQuery({
 
 export const check = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return checkHandler(ctx, args);
-  },
+  handler: checkHandler,
 });
 
 export const call = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return callHandler(ctx, args);
-  },
+  handler: callHandler,
 });
 
 export const raise = mutation({
   args: { gameId: v.id("games"), playerId: v.string(), raiseToAmount: v.number() },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return raiseHandler(ctx, args);
-  },
+  handler: raiseHandler,
 });
 
 export const fold = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return foldHandler(ctx, args);
-  },
+  handler: foldHandler,
 });
 
 export const callClock = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return callClockHandler(ctx, args);
-  },
+  handler: callClockHandler,
 });
 
 export const internalResolveExpiredTurnClock = internalMutation({
@@ -146,10 +127,7 @@ export const submitWordInternal = internalMutation({
 
 export const forfeitShowdown = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return forfeitShowdownHandler(ctx, args);
-  },
+  handler: forfeitShowdownHandler,
 });
 
 export const submitWord = action({
@@ -165,10 +143,7 @@ export const submitWord = action({
 
 export const resolveShowdown = mutation({
   args: { gameId: v.id("games") },
-  handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
-    return resolveShowdownHandler(ctx, args);
-  },
+  handler: resolveShowdownHandler,
 });
 
 export const internalResolveExpiredShowdown = internalMutation({
