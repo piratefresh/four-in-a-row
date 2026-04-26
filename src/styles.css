@@ -1,5 +1,10 @@
 @import "@fontsource/noto-serif/400.css";
 @import "@fontsource/noto-serif/700.css";
+@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/700.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -27,6 +32,11 @@ code {
 @theme inline {
   --font-serif: "Noto Serif", ui-serif, Georgia, Cambria, "Times New Roman",
     Times, serif;
+  --font-display: "Fraunces", ui-serif, Georgia, Cambria, "Times New Roman",
+    Times, serif;
+  --font-body: "Bricolage Grotesque", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -34,8 +44,23 @@ code {
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  --radius-device: 36px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-felt: #0d3b2e;
+  --color-felt-deep: #072419;
+  --color-felt-light: #14523f;
+  --color-gold: #d4a54a;
+  --color-gold-bright: #f5c76a;
+  --color-cream: #f6efe0;
+  --color-paper: #fbf7ec;
+  --color-ink: #111511;
+  --color-ink-soft: #2a2f2a;
+  --color-game-muted: #8a8778;
+  --color-game-red: #c23d3d;
+  --color-chip-green: #2c7a4f;
+  --color-chip-red: #a23131;
+  --color-chip-blue: #2b4f8a;
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);

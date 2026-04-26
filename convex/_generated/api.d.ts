@@ -9,6 +9,7 @@
  */
 
 import type * as ai from "../ai.js";
+import type * as aiBettingConstants from "../aiBettingConstants.js";
 import type * as aiCache from "../aiCache.js";
 import type * as aiDialogue from "../aiDialogue.js";
 import type * as aiPersonalities from "../aiPersonalities.js";
@@ -66,6 +67,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  aiBettingConstants: typeof aiBettingConstants;
   aiCache: typeof aiCache;
   aiDialogue: typeof aiDialogue;
   aiPersonalities: typeof aiPersonalities;

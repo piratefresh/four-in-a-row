@@ -21,6 +21,12 @@ export function TraceDetail({ trace }: TraceDetailProps) {
         <DetailItem label="Word" value={trace.wordSubmitted ?? "-"} />
         <DetailItem label="Score" value={trace.wordScore ?? trace.winnerScore ?? "-"} />
         <DetailItem label="Hand strength" value={formatNumber(trace.handStrength)} />
+        <DetailItem label="Rate of return" value={formatNumber(trace.rateOfReturn, { infinity: true })} />
+        <DetailItem label="Pot odds" value={formatNumber(trace.potOdds)} />
+        <DetailItem label="Chip risk" value={formatNumber(trace.chipRisk)} />
+        <DetailItem label="FCR bucket" value={trace.fcrBucket ?? "-"} />
+        <DetailItem label="Probabilistic action" value={trace.probabilisticAction ?? "-"} />
+        <DetailItem label="Cache hit" value={trace.actionCacheHit === undefined ? "-" : trace.actionCacheHit ? "Yes" : "No"} />
         <DetailItem label="Fallback" value={trace.usedFallback === undefined ? "-" : trace.usedFallback ? "Yes" : "No"} />
       </DetailSection>
 
@@ -90,6 +96,8 @@ function PreBlock({ title, value }: { title: string; value: string }) {
   );
 }
 
-function formatNumber(value: number | undefined) {
-  return value === undefined ? "-" : value.toFixed(3);
+function formatNumber(value: number | undefined, options?: { infinity?: boolean }) {
+  if (value === undefined) return "-";
+  if (options?.infinity && value === Infinity) return "∞";
+  return value.toFixed(3);
 }

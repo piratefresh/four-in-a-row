@@ -9,9 +9,10 @@
 import { describe, expect, it } from "vitest";
 import {
   estimateHandStrength,
-  getQuickRecommendation,
+  getProbabilisticBettingAction,
 } from "./gameRules";
 import { parseBettingToolCall, parseStructuredTextResponse } from "./aiTools";
+import { AI_DIFFICULTY, AI_PERSONALITIES } from "./aiStrategy";
 
 describe("AI decision helpers", () => {
   // ---------------------------------------------------------------------------
@@ -66,61 +67,69 @@ describe("AI decision helpers", () => {
       });
     });
 
-    describe("getQuickRecommendation", () => {
+    describe("getProbabilisticBettingAction", () => {
       it("recommends fold for weak hand with high bet risk", () => {
-        const recommendation = getQuickRecommendation(
-          0.2, // low hand strength
-          60, // current bet
-          100, // chips
-          100, // pot
+        const recommendation = getProbabilisticBettingAction(
+          0.2,
+          60,
+          100,
+          100,
+          20,
           "preflop",
+          AI_PERSONALITIES.BALANCED,
+          AI_DIFFICULTY.MEDIUM,
+          [20, 40, 60, 80, 100, 120, 140, 160, 200],
+          () => 0.1,
         );
-        expect(recommendation).toBe("fold");
+        expect(recommendation.action).toBe("fold");
       });
 
       it("recommends raise for strong hand with good pot odds", () => {
-        const recommendation = getQuickRecommendation(
-          0.8, // high hand strength
-          20, // small current bet
-          500, // plenty of chips
-          200, // good pot
-          "turn", // later stage
+        const recommendation = getProbabilisticBettingAction(
+          0.8,
+          20,
+          500,
+          200,
+          20,
+          "turn",
+          AI_PERSONALITIES.BALANCED,
+          AI_DIFFICULTY.MEDIUM,
+          [20, 40, 60, 80, 100, 120, 140, 160, 200],
+          () => 0.5,
         );
-        expect(recommendation).toBe("raise");
+        expect(recommendation.action).toBe("raise");
       });
 
-it("recommends fold or call for moderate hand", () => {
-      const recommendation = getQuickRecommendation(
-        0.5, // medium hand strength
-        20, // reasonable current bet
-        500, // plenty of chips
-        100, // decent pot
-        "flop",
-      );
-      // 0.5 is at the threshold for flop (not earlyStage), may fold or call
-      expect(["fold", "call"]).toContain(recommendation);
-    });
-
-      it("is more conservative in early stages", () => {
-        const earlyRecommendation = getQuickRecommendation(
-          0.4, // medium-low hand strength
-          40, // moderate bet
-          200, // moderate chips
-          100, // moderate pot
-          "preflop",
+      it("recommends call or raise for moderate positive-RR hands", () => {
+        const recommendation = getProbabilisticBettingAction(
+          0.5,
+          20,
+          500,
+          100,
+          20,
+          "flop",
+          AI_PERSONALITIES.BALANCED,
+          AI_DIFFICULTY.MEDIUM,
+          [20, 40, 60, 80, 100, 120, 140, 160, 200],
+          () => 0.1,
         );
-        const lateRecommendation = getQuickRecommendation(
-          0.4,
-          40,
+        expect(["call", "raise"]).toContain(recommendation.action);
+      });
+
+      it("never folds for free", () => {
+        const recommendation = getProbabilisticBettingAction(
+          0.1,
+          0,
           200,
           100,
-          "river",
+          20,
+          "preflop",
+          AI_PERSONALITIES.BALANCED,
+          AI_DIFFICULTY.MEDIUM,
+          [20, 40, 60, 80, 100, 120, 140, 160, 200],
+          () => 0,
         );
-
-        // Early stage with same hand should be more likely to fold
-        if (earlyRecommendation === "fold") {
-          expect(["fold", "call"]).toContain(lateRecommendation);
-        }
+        expect(recommendation.action).toBe("check");
       });
     });
   });

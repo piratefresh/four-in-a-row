@@ -4,6 +4,7 @@ import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import type { GameTile } from "../gameState";
 import { getBotCharacterForAuthUserId, getBotCharacterForSeed, isBluffLikely, shouldBelievePlayer } from "../aiStrategy";
+import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 import { calculateScore, getHighestScoringTileValue } from "./gamesScoring";
 
 export type SubmitWordArgs = {
@@ -553,6 +554,7 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
     const botCharacter =
       getBotCharacterForAuthUserId(botPlayer?.authUserId) ?? getBotCharacterForSeed(args.playerId);
     const personality = botCharacter.personality;
+    const difficulty = (runtimeState.room?.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM;
 
     const recentMessages = await ctx.runQuery(api.messages.getRecentMessages, {
       roomId: game.roomId as any,
@@ -571,13 +573,14 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
       botName: botCharacter.name,
       botTitle: botCharacter.title,
       personality,
+      difficulty,
       revealedCommunityCount: game.communityTiles.filter((tile) => tile.revealed).length,
       handTileCount: botHand.tiles.length,
       bluffDetected,
       believesPlayer,
     });
     const wordResult = await ctx.runAction(internal.ai.aiSubmitWord, {
-      difficulty: "medium",
+      difficulty,
       personality,
       handTiles: botHand.tiles,
       communityTiles: game.communityTiles,

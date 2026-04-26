@@ -25,12 +25,24 @@ import {
 } from "../players";
 import { PLAYER_NAME_MAX_LENGTH } from "../../constants";
 import { requireVerifiedUser } from "../../verifyUser";
+import { AI_DIFFICULTY, type AIDifficulty } from "../../aiBettingConstants";
 
 export const createRoom = mutation({
-  args: { name: v.string() },
+  args: {
+    name: v.string(),
+    difficulty: v.optional(v.union(
+      v.literal("easy"),
+      v.literal("medium"),
+      v.literal("hard"),
+    )),
+  },
   handler: async (ctx, args) => {
     await requireVerifiedUser(ctx);
-    return createRoomWithHost(ctx, args.name);
+    return createRoomWithHost(
+      ctx,
+      args.name,
+      (args.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM,
+    );
   },
 });
 
@@ -234,7 +246,11 @@ export const continueToNextRoom = mutation({
     let nextRoom = await findContinuationRoom(ctx, room);
 
     if (!nextRoom || nextRoom.status !== "open") {
-      const { roomId: nextRoomId } = await createOpenRoom(ctx, { sourceRoomId: room._id });
+      const { roomId: nextRoomId } = await createOpenRoom(ctx, {
+        sourceRoomId: room._id,
+        isBotGame: room.isBotGame,
+        difficulty: room.difficulty as AIDifficulty | undefined,
+      });
       await ctx.db.patch(room._id, { status: "closed", nextRoomId, lastActiveAt: Date.now() });
       nextRoom = await ctx.db.get(nextRoomId);
     } else if (room.nextRoomId !== nextRoom._id) {

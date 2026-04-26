@@ -71,7 +71,10 @@ describe("aiPrompts", () => {
       personality: "aggressive",
       personalityDescription: "Jax Rook, a bold and competitive player",
       handStrength: 0.65,
-      quickRecommendation: "call",
+      potOdds: 0.25,
+      rateOfReturn: 2.6,
+      recommendedAction: "raise",
+      fcrRecommendation: "fold 0.0%, call 30.0%, raise 70.0% (RR >= 1.3)",
       isBluffing: false,
       believesPlayer: null,
     };
@@ -91,6 +94,15 @@ describe("aiPrompts", () => {
     it("includes hand strength as a percentage", () => {
       const result = AI_PROMPTS.bettingTooluse.build(fullVars);
       expect(result).toContain("65%");
+    });
+
+    it("includes probabilistic analysis", () => {
+      const result = AI_PROMPTS.bettingTooluse.build(fullVars);
+      expect(result).toContain("Probabilistic Analysis");
+      expect(result).toContain("Pot odds: 0.250");
+      expect(result).toContain("Rate of return: 2.600");
+      expect(result).toContain("Recommended action: raise");
+      expect(result).toContain("FCR distribution");
     });
 
     it("shows CHECK when current bet is 0", () => {

@@ -27,7 +27,10 @@ export type BettingPromptVars = {
   personality: string;
   personalityDescription: string;
   handStrength: number;
-  quickRecommendation: string;
+  potOdds: number;
+  rateOfReturn: number | string;
+  recommendedAction: string;
+  fcrRecommendation: string;
   isBluffing: boolean;
   believesPlayer: boolean | null;
 };
@@ -123,7 +126,7 @@ Players receive private letter tiles and share community tiles, betting on their
 
 export const PROMPT_BETTING_TOOLUSE: PromptEntry<BettingPromptVars> = {
   id: "betting-tooluse",
-  version: "1.0.0",
+  version: "2.0.0",
   description: "Tool-use betting prompt with function calling for betting decisions",
   build(vars) {
     return `${gameRulesSection()}
@@ -145,9 +148,14 @@ Raises this round: ${vars.currentRaises}/${vars.maxRaises}
 
 ## Your Assessment
 Hand strength: ${Math.round(vars.handStrength * 100)}%
-Quick recommendation: ${vars.quickRecommendation}
 Bluffing: ${vars.isBluffing ? "Yes — act more confident than your hand warrants" : "No — play honestly"}
 ${vars.believesPlayer === true ? "Player read: You believe the player's recent confident claims. Consider playing more cautiously — slight bias toward calling or folding over raising." : ""}${vars.believesPlayer === false ? "Player read: You think the player is bluffing. Consider playing more aggressively — slight bias toward raising over folding." : ""}${vars.believesPlayer === null ? "Player read: No recent player claims to evaluate." : ""}
+
+## Probabilistic Analysis
+Pot odds: ${vars.potOdds.toFixed(3)}
+Rate of return: ${typeof vars.rateOfReturn === "number" ? vars.rateOfReturn.toFixed(3) : vars.rateOfReturn}
+Recommended action: ${vars.recommendedAction}
+FCR distribution: ${vars.fcrRecommendation}
 
 ## Available Actions
 ${vars.currentBet === 0 ? "- CHECK (pass, no cost)" : ""}

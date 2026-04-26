@@ -17,6 +17,7 @@ import {
 import { createOpenRoom } from "./lifecycle";
 import { PLAYER_NAME_MAX_LENGTH, ROOM_MAX_PLAYERS } from "../constants";
 import { buildDevBotAuthUserId, getBotCharacterForSeatIndex } from "../aiStrategy";
+import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 
 // ==================== Leave Room ====================
 
@@ -291,6 +292,7 @@ export async function createRoomWithHostOptions(
   options: {
     tutorialId?: "first-bot-game";
     isBotGame?: boolean;
+    difficulty?: AIDifficulty;
   },
 ) {
   const name = normalizeName(rawName);
@@ -317,6 +319,7 @@ export async function createRoomWithHostOptions(
   const { roomId, code, now } = await createOpenRoom(ctx, {
     tutorialId: options.tutorialId,
     isBotGame: options.isBotGame,
+    difficulty: options.difficulty,
   });
   const playerId = await ctx.db.insert("players", {
     roomId,
@@ -340,8 +343,12 @@ export async function createRoomWithHostOptions(
   };
 }
 
-export async function createRoomWithHost(ctx: MutationCtx, rawName: string) {
-  return createRoomWithHostOptions(ctx, rawName, { isBotGame: true });
+export async function createRoomWithHost(
+  ctx: MutationCtx,
+  rawName: string,
+  difficulty: AIDifficulty = AI_DIFFICULTY.MEDIUM,
+) {
+  return createRoomWithHostOptions(ctx, rawName, { isBotGame: true, difficulty });
 }
 
 // ==================== Rejoin Room ====================

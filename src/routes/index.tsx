@@ -13,6 +13,8 @@ type HomeSearch = {
   view?: "online";
 };
 
+type OfflineDifficulty = "easy" | "medium" | "hard";
+
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): HomeSearch => ({
     onboarding: search.onboarding === "bot" ? "bot" : undefined,
@@ -47,6 +49,7 @@ function App() {
   const [isRefreshingRooms, setIsRefreshingRooms] = useState(false);
   const [isStartingOffline, setIsStartingOffline] = useState(false);
   const [isStartingTutorial, setIsStartingTutorial] = useState(false);
+  const [offlineDifficulty, setOfflineDifficulty] = useState<OfflineDifficulty>("medium");
   const [onboardingSetupStage, setOnboardingSetupStage] = useState<
     "auth" | "room" | "bots" | "deal" | null
   >(null);
@@ -146,11 +149,15 @@ function App() {
     }
   };
 
-  const startOfflineGame = useEffectEvent(async (options?: { onboarding?: boolean }) => {
+  const startOfflineGame = useEffectEvent(async (options?: {
+    onboarding?: boolean;
+    difficulty?: OfflineDifficulty;
+  }) => {
     const displayName = getDisplayName();
     if (!displayName) return;
 
     const onboarding = options?.onboarding ?? false;
+    const difficulty = options?.difficulty ?? offlineDifficulty;
     setIsStartingOffline(true);
     setOnboardingSetupStage(onboarding ? "room" : null);
     setJoinMessage(onboarding ? "Setting up your starter bot table..." : null);
@@ -158,7 +165,7 @@ function App() {
     try {
       const room = onboarding
         ? await createTutorialBotRoom({ name: displayName })
-        : await createRoom({ name: displayName });
+        : await createRoom({ name: displayName, difficulty });
 
       setOnboardingSetupStage(onboarding ? "bots" : null);
       if (!onboarding) {
@@ -307,10 +314,12 @@ function App() {
           activeRoomTutorialId={activeRoom?.tutorialId}
           isStartingOffline={isStartingOffline}
           isStartingTutorial={isStartingTutorial}
+          offlineDifficulty={offlineDifficulty}
           statusMessage={joinMessage}
+          onOfflineDifficultyChange={setOfflineDifficulty}
           onSelectOnline={handleSelectOnline}
-          onStartOffline={() => {
-            void startOfflineGame();
+          onStartOffline={(difficulty) => {
+            void startOfflineGame({ difficulty });
           }}
           onPlayTutorial={() => {
             void handlePlayTutorial();

@@ -20,6 +20,7 @@ import {
   sortHandsByTurnOrder,
 } from "./gamesShared";
 import { getBotCharacterForAuthUserId, getModelForDifficulty, AI_PERSONALITIES, isBluffLikely, shouldBelievePlayer } from "../aiStrategy";
+import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 import {
   type DialogueTrigger,
   prepareDialoguePrompt,
@@ -496,6 +497,7 @@ export async function internalProcessBotTurnHandler(
   const botPlayer = runtimeState.players.find((p) => String(p._id) === args.playerId);
   const botAuthUserId = botPlayer?.authUserId ?? "";
   const roomId = game.roomId as Id<"rooms">;
+  const difficulty = (runtimeState.room?.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM;
 
   const sendDialogue = async (action: string) => {
     if (!botAuthUserId) return;
@@ -584,11 +586,13 @@ export async function internalProcessBotTurnHandler(
       chips: currentTurnHand.chips,
       pot: game.pot,
       raisesThisRound: game.raisesThisRound ?? 0,
+      difficulty,
       bluffDetected,
       believesPlayer,
     });
     const decision = await ctx.runAction(internal.ai.aiDecideBet, {
-      difficulty: "medium",
+      difficulty,
+      personality,
       handTiles: currentTurnHand.tiles,
       communityTiles: game.communityTiles,
       stage: game.stage,

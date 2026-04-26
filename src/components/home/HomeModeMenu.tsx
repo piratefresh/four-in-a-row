@@ -1,11 +1,33 @@
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+type OfflineDifficulty = "easy" | "medium" | "hard";
+
+const OFFLINE_DIFFICULTY_OPTIONS: Array<{
+  value: OfflineDifficulty;
+  label: string;
+  description: string;
+}> = [
+  { value: "easy", label: "Easy", description: "More mistakes, folds more often" },
+  { value: "medium", label: "Medium", description: "Balanced" },
+  { value: "hard", label: "Hard", description: "Sharper and more aggressive" },
+];
+
 type HomeModeMenuProps = {
   activeRoomCode?: string | null;
   activeRoomTutorialId?: string | null;
   isStartingOffline: boolean;
   isStartingTutorial: boolean;
+  offlineDifficulty: OfflineDifficulty;
   statusMessage: string | null;
+  onOfflineDifficultyChange: (difficulty: OfflineDifficulty) => void;
   onSelectOnline: () => void;
-  onStartOffline: () => void;
+  onStartOffline: (difficulty: OfflineDifficulty) => void;
   onPlayTutorial: () => void;
   onResumeRoom?: () => void;
   onReplayTutorial?: () => void;
@@ -16,7 +38,9 @@ export function HomeModeMenu({
   activeRoomTutorialId,
   isStartingOffline,
   isStartingTutorial,
+  offlineDifficulty,
   statusMessage,
+  onOfflineDifficultyChange,
   onSelectOnline,
   onStartOffline,
   onPlayTutorial,
@@ -108,14 +132,48 @@ export function HomeModeMenu({
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 sm:mt-8">
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={onStartOffline}
-                  disabled={isStartingOffline || isStartingTutorial}
-                  className="inline-flex items-center rounded-full border border-[#f2a165]/35 px-4 py-2 text-sm font-medium text-[#f4cfb0] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#f1a15c]/40 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {offlineCtaLabel}
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isStartingOffline || isStartingTutorial}
+                      className="inline-flex items-center rounded-full border border-[#f2a165]/35 px-4 py-2 text-sm font-medium text-[#f4cfb0] transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#f1a15c]/40 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {offlineCtaLabel}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    className="w-72 rounded-3xl border-[#f2a165]/25 bg-[#120d08]/95 p-2 text-[#d6c5b8] shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur"
+                  >
+                    <DropdownMenuLabel className="px-3 py-2 text-[10px] uppercase tracking-[0.24em] text-[#f2a165]/80">
+                      Choose bot difficulty
+                    </DropdownMenuLabel>
+                    {OFFLINE_DIFFICULTY_OPTIONS.map((option) => {
+                      const selected = offlineDifficulty === option.value;
+
+                      return (
+                        <DropdownMenuItem
+                          key={option.value}
+                          onSelect={() => {
+                            onOfflineDifficultyChange(option.value);
+                            onStartOffline(option.value);
+                          }}
+                          className={`block rounded-2xl px-3 py-2 text-left transition-colors ${
+                            selected
+                              ? "bg-[#3a1f0b]/80 text-[#fff0df]"
+                              : "text-[#d6c5b8] hover:bg-white/5 hover:text-[#f8dfc4] data-highlighted:bg-white/5 data-highlighted:text-[#f8dfc4]"
+                          }`}
+                        >
+                          <span className="block text-sm font-medium">{option.label}</span>
+                          <span className="mt-1 block text-xs leading-4 text-current opacity-75">
+                            {option.description}
+                          </span>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <button
                   type="button"
                   onClick={onPlayTutorial}

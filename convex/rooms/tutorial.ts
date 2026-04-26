@@ -10,6 +10,7 @@ import { addDevBotsToRoom, createRoomWithHostOptions } from "./players";
 import { createGameForRoomHandler, resetTutorialGameForRoomHandler } from "../games/gamesSetup";
 import { scheduleBotTurnIfNeeded } from "../games/gamesProgression";
 import { requireVerifiedUser } from "../verifyUser";
+import { AI_DIFFICULTY } from "../aiBettingConstants";
 
 // ==================== Create Tutorial Bot Room ====================
 
@@ -17,6 +18,7 @@ export async function createTutorialBotRoomHandler(ctx: MutationCtx, args: { nam
   await requireVerifiedUser(ctx);
   const room = await createRoomWithHostOptions(ctx, args.name, {
     tutorialId: FIRST_BOT_GAME_TUTORIAL_ID,
+    difficulty: AI_DIFFICULTY.EASY,
   });
   const roomDoc = await ctx.db.get(room.roomId);
   if (!roomDoc) {

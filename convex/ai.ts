@@ -8,10 +8,13 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-import type { GameStage } from "./gameState";
+import { ANTE_AMOUNT, type GameStage } from "./gameState";
 import {
-  estimateHandStrength,
-  getQuickRecommendation,
+  calculatePotOdds,
+  calculateRateOfReturn,
+  estimateHandStrengthDetailed,
+  getProbabilisticBettingAction,
+  type ProbabilisticBetResult,
 } from "./gameRules";
 import {
   type AIPersonality,
@@ -57,6 +60,10 @@ export type AIBettingDecision = {
   confidence: number; // 0-1
 };
 
+type FallbackBettingDecision = AIBettingDecision & {
+  probabilisticResult: ProbabilisticBetResult;
+};
+
 /**
  * AI Word Building Result
  */
@@ -92,6 +99,31 @@ function logAIDebug(
   console.log(`[ai:${scope}] ${message}`, details);
 }
 
+function finiteTraceNumber(value: number): number | undefined {
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function serializeProbabilisticResultForTrace(result: ProbabilisticBetResult) {
+  return {
+    ...result,
+    debug: {
+      ...result.debug,
+      rateOfReturn: Number.isFinite(result.debug.rateOfReturn)
+        ? result.debug.rateOfReturn
+        : "Infinity",
+    },
+  };
+}
+
+function toAIBettingDecision(decision: AIBettingDecision): AIBettingDecision {
+  return {
+    action: decision.action,
+    raiseAmount: decision.raiseAmount,
+    reasoning: decision.reasoning,
+    confidence: decision.confidence,
+  };
+}
+
 async function insertAITrace(
   ctx: any,
   args: {
@@ -110,6 +142,12 @@ async function insertAITrace(
     difficulty?: string;
     personality?: string;
     handStrength?: number;
+    rateOfReturn?: number;
+    potOdds?: number;
+    chipRisk?: number;
+    probabilisticAction?: string;
+    fcrBucket?: string;
+    actionCacheHit?: boolean;
     isBluffing?: boolean;
     inputPrompt?: string;
     outputRaw?: string;
@@ -138,6 +176,12 @@ async function insertAITrace(
     difficulty: args.difficulty,
     personality: args.personality,
     handStrength: args.handStrength,
+    rateOfReturn: args.rateOfReturn,
+    potOdds: args.potOdds,
+    chipRisk: args.chipRisk,
+    probabilisticAction: args.probabilisticAction,
+    fcrBucket: args.fcrBucket,
+    actionCacheHit: args.actionCacheHit,
     isBluffing: args.isBluffing,
     inputPrompt: args.inputPrompt,
     outputRaw: args.outputRaw,
@@ -155,6 +199,7 @@ async function insertAITrace(
 export const aiDecideBet = internalAction({
   args: {
     difficulty: v.optional(v.string()),
+    personality: v.optional(v.string()),
     handTiles: v.array(
       v.union(
         v.object({
@@ -206,6 +251,8 @@ export const aiDecideBet = internalAction({
   },
   handler: async (ctx, args): Promise<AIBettingDecision> => {
     const difficulty = (args.difficulty as AIDifficulty) || AI_DIFFICULTY.MEDIUM;
+    const personality =
+      (args.personality as AIPersonality | undefined) || AI_PERSONALITIES.BALANCED;
     const timeoutMs = normalizeAiTimeoutMs(args.timeoutMs);
     const believesPlayer = (args.believesPlayer as boolean | null) ?? null;
 
@@ -213,6 +260,7 @@ export const aiDecideBet = internalAction({
       console.warn("OPENROUTER_API_KEY not set, using fallback strategy");
       logAIDebug("betting", "OpenRouter not configured, using fallback strategy", {
         difficulty,
+        personality,
         stage: args.stage,
         currentBet: args.currentBet,
         chips: args.chips,
@@ -220,18 +268,30 @@ export const aiDecideBet = internalAction({
         currentRaises: args.currentRaises,
         timeoutMs,
       });
-      const decision = fallbackBettingDecision(args);
+      const decision = fallbackBettingDecision(args, personality, difficulty);
+      const probabilisticDebug = decision.probabilisticResult.debug;
       await insertAITrace(ctx, {
         ...args,
         category: "ai_betting",
         action: decision.action,
+        raiseAmount: decision.raiseAmount,
         difficulty,
+        personality,
         handStrength: decision.confidence,
-        outputParsed: JSON.stringify(decision),
+        rateOfReturn: finiteTraceNumber(probabilisticDebug.rateOfReturn),
+        potOdds: probabilisticDebug.potOdds,
+        chipRisk: probabilisticDebug.chipRisk,
+        probabilisticAction: decision.probabilisticResult.action,
+        fcrBucket: probabilisticDebug.fcrBucket,
+        actionCacheHit: false,
+        outputParsed: JSON.stringify(toAIBettingDecision(decision)),
         usedFallback: true,
-        metadata: { reason: "openrouter_not_configured" },
+        metadata: {
+          reason: "openrouter_not_configured",
+          probabilisticRecommendation: serializeProbabilisticResultForTrace(decision.probabilisticResult),
+        },
       });
-      return decision;
+      return toAIBettingDecision(decision);
     }
 
     try {
@@ -259,27 +319,39 @@ export const aiDecideBet = internalAction({
         }
       });
 
-      // Estimate hand strength
-      const handStrength = estimateHandStrength(simplifiedHand, revealedCommunity);
-
-      // Check if AI should bluff
-      const isBluffing = shouldBluff(difficulty) && handStrength < 0.5;
-
-      // Get quick recommendation
-      const quickRec = getQuickRecommendation(
+      const handStrengthBreakdown = estimateHandStrengthDetailed(simplifiedHand, revealedCommunity);
+      const handStrength = handStrengthBreakdown.strength;
+      const potOdds = calculatePotOdds(args.currentBet, args.pot);
+      const rateOfReturn = calculateRateOfReturn(handStrength, potOdds);
+      const chipRisk = args.chips > 0 ? args.currentBet / args.chips : 0;
+      const probabilisticResult = getProbabilisticBettingAction(
         handStrength,
         args.currentBet,
         args.chips,
         args.pot,
-        args.stage as GameStage
+        ANTE_AMOUNT,
+        args.stage as GameStage,
+        personality,
+        difficulty,
+        args.raiseLadder,
       );
+
+      // Check if AI should bluff
+      const isBluffing = shouldBluff(difficulty) && handStrength < 0.5;
+
+      const fcrRecommendation = `fold ${probabilisticResult.debug.finalPct.fold.toFixed(1)}%, call ${probabilisticResult.debug.finalPct.call.toFixed(1)}%, raise ${probabilisticResult.debug.finalPct.raise.toFixed(1)}% (${probabilisticResult.debug.fcrBucket})`;
 
       logAIDebug("betting", "prepared betting prompt inputs", {
         difficulty,
         model,
         handStrength,
+        potOdds,
+        rateOfReturn,
+        chipRisk,
+        handStrengthBreakdown,
         isBluffing,
-        quickRecommendation: quickRec,
+        recommendedAction: probabilisticResult.action,
+        fcrRecommendation,
         stage: args.stage,
         currentBet: args.currentBet,
         chips: args.chips,
@@ -321,10 +393,13 @@ export const aiDecideBet = internalAction({
         currentRaises: args.currentRaises,
         maxRaises: args.maxRaises,
         raiseLadderNext: nextRaiseStep ? String(nextRaiseStep) : "MAX",
-        personality: difficulty,
-        personalityDescription: `A ${difficulty} difficulty Word Poker player`,
+        personality,
+        personalityDescription: `A ${personality} Word Poker player`,
         handStrength,
-        quickRecommendation: quickRec,
+        potOdds,
+        rateOfReturn: rateOfReturn === Infinity ? "Infinity" : rateOfReturn,
+        recommendedAction: probabilisticResult.action,
+        fcrRecommendation,
         isBluffing,
         believesPlayer,
       });
@@ -378,10 +453,8 @@ ${toolsJson}`;
       }
 
       const fallbackDecision: AIBettingDecision = {
-        action: quickRec,
-        raiseAmount: quickRec === "raise"
-          ? args.raiseLadder.find((amt) => amt > args.currentBet)
-          : undefined,
+        action: probabilisticResult.action,
+        raiseAmount: probabilisticResult.raiseAmount,
         reasoning: "Fallback strategy (API parsing failed)",
         confidence: handStrength,
       };
@@ -414,16 +487,27 @@ ${toolsJson}`;
         action,
         raiseAmount,
         difficulty,
+        personality,
         model,
         handStrength,
+        rateOfReturn: finiteTraceNumber(probabilisticResult.debug.rateOfReturn),
+        potOdds: probabilisticResult.debug.potOdds,
+        chipRisk: probabilisticResult.debug.chipRisk,
+        probabilisticAction: probabilisticResult.action,
+        fcrBucket: probabilisticResult.debug.fcrBucket,
+        actionCacheHit: false,
         isBluffing,
         inputPrompt: fullPrompt,
         outputRaw: response,
-        outputParsed: JSON.stringify(decision),
+        outputParsed: JSON.stringify(toAIBettingDecision(decision)),
         usedFallback: false,
         metadata: {
           latencyMs,
-          quickRecommendation: quickRec,
+          potOdds,
+          rateOfReturn,
+          chipRisk,
+          handStrengthBreakdown,
+          probabilisticRecommendation: serializeProbabilisticResultForTrace(probabilisticResult),
           toolCall,
           currentRaises: args.currentRaises,
         },
@@ -432,19 +516,31 @@ ${toolsJson}`;
       return decision;
     } catch (error) {
       console.error("AI betting decision error:", error);
-      const decision = fallbackBettingDecision(args);
+      const decision = fallbackBettingDecision(args, personality, difficulty);
+      const probabilisticDebug = decision.probabilisticResult.debug;
       await insertAITrace(ctx, {
         ...args,
         category: "ai_betting",
         action: decision.action,
+        raiseAmount: decision.raiseAmount,
         difficulty,
+        personality,
         handStrength: decision.confidence,
-        outputParsed: JSON.stringify(decision),
+        rateOfReturn: finiteTraceNumber(probabilisticDebug.rateOfReturn),
+        potOdds: probabilisticDebug.potOdds,
+        chipRisk: probabilisticDebug.chipRisk,
+        probabilisticAction: decision.probabilisticResult.action,
+        fcrBucket: probabilisticDebug.fcrBucket,
+        actionCacheHit: false,
+        outputParsed: JSON.stringify(toAIBettingDecision(decision)),
         usedFallback: true,
         success: false,
         error: String(error),
+        metadata: {
+          probabilisticRecommendation: serializeProbabilisticResultForTrace(decision.probabilisticResult),
+        },
       });
-      return decision;
+      return toAIBettingDecision(decision);
     }
   },
 });
@@ -452,8 +548,12 @@ ${toolsJson}`;
 /**
  * Fallback betting decision (if OpenRouter fails)
  */
-function fallbackBettingDecision(args: any): AIBettingDecision {
-  const handStrength = estimateHandStrength(
+function fallbackBettingDecision(
+  args: any,
+  personality: AIPersonality,
+  difficulty: AIDifficulty,
+): FallbackBettingDecision {
+  const handStrength = estimateHandStrengthDetailed(
     args.handTiles.map((t: any) => ({
       letter: t.kind === "single" ? t.letter : t.options[0],
       baseValue: t.kind === "single" ? t.baseValue : t.baseValues[0],
@@ -464,25 +564,27 @@ function fallbackBettingDecision(args: any): AIBettingDecision {
         letter: t.kind === "single" ? t.letter : t.options[0],
         baseValue: t.kind === "single" ? t.baseValue : t.baseValues[0],
       }))
-  );
+  ).strength;
 
-  const action = getQuickRecommendation(
+  const probabilisticResult = getProbabilisticBettingAction(
     handStrength,
     args.currentBet,
     args.chips,
     args.pot,
-    args.stage as GameStage
+    ANTE_AMOUNT,
+    args.stage as GameStage,
+    personality,
+    difficulty,
+    args.raiseLadder,
   );
 
-  let raiseAmount: number | undefined;
-  if (action === "raise") {
-    raiseAmount = args.raiseLadder.find((amt: number) => amt > args.currentBet);
-  }
-
   logAIDebug("betting", "computed fallback betting decision", {
-    action,
-    raiseAmount,
+    action: probabilisticResult.action,
+    raiseAmount: probabilisticResult.raiseAmount,
     handStrength,
+    personality,
+    difficulty,
+    probabilisticDebug: probabilisticResult.debug,
     currentBet: args.currentBet,
     chips: args.chips,
     pot: args.pot,
@@ -490,10 +592,11 @@ function fallbackBettingDecision(args: any): AIBettingDecision {
   });
 
   return {
-    action,
-    raiseAmount,
-    reasoning: "Fallback strategy (API unavailable)",
+    action: probabilisticResult.action,
+    raiseAmount: probabilisticResult.raiseAmount,
+    reasoning: probabilisticResult.reasoning,
     confidence: handStrength,
+    probabilisticResult,
   };
 }
 

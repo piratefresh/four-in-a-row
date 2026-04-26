@@ -9,7 +9,9 @@ describe("HomeModeMenu", () => {
         activeRoomCode={null}
         isStartingOffline={true}
         isStartingTutorial={false}
+        offlineDifficulty="medium"
         statusMessage={null}
+        onOfflineDifficultyChange={vi.fn()}
         onSelectOnline={vi.fn()}
         onStartOffline={vi.fn()}
         onPlayTutorial={vi.fn()}
@@ -18,5 +20,6 @@ describe("HomeModeMenu", () => {
 
     expect(markup).toContain("Setting up table...");
     expect(markup).toContain("Quick start vs bots");
+    expect(markup).toContain("aria-haspopup=\"menu\"");
   });
 });

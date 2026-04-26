@@ -53,11 +53,14 @@ export async function internalGetGameRuntimeStateHandler(
   args: { gameId: Doc<"games">["_id"] },
 ): Promise<{
   game: Doc<"games">;
+  room: Doc<"rooms"> | null;
   hands: Doc<"playerHands">[];
   players: Doc<"players">[];
 } | null> {
   const game = await ctx.db.get(args.gameId);
   if (!game) return null;
+
+  const room = await ctx.db.get(game.roomId as Doc<"rooms">["_id"]);
 
   const hands = await ctx.db
     .query("playerHands")
@@ -69,5 +72,5 @@ export async function internalGetGameRuntimeStateHandler(
     .withIndex("roomId", (q) => q.eq("roomId", game.roomId as Doc<"players">["roomId"]))
     .collect();
 
-  return { game, hands, players };
+  return { game, room, hands, players };
 }

@@ -24,6 +24,7 @@ export async function createOpenRoom(
     maxPlayers: ROOM_MAX_PLAYERS,
     tutorialId: options?.tutorialId,
     isBotGame: options?.isBotGame,
+    difficulty: options?.difficulty,
     nextRoomId: undefined,
     sourceRoomId: options?.sourceRoomId,
     createdAt: now,

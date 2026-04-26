@@ -6,6 +6,26 @@
  */
 
 import { DEV_BOT_AUTH_PREFIX } from "./games/gamesShared";
+import {
+  AI_DIFFICULTY,
+  AI_PERSONALITIES,
+  BETTING_PERSONALITY_PROFILES,
+  DIFFICULTY_BETTING_MODIFIERS,
+  PERSONALITY_BETTING_MODIFIERS,
+  type AIDifficulty,
+  type AIPersonality,
+  type BettingModifiers,
+} from "./aiBettingConstants";
+
+export {
+  AI_DIFFICULTY,
+  AI_PERSONALITIES,
+  BETTING_PERSONALITY_PROFILES,
+  type AIDifficulty,
+  type AIPersonality,
+  type BettingModifiers,
+  type DeterministicBettingPersonalityProfile,
+} from "./aiBettingConstants";
 
 // AI Provider Selection
 export const AI_PROVIDER = {
@@ -17,15 +37,6 @@ export type AIProvider = (typeof AI_PROVIDER)[keyof typeof AI_PROVIDER];
 export function getConfiguredAIProvider(): AIProvider {
   return AI_PROVIDER.OPENROUTER;
 }
-
-// AI Difficulty Levels
-export const AI_DIFFICULTY = {
-  EASY: "easy",
-  MEDIUM: "medium",
-  HARD: "hard",
-} as const;
-
-export type AIDifficulty = (typeof AI_DIFFICULTY)[keyof typeof AI_DIFFICULTY];
 
 // Model selection for OpenRouter
 export const OPENROUTER_MODELS = {
@@ -123,18 +134,6 @@ export function shouldBluff(difficulty: AIDifficulty): boolean {
   return Math.random() < profile.bluffFrequency;
 }
 
-/**
- * AI Personality Traits (for future expansion)
- */
-export const AI_PERSONALITIES = {
-  CAUTIOUS: "cautious",
-  BALANCED: "balanced",
-  AGGRESSIVE: "aggressive",
-  CREATIVE: "creative",
-} as const;
-
-export type AIPersonality = (typeof AI_PERSONALITIES)[keyof typeof AI_PERSONALITIES];
-
 export type BotCharacterProfile = {
   id: string;
   name: string;
@@ -191,52 +190,13 @@ export const SHOWDOWN_PERSONALITY_PROFILES = {
   },
 } as const;
 
-export type DeterministicBettingPersonalityProfile = {
-  aggression: number;
-  bluffRate: number;
-  foldThreshold: number;
-  tiltChance: number;
-  readsPotOdds: boolean;
-  foolRate: number;
-};
+export function getPersonalityModifiers(personality: AIPersonality): BettingModifiers {
+  return PERSONALITY_BETTING_MODIFIERS[personality] ?? { fold: 0, call: 0, raise: 0 };
+}
 
-export const FUTURE_BETTING_PERSONALITY_PROFILES: Record<
-  AIPersonality,
-  DeterministicBettingPersonalityProfile
-> = {
-  [AI_PERSONALITIES.CAUTIOUS]: {
-    aggression: 0.3,
-    bluffRate: 0.08,
-    foldThreshold: 0.4,
-    tiltChance: 0.02,
-    readsPotOdds: true,
-    foolRate: 0.3,
-  },
-  [AI_PERSONALITIES.BALANCED]: {
-    aggression: 0.45,
-    bluffRate: 0.15,
-    foldThreshold: 0.3,
-    tiltChance: 0.05,
-    readsPotOdds: true,
-    foolRate: 0.5,
-  },
-  [AI_PERSONALITIES.AGGRESSIVE]: {
-    aggression: 0.6,
-    bluffRate: 0.2,
-    foldThreshold: 0.22,
-    tiltChance: 0.04,
-    readsPotOdds: true,
-    foolRate: 0.2,
-  },
-  [AI_PERSONALITIES.CREATIVE]: {
-    aggression: 0.5,
-    bluffRate: 0.18,
-    foldThreshold: 0.28,
-    tiltChance: 0.06,
-    readsPotOdds: false,
-    foolRate: 0.6,
-  },
-};
+export function getDifficultyModifiers(difficulty: AIDifficulty): BettingModifiers {
+  return DIFFICULTY_BETTING_MODIFIERS[difficulty] ?? { fold: 0, call: 0, raise: 0 };
+}
 
 const BOT_CHARACTER_BY_ID: Record<BotCharacterId, BotCharacterProfile> =
   Object.fromEntries(BOT_CHARACTERS.map((character) => [character.id, character])) as Record<
@@ -334,6 +294,6 @@ export function shouldBelievePlayer(
 ): boolean | null {
   if (!isBluffLikely) return null;
   const roll = randomFn ? randomFn() : Math.random();
-  const foolRate = FUTURE_BETTING_PERSONALITY_PROFILES[personality]?.foolRate ?? 0.5;
+  const foolRate = BETTING_PERSONALITY_PROFILES[personality]?.foolRate ?? 0.5;
   return roll < foolRate;
 }
