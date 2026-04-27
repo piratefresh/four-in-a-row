@@ -7,6 +7,7 @@ import {
   SHOWDOWN_TIMER_MS,
 } from "../gameState";
 import type { GameDeckTile, GameStage, GameTile } from "../gameState";
+import { resolveConfig } from "../gameConfig";
 import {
   AI_DEALER_PLAYER_ID,
   BOT_ACTION_DELAY_MS,
@@ -252,8 +253,9 @@ async function scheduleShowdownResolution(
     return;
   }
 
+  const config = game.config ?? resolveConfig();
   await ctx.scheduler.runAfter(
-    SHOWDOWN_TIMER_MS,
+    config.showdownTimerMs,
     (internal as typeof internal).games.internalResolveExpiredShowdown,
     {
       gameId,

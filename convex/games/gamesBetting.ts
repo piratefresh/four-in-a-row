@@ -2,12 +2,7 @@ import { ConvexError } from "convex/values";
 import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../_generated/server";
-import {
-  MAX_RAISES_PER_ROUND,
-  RAISE_LADDER,
-  TURN_CLOCK_CALLED_DURATION_MS,
-  TURN_CLOCK_GRACE_PERIOD_MS,
-} from "../gameState";
+import { resolveConfig, type ResolvedGameConfig } from "../gameConfig";
 import {
   advanceTurn,
   handlePostActionProgression,
@@ -46,6 +41,10 @@ function logBotTurn(
   details: Record<string, unknown>,
 ) {
   console.log(`[bot-turn] ${message}`, details);
+}
+
+function getGameConfig(game: Doc<"games">): ResolvedGameConfig {
+  return game.config ?? resolveConfig();
 }
 
 function assertActiveBettingGame(game: Doc<"games"> | null) {
@@ -234,12 +233,13 @@ export async function raiseHandler(
   args: PlayerActionArgs & { raiseToAmount: number },
 ) {
   const game = assertActiveBettingGame(await ctx.db.get(args.gameId));
+  const config = getGameConfig(game);
   const playerId = args.playerId.trim();
   const raisesThisRound = game.raisesThisRound ?? 0;
-  if (raisesThisRound >= MAX_RAISES_PER_ROUND) throw new ConvexError({ code: "RAISE_CAP_REACHED", message: `Maximum ${MAX_RAISES_PER_ROUND} raises per betting round reached.` });
+  if (raisesThisRound >= config.maxRaisesPerRound) throw new ConvexError({ code: "RAISE_CAP_REACHED", message: `Maximum ${config.maxRaisesPerRound} raises per betting round reached.` });
   const raiseToAmount = Math.floor(args.raiseToAmount);
   if (!Number.isFinite(raiseToAmount) || raiseToAmount <= game.currentBet) throw new ConvexError({ code: "INVALID_RAISE_AMOUNT", message: `Raise amount must be greater than current bet of ${game.currentBet}.` });
-  const validRaiseOptions = RAISE_LADDER.filter((amount) => amount > game.currentBet);
+  const validRaiseOptions = config.raiseLadder.filter((amount) => amount > game.currentBet);
   if (validRaiseOptions.length === 0) throw new ConvexError({ code: "RAISE_CAP_REACHED", message: "Maximum raise level reached." });
   if (!validRaiseOptions.includes(raiseToAmount)) throw new ConvexError({ code: "INVALID_RAISE_AMOUNT", message: `Raise amount must match a valid ladder level above ${game.currentBet}: ${validRaiseOptions.join(", ")}.` });
   const { orderedHands, currentTurnHand } = await getCurrentTurnHand(ctx, game, playerId);
@@ -301,6 +301,7 @@ export async function callClockHandler(
   args: PlayerActionArgs,
 ) {
   const game = assertActiveBettingGame(await ctx.db.get(args.gameId));
+  const config = getGameConfig(game);
   const callerPlayerId = args.playerId.trim();
   const { orderedHands, currentTurnHand } = await getOrderedHandsAndCurrentTurnHand(
     ctx,
@@ -352,9 +353,9 @@ export async function callClockHandler(
   }
 
   const elapsed = now - game.turnStartedAt;
-  if (elapsed < TURN_CLOCK_GRACE_PERIOD_MS) {
+  if (elapsed < config.turnClockGraceMs) {
     const secondsRemaining = Math.ceil(
-      (TURN_CLOCK_GRACE_PERIOD_MS - elapsed) / 1000,
+      (config.turnClockGraceMs - elapsed) / 1000,
     );
     throw new ConvexError({
       code: "CLOCK_TOO_EARLY",
@@ -362,7 +363,7 @@ export async function callClockHandler(
     });
   }
 
-  const turnClockExpiresAt = now + TURN_CLOCK_CALLED_DURATION_MS;
+  const turnClockExpiresAt = now + config.turnClockCalledDurationMs;
   await ctx.db.patch(game._id, {
     turnClockCalledAt: now,
     turnClockExpiresAt,
@@ -372,7 +373,7 @@ export async function callClockHandler(
   });
 
   await ctx.scheduler.runAfter(
-    TURN_CLOCK_CALLED_DURATION_MS,
+    config.turnClockCalledDurationMs,
     (internal as typeof internal).games.internalResolveExpiredTurnClock,
     {
       gameId: game._id,
@@ -590,6 +591,7 @@ export async function internalProcessBotTurnHandler(
       bluffDetected,
       believesPlayer,
     });
+    const config = getGameConfig(game);
     const decision = await ctx.runAction(internal.ai.aiDecideBet, {
       difficulty,
       personality,
@@ -599,8 +601,8 @@ export async function internalProcessBotTurnHandler(
       currentBet: game.currentBet,
       chips: currentTurnHand.chips,
       pot: game.pot,
-      raiseLadder: RAISE_LADDER,
-      maxRaises: MAX_RAISES_PER_ROUND,
+      raiseLadder: config.raiseLadder,
+      maxRaises: config.maxRaisesPerRound,
       currentRaises: game.raisesThisRound ?? 0,
       timeoutMs: BOT_AI_TIMEOUT_MS,
       believesPlayer: believesPlayer ?? undefined,
@@ -663,7 +665,7 @@ export async function internalProcessBotTurnHandler(
     if (decision.action === "raise" && decision.raiseAmount) {
       const raiseToAmount = decision.raiseAmount;
       const additionalChipsNeeded = raiseToAmount - currentTurnHand.betThisRound;
-      if (additionalChipsNeeded <= currentTurnHand.chips && (game.raisesThisRound ?? 0) < MAX_RAISES_PER_ROUND && raiseToAmount === RAISE_LADDER.find((amount) => amount > game.currentBet)) {
+      if (additionalChipsNeeded <= currentTurnHand.chips && (game.raisesThisRound ?? 0) < config.maxRaisesPerRound && raiseToAmount === config.raiseLadder.find((amount) => amount > game.currentBet)) {
         await ctx.runMutation(api.games.raise, { gameId: args.gameId, playerId: args.playerId, raiseToAmount });
         logBotTurn("executed AI raise", {
           playerId: currentTurnHand.playerId,

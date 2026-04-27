@@ -7,6 +7,7 @@ import {
   gameStatusValidator,
   gameTileValidator,
 } from "./gameState";
+import { roomConfigValidator, resolvedGameConfigValidator } from "./gameConfig";
 
 export const EMBEDDING_DIMENSIONS = 1024;
 export const RAG_SIMILARITY_THRESHOLD = 0.9;
@@ -24,6 +25,7 @@ export const appTables = {
       v.literal("medium"),
       v.literal("hard"),
     )),
+    config: v.optional(roomConfigValidator),
     hostPlayerId: v.optional(v.id("players")),
     nextRoomId: v.optional(v.id("rooms")),
     sourceRoomId: v.optional(v.id("rooms")),
@@ -87,6 +89,7 @@ export const appTables = {
     turnClockCallerPlayerId: v.optional(v.string()),
     turnClockTargetPlayerId: v.optional(v.string()),
     lastBotTurnScheduledAt: v.optional(v.number()),
+    config: v.optional(resolvedGameConfigValidator),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

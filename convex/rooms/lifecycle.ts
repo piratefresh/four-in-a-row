@@ -25,6 +25,7 @@ export async function createOpenRoom(
     tutorialId: options?.tutorialId,
     isBotGame: options?.isBotGame,
     difficulty: options?.difficulty,
+    config: options?.config,
     nextRoomId: undefined,
     sourceRoomId: options?.sourceRoomId,
     createdAt: now,

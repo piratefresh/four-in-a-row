@@ -9,6 +9,7 @@ export { ROOM_CODE_LENGTH };
 import { ConvexError } from "convex/values";
 import { authComponent, createAuth } from "../auth";
 import type { AIDifficulty } from "../aiBettingConstants";
+import type { RoomConfig } from "../gameConfig";
 
 // ==================== Constants ====================
 
@@ -29,6 +30,7 @@ export type CreateOpenRoomOptions = {
   tutorialId?: typeof FIRST_BOT_GAME_TUTORIAL_ID;
   isBotGame?: boolean;
   difficulty?: AIDifficulty;
+  config?: RoomConfig;
 };
 
 // ==================== String Utilities ====================

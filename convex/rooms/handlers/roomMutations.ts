@@ -26,6 +26,7 @@ import {
 import { PLAYER_NAME_MAX_LENGTH } from "../../constants";
 import { requireVerifiedUser } from "../../verifyUser";
 import { AI_DIFFICULTY, type AIDifficulty } from "../../aiBettingConstants";
+import { roomConfigValidator } from "../../gameConfig";
 
 export const createRoom = mutation({
   args: {
@@ -35,6 +36,7 @@ export const createRoom = mutation({
       v.literal("medium"),
       v.literal("hard"),
     )),
+    config: v.optional(roomConfigValidator),
   },
   handler: async (ctx, args) => {
     await requireVerifiedUser(ctx);
@@ -42,6 +44,7 @@ export const createRoom = mutation({
       ctx,
       args.name,
       (args.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM,
+      args.config,
     );
   },
 });
@@ -250,6 +253,7 @@ export const continueToNextRoom = mutation({
         sourceRoomId: room._id,
         isBotGame: room.isBotGame,
         difficulty: room.difficulty as AIDifficulty | undefined,
+        config: room.config,
       });
       await ctx.db.patch(room._id, { status: "closed", nextRoomId, lastActiveAt: Date.now() });
       nextRoom = await ctx.db.get(nextRoomId);

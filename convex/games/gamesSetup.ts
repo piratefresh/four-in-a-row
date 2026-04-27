@@ -3,8 +3,6 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
-  SMALL_BLIND,
-  BIG_BLIND,
   INITIAL_HAND_SIZE,
   COMMUNITY_TILE_COUNT,
   MIN_COMMUNITY_CHOICE_TILE_COUNT,
@@ -15,12 +13,12 @@ import {
   type GameDeckTile,
   type GameTile,
 } from "../gameState";
+import { resolveConfig, type ResolvedGameConfig } from "../gameConfig";
 import { scheduleBotTurnIfNeeded, setRoomUsersActiveGameId } from "./gamesProgression";
 import {
   AI_DEALER_PLAYER_ID,
   getClearedTurnClockFields,
   getNewTurnStateFields,
-  INITIAL_CHIPS,
 } from "./gamesShared";
 
 function randomIndex(maxExclusive: number) {
@@ -270,10 +268,11 @@ async function dealHands(
   smallBlindIndex: number,
   bigBlindIndex: number,
   now: number,
+  config: ResolvedGameConfig,
 ) {
   for (const [participantIndex, participantId] of participantIds.entries()) {
     const tiles = hands[participantIndex];
-    if (!tiles || tiles.length !== INITIAL_HAND_SIZE) {
+    if (!tiles || tiles.length !== config.initialHandSize) {
       throw new ConvexError({
         code: "INVALID_HAND_DEAL",
         message: "Player hand could not be dealt correctly.",
@@ -283,12 +282,12 @@ async function dealHands(
     // Determine blind amount for this player
     let blindAmount = 0;
     if (participantIndex === smallBlindIndex) {
-      blindAmount = SMALL_BLIND;
+      blindAmount = config.smallBlind;
     } else if (participantIndex === bigBlindIndex) {
-      blindAmount = BIG_BLIND;
+      blindAmount = config.bigBlind;
     }
 
-    if (INITIAL_CHIPS < blindAmount) {
+    if (config.startingChips < blindAmount) {
       throw new ConvexError({
         code: "INSUFFICIENT_CHIPS_FOR_BLIND",
         message: `Players must have at least ${blindAmount} chips to post blinds.`,
@@ -300,7 +299,7 @@ async function dealHands(
       gameId,
       playerId: participantId,
       tiles,
-      chips: INITIAL_CHIPS - blindAmount,
+      chips: config.startingChips - blindAmount,
       betThisRound: 0,
       totalBet: blindAmount,
       hasActed: participantIndex !== smallBlindIndex && participantIndex !== bigBlindIndex,
@@ -359,6 +358,8 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
   const room = await ctx.db.get(roomId);
   if (!room) throw new ConvexError({ code: "ROOM_NOT_FOUND", message: "Room does not exist." });
 
+  const config = resolveConfig(room.config);
+
   const participantIds = await getParticipantIds(ctx, room._id);
   if (!participantIds) {
     throw new ConvexError({
@@ -384,7 +385,7 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
     participantIds.length
   );
 
-  const totalBlinds = SMALL_BLIND + BIG_BLIND;
+  const totalBlinds = config.smallBlind + config.bigBlind;
   const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
 
   await dealHands(
@@ -395,18 +396,20 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
     smallBlindIndex,
     bigBlindIndex,
     now,
+    config,
   );
   await ctx.db.patch(game._id, {
     status: "active",
     communityTiles: roundDeal.communityTiles,
     deck: roundDeal.deck,
     pot: totalBlinds,
-    currentBet: BIG_BLIND,
+    currentBet: config.bigBlind,
     currentPlayerIndex: firstActionIndex,
     dealerButtonIndex,
     smallBlindIndex,
     bigBlindIndex,
     raisesThisRound: 0,
+    config,
     ...getNewTurnStateFields(now),
     updatedAt: now,
   });
@@ -433,7 +436,7 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
     ok: true,
     gameId: game._id,
     status: "active" as const,
-    dealtHandSize: INITIAL_HAND_SIZE,
+    dealtHandSize: config.initialHandSize,
     playersDealt: participantIds.length,
     includesAiDealer: participantIds.includes(AI_DEALER_PLAYER_ID),
   };
@@ -451,6 +454,8 @@ export async function internalStartGameHandler(
   const roomId = game.roomId as Id<"rooms">;
   const room = await ctx.db.get(roomId);
   if (!room) return { ok: false, reason: "Room not found" };
+
+  const config = resolveConfig(room.config);
 
   const participantIds = await getParticipantIds(ctx, room._id);
   if (!participantIds) return { ok: false, reason: "Not enough players" };
@@ -472,7 +477,7 @@ export async function internalStartGameHandler(
     participantIds.length
   );
 
-  const totalBlinds = SMALL_BLIND + BIG_BLIND;
+  const totalBlinds = config.smallBlind + config.bigBlind;
   const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
 
   await dealHands(
@@ -483,18 +488,20 @@ export async function internalStartGameHandler(
     smallBlindIndex,
     bigBlindIndex,
     now,
+    config,
   );
   await ctx.db.patch(game._id, {
     status: "active",
     communityTiles: roundDeal.communityTiles,
     deck: roundDeal.deck,
     pot: totalBlinds,
-    currentBet: BIG_BLIND,
+    currentBet: config.bigBlind,
     currentPlayerIndex: firstActionIndex,
     dealerButtonIndex,
     smallBlindIndex,
     bigBlindIndex,
     raisesThisRound: 0,
+    config,
     ...getNewTurnStateFields(now),
     updatedAt: now,
   });
