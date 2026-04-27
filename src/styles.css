@@ -61,6 +61,9 @@ code {
   --color-chip-green: #2c7a4f;
   --color-chip-red: #a23131;
   --color-chip-blue: #2b4f8a;
+  --gradient-felt-table: radial-gradient(ellipse at 50% 40%, var(--color-felt-light), var(--color-felt-deep));
+  --gradient-felt-splash: radial-gradient(ellipse at center, var(--color-felt-light), var(--color-felt-deep));
+  --gradient-felt-glow: radial-gradient(circle at 50% 40%, rgba(212,165,74,0.08), transparent 60%);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);

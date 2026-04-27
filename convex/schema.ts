@@ -243,6 +243,29 @@ export const appTables = {
     .index("by_gameId_createdAt", ["gameId", "createdAt"])
     .index("by_category_createdAt", ["category", "createdAt"])
     .index("by_createdAt", ["createdAt"]),
+  aiActionsCache: defineTable({
+    personality: v.string(),
+    trigger: v.string(),
+    gameStage: v.string(),
+    contextText: v.string(),
+    embedding: v.array(v.float64()),
+    action: v.string(),
+    raiseAmount: v.optional(v.number()),
+    wordSubmitted: v.optional(v.string()),
+    handStrength: v.number(),
+    rateOfReturn: v.optional(v.number()),
+    reasoning: v.string(),
+    approved: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_personality_trigger", ["personality", "trigger"])
+    .index("by_approved", ["approved"])
+    .index("by_approved_createdAt", ["approved", "createdAt"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1024,
+      filterFields: ["personality", "trigger", "approved"],
+    }),
   aiDialogueCache: defineTable({
     personality: v.string(),
     trigger: v.string(),

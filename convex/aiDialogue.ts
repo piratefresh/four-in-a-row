@@ -162,6 +162,9 @@ export function cleanDialogueResponse(
     cleaned = cleaned.slice(1, -1);
   }
 
+  // Strip LLM-added name prefix like "Jax:", "Nora Vale:", "JAX:"
+  cleaned = cleaned.replace(/^(?:Jax|Rook|Nora|Vale|Ellis|March|Mira|Quill)[A-Za-z]*(?:\s[A-Za-z]+)*:\s*/i, "");
+
   // Truncate at first newline (we want one-liners)
   const newlineIndex = cleaned.indexOf("\n");
   if (newlineIndex !== -1) {

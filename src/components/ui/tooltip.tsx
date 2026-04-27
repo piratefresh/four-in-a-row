@@ -25,6 +25,13 @@ function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
+interface TooltipContentProps
+  extends TooltipPrimitive.Popup.Props,
+    Pick<
+      TooltipPrimitive.Positioner.Props,
+      "align" | "alignOffset" | "side" | "sideOffset"
+    > {}
+
 function TooltipContent({
   className,
   side = "top",
@@ -33,11 +40,7 @@ function TooltipContent({
   alignOffset = 0,
   children,
   ...props
-}: TooltipPrimitive.Popup.Props &
-  Pick<
-    TooltipPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+}: TooltipContentProps) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Positioner
