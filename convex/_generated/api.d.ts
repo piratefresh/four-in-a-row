@@ -26,6 +26,7 @@ import type * as csw24 from "../csw24.js";
 import type * as debugBots from "../debugBots.js";
 import type * as emails from "../emails.js";
 import type * as embeddings from "../embeddings.js";
+import type * as gameConfig from "../gameConfig.js";
 import type * as gameRules from "../gameRules.js";
 import type * as gameState from "../gameState.js";
 import type * as games from "../games.js";
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   debugBots: typeof debugBots;
   emails: typeof emails;
   embeddings: typeof embeddings;
+  gameConfig: typeof gameConfig;
   gameRules: typeof gameRules;
   gameState: typeof gameState;
   games: typeof games;

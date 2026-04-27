@@ -1,8 +1,11 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { DEV_BOT_AUTH_PREFIX } from "./games/gamesShared";
 import { getBotCharacterForAuthUserId } from "./aiStrategy";
+
+const AI_DEALER_PLAYER_ID = "ai_dealer";
 
 function isBotAuthUserId(authUserId: string | undefined): boolean {
   return !!authUserId?.startsWith(DEV_BOT_AUTH_PREFIX);
@@ -29,6 +32,18 @@ export const updatePlayerStats = internalMutation({
     const game = await ctx.db.get(args.gameId);
     if (!game || game.status !== "completed") return;
 
+    const existingRollup = await ctx.db
+      .query("playerStatRollups")
+      .withIndex("by_gameId", (q) => q.eq("gameId", args.gameId))
+      .unique();
+    if (existingRollup) return;
+
+    const now = Date.now();
+    await ctx.db.insert("playerStatRollups", {
+      gameId: args.gameId,
+      createdAt: now,
+    });
+
     const hands = await ctx.db
       .query("playerHands")
       .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
@@ -39,11 +54,15 @@ export const updatePlayerStats = internalMutation({
       .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
       .collect();
 
+    const traces = await ctx.db
+      .query("gameTraces")
+      .withIndex("by_gameId_createdAt", (q) => q.eq("gameId", args.gameId))
+      .collect();
+
     const winnerId = game.winnerId;
-    const now = Date.now();
 
     for (const hand of hands) {
-      if (hand.playerId === "ai_dealer") continue;
+      if (hand.playerId === AI_DEALER_PLAYER_ID) continue;
 
       const player = await getPlayerById(ctx, hand.playerId);
       const authUserId = player?.authUserId;
@@ -69,10 +88,6 @@ export const updatePlayerStats = internalMutation({
       const reachedShowdown = playerSubmissions.length > 0 || !hand.hasFolded;
       const wonShowdown = won && reachedShowdown && playerSubmissions.length > 0;
 
-      const totalActions = playerSubmissions.length > 0
-        ? submissions.filter((s) => s.playerId === hand.playerId).length
-        : 0;
-
       const newWordsSubmitted = existingStats.wordsSubmitted + playerSubmissions.length;
       const allScores = playerSubmissions.map((s) => s.score);
       const existingTotalScore = existingStats.avgWordScore * existingStats.wordsSubmitted;
@@ -93,11 +108,38 @@ export const updatePlayerStats = internalMutation({
         }
       }
 
-      const lastActionCounts = countLastActions(hands, hand.playerId);
+      const actionCounts = countTraceActions(traces, hand.playerId);
+      if (hand.hasFolded && actionCounts.fold === 0) {
+        actionCounts.fold = 1;
+      }
+      const aiTraceStats = getAiTraceStats(traces, {
+        playerId: hand.playerId,
+        characterId,
+      });
 
       const newGamesPlayed = existingStats.gamesPlayed + 1;
       const newGamesWon = existingStats.gamesWon + (won ? 1 : 0);
       const newWinRate = newGamesPlayed > 0 ? newGamesWon / newGamesPlayed : 0;
+      const existingAiDecisions = existingStats.totalAiDecisions ?? 0;
+      const newAiDecisions = existingAiDecisions + aiTraceStats.totalAiDecisions;
+      const newAiSuccesses = (existingStats.totalAiSuccesses ?? 0) + aiTraceStats.totalAiSuccesses;
+      const newAiFailures = (existingStats.totalAiFailures ?? 0) + aiTraceStats.totalAiFailures;
+      const newLatencySamples =
+        (existingStats.totalAiLatencySamples ?? 0) + aiTraceStats.latencySamples;
+      const newHandStrengthSamples =
+        (existingStats.totalHandStrengthSamples ?? 0) + aiTraceStats.handStrengthSamples;
+      const newAvgLatencyMs = mergeAverage({
+        currentAverage: existingStats.avgLatencyMs ?? 0,
+        currentCount: existingStats.totalAiLatencySamples ?? 0,
+        addedTotal: aiTraceStats.latencyTotal,
+        addedCount: aiTraceStats.latencySamples,
+      });
+      const newAvgHandStrength = mergeAverage({
+        currentAverage: existingStats.avgHandStrength ?? 0,
+        currentCount: existingStats.totalHandStrengthSamples ?? 0,
+        addedTotal: aiTraceStats.handStrengthTotal,
+        addedCount: aiTraceStats.handStrengthSamples,
+      });
 
       await ctx.db.patch(existingStats._id, {
         gamesPlayed: newGamesPlayed,
@@ -113,47 +155,54 @@ export const updatePlayerStats = internalMutation({
         bestWord,
         bestWordScore,
         longestWord,
-        totalChecks: existingStats.totalChecks + lastActionCounts.check,
-        totalCalls: existingStats.totalCalls + lastActionCounts.call,
-        totalRaises: existingStats.totalRaises + lastActionCounts.raise,
-        totalFolds: existingStats.totalFolds + lastActionCounts.fold + (hand.hasFolded && !lastActionCounts.fold ? 1 : 0),
+        totalChecks: existingStats.totalChecks + actionCounts.check,
+        totalCalls: existingStats.totalCalls + actionCounts.call,
+        totalRaises: existingStats.totalRaises + actionCounts.raise,
+        totalFolds: existingStats.totalFolds + actionCounts.fold,
+        totalBluffs: (existingStats.totalBluffs ?? 0) + aiTraceStats.totalBluffs,
+        totalFallbacks: (existingStats.totalFallbacks ?? 0) + aiTraceStats.totalFallbacks,
+        avgHandStrength: newAvgHandStrength,
+        totalAiDecisions: newAiDecisions,
+        totalAiSuccesses: newAiSuccesses,
+        totalAiFailures: newAiFailures,
+        avgLatencyMs: newAvgLatencyMs,
+        totalAiLatencySamples: newLatencySamples,
+        totalHandStrengthSamples: newHandStrengthSamples,
         playerName,
         lastGameAt: now,
         updatedAt: now,
       });
     }
-
-    await updateAIStatsFromTraces(ctx, args.gameId, now);
   },
 });
 
-async function getPlayerById(ctx: any, playerId: string) {
-  if (playerId === "ai_dealer") return null;
+async function getPlayerById(ctx: MutationCtx, playerId: string) {
+  if (playerId === AI_DEALER_PLAYER_ID) return null;
   const normalizedId = ctx.db.normalizeId("players", playerId);
   if (!normalizedId) return null;
   return await ctx.db.get(normalizedId);
 }
 
 async function findOrCreateStats(
-  ctx: any,
+  ctx: MutationCtx,
   params: {
     authUserId: string | undefined;
     characterId: string | undefined;
     playerName: string;
     isBot: boolean;
   },
-) {
-  let existing;
+): Promise<Doc<"playerStats">> {
+  let existing: Doc<"playerStats"> | null = null;
 
   if (params.isBot && params.characterId) {
     [existing] = await ctx.db
       .query("playerStats")
-      .withIndex("by_characterId", (q: any) => q.eq("characterId", params.characterId))
+      .withIndex("by_characterId", (q) => q.eq("characterId", params.characterId))
       .collect();
   } else if (params.authUserId) {
     [existing] = await ctx.db
       .query("playerStats")
-      .withIndex("by_authUserId", (q: any) => q.eq("authUserId", params.authUserId))
+      .withIndex("by_authUserId", (q) => q.eq("authUserId", params.authUserId))
       .collect();
   }
 
@@ -179,74 +228,98 @@ async function findOrCreateStats(
     totalCalls: 0,
     totalRaises: 0,
     totalFolds: 0,
+    totalAiDecisions: 0,
+    totalAiSuccesses: 0,
+    totalAiFailures: 0,
+    avgLatencyMs: 0,
+    totalAiLatencySamples: 0,
+    totalHandStrengthSamples: 0,
     lastGameAt: now,
     updatedAt: now,
   });
 
-  return { ...params, _id: newId };
+  const created = await ctx.db.get(newId);
+  if (!created) {
+    throw new Error("Failed to create player stats document.");
+  }
+  return created;
 }
 
-function countLastActions(
-  hands: Array<{ playerId: string; lastAction?: string }>,
+function countTraceActions(
+  traces: Doc<"gameTraces">[],
   playerId: string,
 ) {
-  const hand = hands.find((h) => h.playerId === playerId);
-  const counts: Record<string, number> = { check: 0, call: 0, raise: 0, fold: 0 };
-  if (hand?.lastAction) {
-    counts[hand.lastAction] = 1;
+  const counts = { check: 0, call: 0, raise: 0, fold: 0 };
+  for (const trace of traces) {
+    if (trace.category !== "game_action" || trace.playerId !== playerId) continue;
+    if (
+      trace.action === "check" ||
+      trace.action === "call" ||
+      trace.action === "raise" ||
+      trace.action === "fold"
+    ) {
+      counts[trace.action] += 1;
+    }
   }
   return counts;
 }
 
-async function updateAIStatsFromTraces(
-  ctx: any,
-  gameId: Id<"games">,
-  now: number,
+function getAiTraceStats(
+  traces: Doc<"gameTraces">[],
+  player: { playerId: string; characterId?: string },
 ) {
-  const aiBettingTraces = await ctx.db
-    .query("gameTraces")
-    .filter((q: any) =>
-      q.and(
-        q.eq(q.field("category"), "ai_betting"),
-        q.eq(q.field("gameId"), gameId),
-      ),
-    )
-    .collect();
+  const stats = {
+    totalAiDecisions: 0,
+    totalAiSuccesses: 0,
+    totalAiFailures: 0,
+    totalBluffs: 0,
+    totalFallbacks: 0,
+    latencyTotal: 0,
+    latencySamples: 0,
+    handStrengthTotal: 0,
+    handStrengthSamples: 0,
+  };
 
-  for (const trace of aiBettingTraces) {
-    if (!trace.characterId) continue;
+  for (const trace of traces) {
+    if (!trace.category.startsWith("ai_")) continue;
+    const matchesPlayer =
+      trace.playerId === player.playerId ||
+      (!!player.characterId && trace.characterId === player.characterId);
+    if (!matchesPlayer) continue;
 
-    let stats;
-    [stats] = await ctx.db
-      .query("playerStats")
-      .withIndex("by_characterId", (q: any) =>
-        q.eq("characterId", trace.characterId),
-      )
-      .collect();
-
-    if (!stats) continue;
-
-    const bluffs = trace.isBluffing ? 1 : 0;
-    const fallbacks = trace.usedFallback ? 1 : 0;
-    const handStrength = trace.handStrength ?? 0;
-
-    const currentBluffs = stats.totalBluffs ?? 0;
-    const currentFallbacks = stats.totalFallbacks ?? 0;
-    const currentAvgHS = stats.avgHandStrength ?? 0;
-    const totalBettingActions = (stats.totalChecks ?? 0) + (stats.totalCalls ?? 0) + (stats.totalRaises ?? 0) + (stats.totalFolds ?? 0);
-
-    const newAvgHS =
-      totalBettingActions > 0
-        ? (currentAvgHS * (totalBettingActions - 1) + handStrength) / totalBettingActions
-        : handStrength;
-
-    await ctx.db.patch(stats._id, {
-      totalBluffs: currentBluffs + bluffs,
-      totalFallbacks: currentFallbacks + fallbacks,
-      avgHandStrength: newAvgHS,
-      updatedAt: now,
-    });
+    stats.totalAiDecisions += 1;
+    if (trace.success) {
+      stats.totalAiSuccesses += 1;
+    } else {
+      stats.totalAiFailures += 1;
+    }
+    if (trace.isBluffing) stats.totalBluffs += 1;
+    if (trace.usedFallback) stats.totalFallbacks += 1;
+    if (typeof trace.latencyMs === "number" && Number.isFinite(trace.latencyMs)) {
+      stats.latencyTotal += trace.latencyMs;
+      stats.latencySamples += 1;
+    }
+    if (
+      typeof trace.handStrength === "number" &&
+      Number.isFinite(trace.handStrength)
+    ) {
+      stats.handStrengthTotal += trace.handStrength;
+      stats.handStrengthSamples += 1;
+    }
   }
+
+  return stats;
+}
+
+function mergeAverage(args: {
+  currentAverage: number;
+  currentCount: number;
+  addedTotal: number;
+  addedCount: number;
+}) {
+  const nextCount = args.currentCount + args.addedCount;
+  if (nextCount === 0) return args.currentAverage;
+  return (args.currentAverage * args.currentCount + args.addedTotal) / nextCount;
 }
 
 export const getPlayerStats = query({

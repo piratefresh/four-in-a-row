@@ -585,6 +585,7 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
       handTiles: botHand.tiles,
       communityTiles: game.communityTiles,
       timeoutMs: 15_000,
+      bluffDetected,
       believesPlayer: believesPlayer ?? undefined,
       gameId: args.gameId,
       roomId: game.roomId as any,

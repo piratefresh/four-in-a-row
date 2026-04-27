@@ -134,11 +134,19 @@ async function insertAITrace(
     characterId?: string;
     category: "ai_betting" | "ai_showdown";
     action?: string;
+    executedAction?: string;
+    actionOverrideReason?: string;
     stage?: string;
     raiseAmount?: number;
     wordSubmitted?: string;
     wordScore?: number;
     model?: string;
+    provider?: string;
+    latencyMs?: number;
+    promptTemplate?: string;
+    decisionSource?: string;
+    cacheStatus?: string;
+    qualityFlags?: string[];
     difficulty?: string;
     personality?: string;
     handStrength?: number;
@@ -149,6 +157,11 @@ async function insertAITrace(
     fcrBucket?: string;
     actionCacheHit?: boolean;
     isBluffing?: boolean;
+    bluffDetected?: boolean;
+    believesPlayer?: boolean | null;
+    llmWord?: string;
+    validationResult?: string;
+    fallbackReason?: string;
     inputPrompt?: string;
     outputRaw?: string;
     outputParsed?: string;
@@ -167,7 +180,17 @@ async function insertAITrace(
     characterId: args.characterId,
     isBot: true,
     category: args.category,
+    component: args.category === "ai_showdown" ? "showdown" : "ai",
+    operation: args.category === "ai_showdown" ? "submit_word" : "decide_bet",
+    decisionSource: args.decisionSource,
+    latencyMs: args.latencyMs,
+    provider: args.provider,
+    promptTemplate: args.promptTemplate,
+    cacheStatus: args.cacheStatus,
+    qualityFlags: args.qualityFlags,
     action: args.action,
+    executedAction: args.executedAction,
+    actionOverrideReason: args.actionOverrideReason,
     stage: args.stage,
     raiseAmount: args.raiseAmount,
     wordSubmitted: args.wordSubmitted,
@@ -183,6 +206,11 @@ async function insertAITrace(
     fcrBucket: args.fcrBucket,
     actionCacheHit: args.actionCacheHit,
     isBluffing: args.isBluffing,
+    bluffDetected: args.bluffDetected,
+    believesPlayer: args.believesPlayer,
+    llmWord: args.llmWord,
+    validationResult: args.validationResult,
+    fallbackReason: args.fallbackReason,
     inputPrompt: args.inputPrompt,
     outputRaw: args.outputRaw,
     outputParsed: args.outputParsed,
@@ -242,6 +270,7 @@ export const aiDecideBet = internalAction({
     maxRaises: v.number(),
     currentRaises: v.number(),
     timeoutMs: v.optional(v.number()),
+    bluffDetected: v.optional(v.boolean()),
     believesPlayer: v.optional(v.union(v.literal(true), v.literal(false), v.null())),
     gameId: v.optional(v.id("games")),
     roomId: v.optional(v.id("rooms")),
@@ -274,9 +303,14 @@ export const aiDecideBet = internalAction({
         ...args,
         category: "ai_betting",
         action: decision.action,
+        executedAction: decision.action,
         raiseAmount: decision.raiseAmount,
         difficulty,
         personality,
+        provider: "deterministic",
+        promptTemplate: "betting_tooluse",
+        decisionSource: "fallback",
+        fallbackReason: "openrouter_not_configured",
         handStrength: decision.confidence,
         rateOfReturn: finiteTraceNumber(probabilisticDebug.rateOfReturn),
         potOdds: probabilisticDebug.potOdds,
@@ -284,6 +318,8 @@ export const aiDecideBet = internalAction({
         probabilisticAction: decision.probabilisticResult.action,
         fcrBucket: probabilisticDebug.fcrBucket,
         actionCacheHit: false,
+        bluffDetected: args.bluffDetected,
+        believesPlayer,
         outputParsed: JSON.stringify(toAIBettingDecision(decision)),
         usedFallback: true,
         metadata: {
@@ -485,10 +521,15 @@ ${toolsJson}`;
         ...args,
         category: "ai_betting",
         action,
+        executedAction: action,
         raiseAmount,
         difficulty,
         personality,
         model,
+        provider: "openrouter",
+        latencyMs,
+        promptTemplate: "betting_tooluse",
+        decisionSource: "llm",
         handStrength,
         rateOfReturn: finiteTraceNumber(probabilisticResult.debug.rateOfReturn),
         potOdds: probabilisticResult.debug.potOdds,
@@ -497,6 +538,8 @@ ${toolsJson}`;
         fcrBucket: probabilisticResult.debug.fcrBucket,
         actionCacheHit: false,
         isBluffing,
+        bluffDetected: args.bluffDetected,
+        believesPlayer,
         inputPrompt: fullPrompt,
         outputRaw: response,
         outputParsed: JSON.stringify(toAIBettingDecision(decision)),
@@ -522,9 +565,14 @@ ${toolsJson}`;
         ...args,
         category: "ai_betting",
         action: decision.action,
+        executedAction: decision.action,
         raiseAmount: decision.raiseAmount,
         difficulty,
         personality,
+        provider: "deterministic",
+        promptTemplate: "betting_tooluse",
+        decisionSource: "fallback",
+        fallbackReason: "llm_error",
         handStrength: decision.confidence,
         rateOfReturn: finiteTraceNumber(probabilisticDebug.rateOfReturn),
         potOdds: probabilisticDebug.potOdds,
@@ -532,6 +580,8 @@ ${toolsJson}`;
         probabilisticAction: decision.probabilisticResult.action,
         fcrBucket: probabilisticDebug.fcrBucket,
         actionCacheHit: false,
+        bluffDetected: args.bluffDetected,
+        believesPlayer,
         outputParsed: JSON.stringify(toAIBettingDecision(decision)),
         usedFallback: true,
         success: false,
@@ -646,6 +696,7 @@ export const aiSubmitWord = internalAction({
       )
     ),
     timeoutMs: v.optional(v.number()),
+    bluffDetected: v.optional(v.boolean()),
     believesPlayer: v.optional(v.union(v.literal(true), v.literal(false), v.null())),
     gameId: v.optional(v.id("games")),
     roomId: v.optional(v.id("rooms")),
@@ -687,8 +738,17 @@ export const aiSubmitWord = internalAction({
         category: "ai_showdown",
         difficulty,
         personality,
+        provider: "deterministic",
+        promptTemplate: "showdown_tooluse",
+        decisionSource: "fallback",
+        fallbackReason:
+          SHOWDOWN_MODE === AI_SHOWDOWN_MODE.DETERMINISTIC
+            ? "deterministic_mode"
+            : "openrouter_not_configured",
         wordSubmitted: result.word,
         wordScore: result.estimatedScore,
+        bluffDetected: args.bluffDetected,
+        believesPlayer,
         outputParsed: JSON.stringify(result),
         usedFallback: true,
         metadata: {
@@ -816,6 +876,14 @@ ${toolsJson}`;
             inputPrompt: fullPrompt,
             outputRaw: response,
             outputParsed: JSON.stringify(result),
+            provider: "openrouter",
+            latencyMs,
+            promptTemplate: "showdown_tooluse",
+            decisionSource: "llm",
+            llmWord,
+            validationResult: "valid",
+            bluffDetected: args.bluffDetected,
+            believesPlayer,
             usedFallback: false,
             metadata: { latencyMs, llmWord },
           });
@@ -842,6 +910,15 @@ ${toolsJson}`;
         model,
         wordSubmitted: result.word,
         wordScore: result.estimatedScore,
+        provider: "deterministic",
+        latencyMs,
+        promptTemplate: "showdown_tooluse",
+        decisionSource: "fallback",
+        llmWord,
+        validationResult: llmWord ? "invalid" : "missing",
+        fallbackReason: "llm_word_failed_validation",
+        bluffDetected: args.bluffDetected,
+        believesPlayer,
         inputPrompt: fullPrompt,
         outputRaw: response,
         outputParsed: JSON.stringify(result),
@@ -866,8 +943,14 @@ ${toolsJson}`;
         category: "ai_showdown",
         difficulty,
         personality,
+        provider: "deterministic",
+        promptTemplate: "showdown_tooluse",
+        decisionSource: "fallback",
+        fallbackReason: "llm_error",
         wordSubmitted: result.word,
         wordScore: result.estimatedScore,
+        bluffDetected: args.bluffDetected,
+        believesPlayer,
         outputParsed: JSON.stringify(result),
         usedFallback: true,
         success: false,

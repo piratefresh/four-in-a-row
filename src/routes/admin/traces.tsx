@@ -4,7 +4,12 @@ import type { ReactNode } from "react";
 import { useQuery } from "convex/react";
 import { Activity, Bell, Database, RefreshCw } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
-import { TraceFilters, type TraceGroup } from "@/components/admin/TraceFilters";
+import {
+  TraceFilters,
+  type TraceComponentFilter,
+  type TraceDecisionSourceFilter,
+  type TraceGroup,
+} from "@/components/admin/TraceFilters";
 import { TraceTable } from "@/components/admin/TraceTable";
 
 export const Route = createFileRoute("/admin/traces")({
@@ -18,6 +23,11 @@ export const Route = createFileRoute("/admin/traces")({
 
 function AdminTracesPage() {
   const [group, setGroup] = useState<TraceGroup>("all");
+  const [component, setComponent] = useState<TraceComponentFilter>("all");
+  const [decisionSource, setDecisionSource] = useState<TraceDecisionSourceFilter>("all");
+  const [difficulty, setDifficulty] = useState("");
+  const [character, setCharacter] = useState("");
+  const [gameId, setGameId] = useState("");
   const [search, setSearch] = useState("");
   const [botOnly, setBotOnly] = useState(false);
   const [fallbackOnly, setFallbackOnly] = useState(false);
@@ -105,6 +115,16 @@ function AdminTracesPage() {
             <TraceFilters
               group={group}
               onGroupChange={setGroup}
+              component={component}
+              onComponentChange={setComponent}
+              decisionSource={decisionSource}
+              onDecisionSourceChange={setDecisionSource}
+              difficulty={difficulty}
+              onDifficultyChange={setDifficulty}
+              character={character}
+              onCharacterChange={setCharacter}
+              gameId={gameId}
+              onGameIdChange={setGameId}
               search={search}
               onSearchChange={setSearch}
               botOnly={botOnly}
@@ -119,6 +139,11 @@ function AdminTracesPage() {
               <TraceTable
                 traces={traces}
                 group={group}
+                component={component}
+                decisionSource={decisionSource}
+                difficulty={difficulty}
+                character={character}
+                gameId={gameId}
                 search={search}
                 botOnly={botOnly}
                 fallbackOnly={fallbackOnly}

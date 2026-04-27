@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 
 const traceCategoryValidator = v.union(
   v.literal("game_start"),
@@ -20,7 +21,17 @@ const traceInputValidator = {
   playerName: v.optional(v.string()),
   characterId: v.optional(v.string()),
   isBot: v.optional(v.boolean()),
+  component: v.optional(v.string()),
+  operation: v.optional(v.string()),
+  decisionSource: v.optional(v.string()),
+  latencyMs: v.optional(v.number()),
+  provider: v.optional(v.string()),
+  promptTemplate: v.optional(v.string()),
+  cacheStatus: v.optional(v.string()),
+  qualityFlags: v.optional(v.array(v.string())),
   action: v.optional(v.string()),
+  executedAction: v.optional(v.string()),
+  actionOverrideReason: v.optional(v.string()),
   stage: v.optional(v.string()),
   previousStage: v.optional(v.string()),
   tilesRevealed: v.optional(v.string()),
@@ -46,12 +57,20 @@ const traceInputValidator = {
   fcrBucket: v.optional(v.string()),
   actionCacheHit: v.optional(v.boolean()),
   isBluffing: v.optional(v.boolean()),
+  bluffDetected: v.optional(v.boolean()),
+  believesPlayer: v.optional(v.union(v.literal(true), v.literal(false), v.null())),
+  llmWord: v.optional(v.string()),
+  validationResult: v.optional(v.string()),
+  fallbackReason: v.optional(v.string()),
   inputPrompt: v.optional(v.string()),
   outputRaw: v.optional(v.string()),
   outputParsed: v.optional(v.string()),
   usedFallback: v.optional(v.boolean()),
   dialogueTrigger: v.optional(v.string()),
   dialogueMessage: v.optional(v.string()),
+  dialogueSource: v.optional(v.string()),
+  dialogueSent: v.optional(v.boolean()),
+  dialogueSuppressedReason: v.optional(v.string()),
   success: v.optional(v.boolean()),
   error: v.optional(v.string()),
   metadata: v.optional(v.any()),
@@ -60,8 +79,10 @@ const traceInputValidator = {
 export const insertGameTrace = internalMutation({
   args: traceInputValidator,
   handler: async (ctx, args) => {
+    const normalized = withTraceDefaults(args);
     return await ctx.db.insert("gameTraces", stripUndefined({
       ...args,
+      ...normalized,
       success: args.success ?? true,
       createdAt: Date.now(),
     }) as any);
@@ -109,4 +130,54 @@ function stripUndefined(value: unknown): unknown {
   }
 
   return value;
+}
+
+function withTraceDefaults(args: {
+  category: string;
+  component?: string;
+  operation?: string;
+  decisionSource?: string;
+  usedFallback?: boolean;
+  cacheStatus?: string;
+  provider?: string;
+  actionCacheHit?: boolean;
+}): Partial<Doc<"gameTraces">> {
+  const isAiTrace = args.category.startsWith("ai_");
+  const component = args.component ?? getDefaultComponent(args.category);
+  const operation = args.operation ?? args.category;
+  const decisionSource =
+    args.decisionSource ??
+    getDefaultDecisionSource({
+      category: args.category,
+      usedFallback: args.usedFallback,
+      cacheStatus: args.cacheStatus,
+      provider: args.provider,
+    });
+
+  return {
+    component,
+    operation,
+    decisionSource,
+    provider: args.provider ?? (isAiTrace && !args.usedFallback ? "openrouter" : undefined),
+    cacheStatus: args.cacheStatus ?? (args.actionCacheHit ? "hit" : undefined),
+  };
+}
+
+function getDefaultComponent(category: string) {
+  if (category === "ai_dialogue") return "dialogue";
+  if (category.startsWith("ai_")) return "ai";
+  if (category === "showdown_submit") return "showdown";
+  return "game";
+}
+
+function getDefaultDecisionSource(args: {
+  category: string;
+  usedFallback?: boolean;
+  cacheStatus?: string;
+  provider?: string;
+}) {
+  if (!args.category.startsWith("ai_")) return "game";
+  if (args.cacheStatus === "hit") return "cache";
+  if (args.usedFallback) return "fallback";
+  return args.provider ?? "llm";
 }

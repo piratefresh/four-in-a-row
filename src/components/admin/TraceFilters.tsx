@@ -11,10 +11,22 @@ export type TraceCategory =
   | "ai_dialogue";
 
 export type TraceGroup = "all" | "game" | "ai" | "dialogue";
+export type TraceComponentFilter = "all" | "game" | "ai" | "showdown" | "dialogue";
+export type TraceDecisionSourceFilter = "all" | "game" | "llm" | "fallback" | "cache" | "template";
 
 type TraceFiltersProps = {
   group: TraceGroup;
   onGroupChange: (group: TraceGroup) => void;
+  component: TraceComponentFilter;
+  onComponentChange: (component: TraceComponentFilter) => void;
+  decisionSource: TraceDecisionSourceFilter;
+  onDecisionSourceChange: (decisionSource: TraceDecisionSourceFilter) => void;
+  difficulty: string;
+  onDifficultyChange: (difficulty: string) => void;
+  character: string;
+  onCharacterChange: (character: string) => void;
+  gameId: string;
+  onGameIdChange: (gameId: string) => void;
   search: string;
   onSearchChange: (search: string) => void;
   botOnly: boolean;
@@ -32,9 +44,36 @@ const GROUPS: Array<{ value: TraceGroup; label: string }> = [
   { value: "dialogue", label: "Dialogue" },
 ];
 
+const COMPONENTS: Array<{ value: TraceComponentFilter; label: string }> = [
+  { value: "all", label: "Any component" },
+  { value: "game", label: "Game" },
+  { value: "ai", label: "AI" },
+  { value: "showdown", label: "Showdown" },
+  { value: "dialogue", label: "Dialogue" },
+];
+
+const DECISION_SOURCES: Array<{ value: TraceDecisionSourceFilter; label: string }> = [
+  { value: "all", label: "Any source" },
+  { value: "game", label: "Game" },
+  { value: "llm", label: "LLM" },
+  { value: "fallback", label: "Fallback" },
+  { value: "cache", label: "Cache" },
+  { value: "template", label: "Template" },
+];
+
 export function TraceFilters({
   group,
   onGroupChange,
+  component,
+  onComponentChange,
+  decisionSource,
+  onDecisionSourceChange,
+  difficulty,
+  onDifficultyChange,
+  character,
+  onCharacterChange,
+  gameId,
+  onGameIdChange,
   search,
   onSearchChange,
   botOnly,
@@ -80,6 +119,36 @@ export function TraceFilters({
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Filters
         </span>
+        <SelectFilter
+          label="Component"
+          value={component}
+          options={COMPONENTS}
+          onChange={(value) => onComponentChange(value as TraceComponentFilter)}
+        />
+        <SelectFilter
+          label="Source"
+          value={decisionSource}
+          options={DECISION_SOURCES}
+          onChange={(value) => onDecisionSourceChange(value as TraceDecisionSourceFilter)}
+        />
+        <TextFilter
+          label="Difficulty"
+          value={difficulty}
+          placeholder="easy, medium, hard"
+          onChange={onDifficultyChange}
+        />
+        <TextFilter
+          label="Character"
+          value={character}
+          placeholder="nora, jax..."
+          onChange={onCharacterChange}
+        />
+        <TextFilter
+          label="Game"
+          value={gameId}
+          placeholder="game id"
+          onChange={onGameIdChange}
+        />
         <FilterChip
           label="Bots"
           active={botOnly}
@@ -97,6 +166,59 @@ export function TraceFilters({
         />
       </div>
     </div>
+  );
+}
+
+function SelectFilter({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 rounded-sm border border-white/10 bg-white/[0.03] px-2 py-1 text-white/55">
+      <span>{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="bg-transparent text-white outline-none"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value} className="bg-[#0c0d10]">
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TextFilter({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 rounded-sm border border-white/10 bg-white/[0.03] px-2 py-1 text-white/55">
+      <span>{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-24 bg-transparent text-white outline-none placeholder:text-white/30"
+      />
+    </label>
   );
 }
 

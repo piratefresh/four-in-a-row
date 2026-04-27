@@ -11,11 +11,21 @@ import {
 } from "@/components/ui/table";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { TraceDetail } from "./TraceDetail";
-import type { TraceCategory, TraceGroup } from "./TraceFilters";
+import type {
+  TraceCategory,
+  TraceComponentFilter,
+  TraceDecisionSourceFilter,
+  TraceGroup,
+} from "./TraceFilters";
 
 type TraceTableProps = {
   traces: Doc<"gameTraces">[];
   group: TraceGroup;
+  component: TraceComponentFilter;
+  decisionSource: TraceDecisionSourceFilter;
+  difficulty: string;
+  character: string;
+  gameId: string;
   search: string;
   botOnly: boolean;
   fallbackOnly: boolean;
@@ -43,6 +53,11 @@ const GROUP_CATEGORIES: Record<TraceGroup, TraceCategory[]> = {
 export function TraceTable({
   traces,
   group,
+  component,
+  decisionSource,
+  difficulty,
+  character,
+  gameId,
   search,
   botOnly,
   fallbackOnly,
@@ -52,11 +67,43 @@ export function TraceTable({
   const filteredTraces = useMemo(() => {
     const groupCategories = GROUP_CATEGORIES[group];
     const normalizedSearch = search.trim().toLowerCase();
+    const normalizedDifficulty = difficulty.trim().toLowerCase();
+    const normalizedCharacter = character.trim().toLowerCase();
+    const normalizedGameId = gameId.trim().toLowerCase();
 
     return traces.filter((trace) => {
       if (
         groupCategories.length > 0 &&
         !groupCategories.includes(trace.category)
+      ) {
+        return false;
+      }
+      if (component !== "all" && trace.component !== component) return false;
+      if (
+        decisionSource !== "all" &&
+        trace.decisionSource !== decisionSource
+      ) {
+        return false;
+      }
+      if (
+        normalizedDifficulty &&
+        trace.difficulty?.toLowerCase() !== normalizedDifficulty
+      ) {
+        return false;
+      }
+      if (
+        normalizedCharacter &&
+        ![trace.characterId, trace.playerName, trace.personality]
+          .filter(Boolean)
+          .some((value) =>
+            String(value).toLowerCase().includes(normalizedCharacter),
+          )
+      ) {
+        return false;
+      }
+      if (
+        normalizedGameId &&
+        !String(trace.gameId).toLowerCase().includes(normalizedGameId)
       ) {
         return false;
       }
@@ -67,14 +114,22 @@ export function TraceTable({
 
       return [
         trace.category,
+        trace.component,
+        trace.operation,
+        trace.decisionSource,
         trace.playerName,
         trace.playerId,
         trace.characterId,
         trace.action,
+        trace.executedAction,
+        trace.actionOverrideReason,
         trace.stage,
         trace.wordSubmitted,
         trace.winnerWord,
         trace.dialogueMessage,
+        trace.dialogueSource,
+        trace.fallbackReason,
+        trace.validationResult,
         trace.inputPrompt,
         trace.outputRaw,
         trace.outputParsed,
@@ -82,7 +137,19 @@ export function TraceTable({
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalizedSearch));
     });
-  }, [botOnly, failedOnly, fallbackOnly, group, search, traces]);
+  }, [
+    botOnly,
+    character,
+    component,
+    decisionSource,
+    difficulty,
+    failedOnly,
+    fallbackOnly,
+    gameId,
+    group,
+    search,
+    traces,
+  ]);
 
   if (filteredTraces.length === 0) {
     return (
@@ -204,6 +271,9 @@ function getPrimarySignal(trace: Doc<"gameTraces">) {
 function getTraceDetails(trace: Doc<"gameTraces">) {
   if (trace.dialogueMessage) return trace.dialogueMessage;
   if (trace.error) return trace.error;
+  if (trace.actionOverrideReason) return trace.actionOverrideReason;
+  if (trace.fallbackReason) return `fallback: ${trace.fallbackReason}`;
+  if (trace.validationResult) return `validation: ${trace.validationResult}`;
   if (trace.handStrength !== undefined) {
     const bluff = trace.isBluffing ? "bluff" : "no bluff";
     return `HS ${trace.handStrength.toFixed(2)} . ${bluff}`;
