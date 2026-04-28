@@ -13,7 +13,7 @@
     "test:e2e:trace": "playwright show-trace",
     "test:e2e:ui": "playwright test --ui",
     "generate:csw24-index": "node scripts/generate-csw24-index.mjs",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "bun run build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
