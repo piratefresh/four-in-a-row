@@ -3,7 +3,6 @@ export {
   canReuseLinkedNextRoom,
   normalizeName,
   normalizeRoomCode,
-  isLegacySeedHostName,
   isTutorialRoom,
   isPlayerInactive,
   getActivePlayersInRoom,
@@ -21,7 +20,6 @@ export {
 } from "./rooms/helpers";
 
 export {
-  createOpenRoom,
   reapInactivePlayersForRoom,
   reapInactivePlayersAcrossOpenRooms,
   closeStaleScoreboardRooms,
@@ -55,10 +53,7 @@ export {
   leaveCurrentRoom,
   heartbeat,
   heartbeatByCode,
-  ensureSeedRooms,
-  refreshOpenRooms,
   toggleReady,
-  clearAllData,
   runCronCleanup,
   listRooms,
   getRoomMembers,

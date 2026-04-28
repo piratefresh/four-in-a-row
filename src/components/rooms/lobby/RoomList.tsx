@@ -9,10 +9,8 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
-import {
-  RoomCard,
-  roomCardGridColumnsClassName,
-} from "./RoomCard";
+import { RoomCard, roomCardGridColumnsClassName } from "./RoomCard";
+import { Button } from "@/components/ui/button";
 
 type RoomListItem = {
   _id: string;
@@ -105,7 +103,7 @@ export function RoomList({
 
   if (rooms === undefined) {
     return (
-      <div className="py-8 text-center text-sm text-slate-400">
+      <div className="py-8 text-center text-sm text-cream/50">
         Loading rooms...
       </div>
     );
@@ -113,7 +111,7 @@ export function RoomList({
 
   if (rooms.length === 0) {
     return (
-      <div className="py-8 text-center text-sm text-slate-400">
+      <div className="py-8 text-center text-sm text-cream/50">
         No active games yet.
       </div>
     );
@@ -123,83 +121,89 @@ export function RoomList({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-transparent px-4">
-        <div
-          className={`grid ${roomCardGridColumnsClassName} gap-3 text-[11px] uppercase tracking-[0.22em] text-slate-500`}
-        >
-          {headerGroups[0]?.headers.map((header) => (
+      <div className="overflow-x-auto">
+        <div className="min-w-max space-y-2">
+          <div className="rounded-2xl border border-cream/10 bg-cream/5 px-4 py-2">
             <div
-              key={header.id}
-              className={
-                header.id === "activePlayers" || header.id === "lastActiveAt" || header.id === "createdAt"
-                  ? "text-right"
-                  : ""
-              }
+              className={`grid ${roomCardGridColumnsClassName} gap-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gold`}
             >
-              <button
-                type="button"
-                onClick={header.column.getToggleSortingHandler()}
-                className={`flex items-center gap-1 transition-colors hover:text-slate-300 ${
-                  header.id === "activePlayers" || header.id === "lastActiveAt" || header.id === "createdAt"
-                    ? "justify-end"
-                    : ""
-                }`}
-              >
-                {flexRender(
-                  header.column.columnDef.header,
-                  header.getContext(),
-                )}
-                {header.column.getCanSort() && (
-                  <span className="inline-flex">
-                    {header.column.getIsSorted() === "desc" ? (
-                      <ArrowDown className="h-3 w-3" />
-                    ) : header.column.getIsSorted() === "asc" ? (
-                      <ArrowUp className="h-3 w-3" />
-                    ) : (
-                      <ChevronsUpDown className="h-3 w-3 opacity-50" />
+              {headerGroups[0]?.headers.map((header) => (
+                <div
+                  key={header.id}
+                  className={
+                    header.id === "activePlayers" ||
+                    header.id === "lastActiveAt" ||
+                    header.id === "createdAt"
+                      ? "text-right"
+                      : ""
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={header.column.getToggleSortingHandler()}
+                    className={`flex items-center gap-1 transition-colors hover:text-gold-bright ${
+                      header.id === "activePlayers" ||
+                      header.id === "lastActiveAt" ||
+                      header.id === "createdAt"
+                        ? "justify-end"
+                        : ""
+                    }`}
+                  >
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
                     )}
-                  </span>
-                )}
-              </button>
+                    {header.column.getCanSort() && (
+                      <span className="inline-flex">
+                        {header.column.getIsSorted() === "desc" ? (
+                          <ArrowDown className="h-3 w-3" />
+                        ) : header.column.getIsSorted() === "asc" ? (
+                          <ArrowUp className="h-3 w-3" />
+                        ) : (
+                          <ChevronsUpDown className="h-3 w-3 opacity-50" />
+                        )}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {table.getRowModel().rows.map((row) => (
+            <div key={row.id}>
+              {flexRender(
+                row.getVisibleCells()[0].column.columnDef.cell,
+                row.getVisibleCells()[0].getContext(),
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      <div className="space-y-2">
-        {table.getRowModel().rows.map((row) => (
-          <div key={row.id}>
-            {flexRender(
-              row.getVisibleCells()[0].column.columnDef.cell,
-              row.getVisibleCells()[0].getContext(),
-            )}
-          </div>
-        ))}
-      </div>
-
       {table.getPageCount() > 1 && (
         <div className="flex items-center justify-between gap-4 pt-2">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-cream/50">
             Page {table.getState().pagination.pageIndex + 1} of{" "}
             {table.getPageCount()}
           </p>
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              variant="secondary"
             >
               Previous
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              variant="primary"
             >
               Next
-            </button>
+            </Button>
           </div>
         </div>
       )}

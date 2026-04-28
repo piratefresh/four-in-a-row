@@ -1,5 +1,6 @@
 import { RoomList } from "@/components/rooms/lobby/RoomList";
 import { StatCard } from "@/components/rooms/lobby/StatCard";
+import { Button } from "../ui/button";
 
 type RoomListItem = {
   _id: string;
@@ -15,7 +16,7 @@ type OnlineRoomsProps = {
   activeRoomTutorialId?: string | null;
   joinMessage: string | null;
   joiningRoomCode: string | null;
-  isRefreshingRooms: boolean;
+  isCreatingRoom: boolean;
   rooms: RoomListItem[] | undefined;
   stats:
     | {
@@ -26,7 +27,7 @@ type OnlineRoomsProps = {
       }
     | undefined;
   onOpenRoom: (roomCode: string) => void;
-  onRefreshRooms: () => void;
+  onCreateRoom: () => void;
   onResumeRoom?: () => void;
 };
 
@@ -35,15 +36,15 @@ export function OnlineRooms({
   activeRoomTutorialId,
   joinMessage,
   joiningRoomCode,
-  isRefreshingRooms,
+  isCreatingRoom,
   rooms,
   stats,
   onOpenRoom,
-  onRefreshRooms,
+  onCreateRoom,
   onResumeRoom,
 }: OnlineRoomsProps) {
   return (
-    <main className="min-h-screen bg-[#040505] text-white">
+    <main className="min-h-screen bg-felt text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {activeRoomCode ? (
@@ -59,30 +60,18 @@ export function OnlineRooms({
           ) : null}
         </div>
 
-        <section className="rounded-[2rem] border border-white/8 bg-[linear-gradient(160deg,rgba(17,22,17,0.98),rgba(5,6,5,0.96))] px-5 py-6 shadow-[0_24px_70px_rgba(0,0,0,0.42)] sm:px-7">
-          <p className="text-[11px] uppercase tracking-[0.34em] text-[#d2ae56]">
+        <section className="">
+          <h2 className="font-display uppercase text-gold font-bold text-2xl">
             Online Rooms
-          </p>
-          <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
-            <div className="max-w-2xl">
-              <h1 className="font-serif text-4xl tracking-tight text-[#fbf6ea] sm:text-5xl">
-                Pick an open room.
-              </h1>
-              <p className="mt-3 text-sm leading-6 text-[#c8c4b8] sm:text-base">
-                Join a live table, grab an open seat, and play against whoever
-                is already waiting.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onRefreshRooms}
-              disabled={isRefreshingRooms}
-              className="rounded-full border border-[#d7b45e]/35 bg-[linear-gradient(180deg,#ffd861_0%,#b88a1b_100%)] px-5 py-3 text-sm font-semibold text-[#261701] shadow-[0_10px_24px_rgba(0,0,0,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isRefreshingRooms ? "Creating..." : "Create new room"}
-            </button>
-          </div>
+          </h2>
+          <Button
+            type="button"
+            onClick={onCreateRoom}
+            disabled={isCreatingRoom}
+            className="border-gold-bright bg-gold font-display font-bold text-felt-deep"
+          >
+            {isCreatingRoom ? "Creating..." : "Create new room"}
+          </Button>
         </section>
 
         <div className="flex gap-2 overflow-x-auto">
@@ -107,13 +96,13 @@ export function OnlineRooms({
           </div>
         ) : null}
 
-        <section className="flex-1 rounded-[2rem] border border-white/8 bg-[linear-gradient(180deg,rgba(11,12,11,0.98),rgba(5,5,5,0.96))] p-4 shadow-[0_24px_70px_rgba(0,0,0,0.42)] sm:p-6">
+        <div className="min-w-0 overflow-x-auto">
           <RoomList
             rooms={rooms}
             joiningRoomCode={joiningRoomCode}
             onOpenRoom={onOpenRoom}
           />
-        </section>
+        </div>
       </div>
     </main>
   );

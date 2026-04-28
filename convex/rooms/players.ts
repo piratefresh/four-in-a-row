@@ -6,7 +6,6 @@ import {
   findFirstAvailableSeat,
   getOfflineBotSourcePlayers,
   isTutorialRoom,
-  shouldCreateReplacementOpenRoom,
   getActivePlayersInRoom,
   getAnyActiveAuthedPlayer,
   getActiveAuthedPlayerInRoom,
@@ -60,10 +59,6 @@ export async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
       hostPlayerId: undefined,
       lastActiveAt: now,
     });
-
-    if (shouldCreateReplacementOpenRoom(room)) {
-      await createOpenRoom(ctx);
-    }
 
     return {
       ok: true,

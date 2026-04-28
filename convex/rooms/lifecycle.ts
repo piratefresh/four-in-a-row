@@ -2,7 +2,6 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
   STALE_SCOREBOARD_ROOM_MS,
-  shouldCreateReplacementOpenRoom,
   isPlayerInactive,
   getActivePlayersInRoom,
   generateUniqueRoomCode,
@@ -94,9 +93,6 @@ export async function reapInactivePlayersForRoom(
       hostPlayerId: undefined,
       lastActiveAt: now,
     });
-    if (shouldCreateReplacementOpenRoom(room)) {
-      await createOpenRoom(ctx);
-    }
 
     return {
       stalePlayersRemoved: stalePlayers.length,
@@ -192,9 +188,6 @@ export async function closeStaleScoreboardRooms(ctx: MutationCtx) {
       hostPlayerId: undefined,
       lastActiveAt: now,
     });
-    if (shouldCreateReplacementOpenRoom(room)) {
-      await createOpenRoom(ctx);
-    }
     closed += 1;
   }
 

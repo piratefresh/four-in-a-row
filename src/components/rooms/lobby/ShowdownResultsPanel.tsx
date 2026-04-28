@@ -37,8 +37,10 @@ export function ShowdownResultsPanel({
   getPlayerAvatar: (id: string) => string | null;
 }) {
   return (
-    <div className="mb-3 rounded-md border border-purple-700 bg-purple-950/40 p-4">
-      <h3 className="mb-3 text-lg font-bold text-purple-300">Showdown Results</h3>
+    <div className="mb-3 rounded-md border border-purple-700 p-4">
+      <h3 className="mb-3 text-lg font-bold text-purple-300">
+        Showdown Results
+      </h3>
 
       {showdownResults.hasWinner ? (
         <>
@@ -64,7 +66,8 @@ export function ShowdownResultsPanel({
                       {showdownResults.winningScoreBreakdown.basePoints}
                     </p>
                     <p>
-                      Multiplier Bonus: {showdownResults.winningScoreBreakdown.multiplierBonus}
+                      Multiplier Bonus:{" "}
+                      {showdownResults.winningScoreBreakdown.multiplierBonus}
                     </p>
                     <p>
                       Full Rack Bonus:{" "}
@@ -80,74 +83,86 @@ export function ShowdownResultsPanel({
             )}
           </div>
 
-          {showdownResults.allSubmissions && showdownResults.allSubmissions.length > 0 && (
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-300">
-                All Submissions
-              </p>
-              <div className="space-y-2">
-                {showdownResults.allSubmissions.map((submission) => {
-                  const isForfeited = submission.status === "forfeited" || submission.status === "no-submission";
-                  return (
-                    <div
-                      key={submission.playerId}
-                      className={`rounded-md border p-2 text-sm ${
-                        submission.playerId === showdownResults.winnerId
-                          ? "border-amber-500 bg-amber-500/5"
-                          : isForfeited
-                            ? "border-slate-700 bg-slate-900/50"
-                            : "border-slate-600 bg-slate-800/50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8 border border-white/10">
-                            <AvatarImage
-                              src={getPlayerAvatar(submission.playerId) ?? undefined}
-                              alt={`${getPlayerName(submission.playerId)} avatar`}
-                            />
-                            <AvatarFallback className="bg-slate-700 text-xs font-semibold text-white">
-                              {getInitials(getPlayerName(submission.playerId))}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <span className="font-semibold text-slate-200">
-                              {submission.playerId === playerId
-                                ? "You"
-                                : getPlayerName(submission.playerId)}
-                            </span>
-                            <span className="mx-2 text-slate-400">|</span>
-                            {isForfeited ? (
-                              <span className="italic text-slate-500">
-                                Forfeited
+          {showdownResults.allSubmissions &&
+            showdownResults.allSubmissions.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-300">
+                  All Submissions
+                </p>
+                <div className="space-y-2">
+                  {showdownResults.allSubmissions.map((submission) => {
+                    const isForfeited =
+                      submission.status === "forfeited" ||
+                      submission.status === "no-submission";
+                    return (
+                      <div
+                        key={submission.playerId}
+                        className={`rounded-md border p-2 text-sm ${
+                          submission.playerId === showdownResults.winnerId
+                            ? "border-amber-500 bg-amber-500/5"
+                            : isForfeited
+                              ? "border-slate-700 bg-slate-900/50"
+                              : "border-slate-600 bg-slate-800/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-8 w-8 border border-white/10">
+                              <AvatarImage
+                                src={
+                                  getPlayerAvatar(submission.playerId) ??
+                                  undefined
+                                }
+                                alt={`${getPlayerName(submission.playerId)} avatar`}
+                              />
+                              <AvatarFallback className="bg-slate-700 text-xs font-semibold text-white">
+                                {getInitials(
+                                  getPlayerName(submission.playerId),
+                                )}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <span className="font-semibold text-slate-200">
+                                {submission.playerId === playerId
+                                  ? "You"
+                                  : getPlayerName(submission.playerId)}
                               </span>
-                            ) : (
-                              <span className="font-bold text-white">
-                                {submission.word?.toUpperCase()}
-                              </span>
-                            )}
+                              <span className="mx-2 text-slate-400">|</span>
+                              {isForfeited ? (
+                                <span className="italic text-slate-500">
+                                  Forfeited
+                                </span>
+                              ) : (
+                                <span className="font-bold text-white">
+                                  {submission.word?.toUpperCase()}
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          <span
+                            className={`font-bold ${isForfeited ? "text-slate-600" : "text-cyan-300"}`}
+                          >
+                            {submission.score} pts
+                          </span>
                         </div>
-                        <span className={`font-bold ${isForfeited ? "text-slate-600" : "text-cyan-300"}`}>
-                          {submission.score} pts
-                        </span>
+                        {!isForfeited && submission.scoreBreakdown && (
+                          <div className="mt-1 text-xs text-slate-400">
+                            Base: {submission.scoreBreakdown.basePoints} | Mult:{" "}
+                            {submission.scoreBreakdown.multiplierBonus} | Rack:{" "}
+                            {submission.scoreBreakdown.fullRackBonus}
+                          </div>
+                        )}
                       </div>
-                      {!isForfeited && submission.scoreBreakdown && (
-                        <div className="mt-1 text-xs text-slate-400">
-                          Base: {submission.scoreBreakdown.basePoints} | Mult:{" "}
-                          {submission.scoreBreakdown.multiplierBonus} | Rack:{" "}
-                          {submission.scoreBreakdown.fullRackBonus}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </>
       ) : (
-        <p className="text-sm text-slate-300">No winner - no eligible submissions.</p>
+        <p className="text-sm text-slate-300">
+          No winner - no eligible submissions.
+        </p>
       )}
     </div>
   );

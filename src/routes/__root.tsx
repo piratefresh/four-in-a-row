@@ -140,8 +140,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="bg-black text-white">
-<AppTourProvider>
+      <body className="bg-felt text-cream">
+        <AppTourProvider>
           <div className="flex min-h-dvh flex-col">
             <Header />
             <VerifyEmailBanner />

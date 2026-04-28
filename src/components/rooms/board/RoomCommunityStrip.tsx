@@ -1,4 +1,4 @@
-import { WordTile, type WordTileSize } from "../table/WordTile";
+import { WordTile, type WordTileSize } from "../table/word-tile-v2";
 
 type CommunityStripTile =
   | {
@@ -83,7 +83,7 @@ export function RoomCommunityStrip({
                     isChoice={isChoice}
                     showValue={isRevealed}
                     size={tileSize}
-                    variant={isRevealed ? "community" : "hidden"}
+                    variant={isRevealed ? "community" : "empty"}
                   />
                 </div>
               );

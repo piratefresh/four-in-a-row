@@ -1,5 +1,5 @@
 import type { Step, Tour } from "nextstepjs";
-import { WordTile } from "@/components/rooms/table/WordTile";
+import { WordTile } from "@/components/rooms/table/word-tile-v2";
 import { calculateShowdownPreviewScore } from "@/lib/showdownScore";
 
 export type TutorialStep = Step & {

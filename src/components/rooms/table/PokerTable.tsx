@@ -69,8 +69,8 @@ export function PokerTable({
       className={`relative mx-auto ${size ? tableSizeClasses[size] : "w-[300px] h-[250px]"} ${className ?? ""}`}
     >
       <div className={`absolute ${shellInsetClassName}`}>
-        <div className="relative h-full w-full rounded-[50%/40%] border-[3px] border-[#3a2815] bg-[radial-gradient(circle_at_50%_38%,#2d5016_0%,#1a3010_70%,#0f1d08_100%)] shadow-[inset_0_0_40px_rgba(0,0,0,0.6),0_10px_30px_rgba(0,0,0,0.5)]">
-          <div className="absolute inset-3 rounded-[50%/40%] border border-[#f4d37a]/60"></div>
+        <div className="relative h-full w-full rounded-[50%/40%] border-[3px] border-felt-deep bg-gradient-felt-table shadow-[inset_0_0_40px_rgba(0,0,0,0.6),0_10px_30px_rgba(0,0,0,0.5)]">
+          <div className="absolute inset-3 rounded-[50%/40%] border border-gold-bright/60"></div>
         </div>
       </div>
 

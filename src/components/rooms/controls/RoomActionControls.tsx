@@ -208,36 +208,36 @@ export function RoomActionControls({
                   disabled={utility.disableShuffle}
                 />
               ) : null}
-              <div className="rounded-2xl border border-[#2a2a2a] bg-[linear-gradient(180deg,rgba(18,18,18,0.96)_0%,rgba(10,10,10,0.98)_100%)] px-5 py-3 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_14px_30px_rgba(0,0,0,0.32)]">
+              <div className="rounded-lg border-b-[3px] border-gold bg-cream px-3 py-2.5 text-center text-[11px] leading-[1.3] text-ink shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.08, duration: 0.2 }}
                 >
-                  <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8f8876]">
+                  <div className="font-medium uppercase tracking-[0.18em] text-ink/60">
                     {betting.isTurnClockTarget && turnClockLabel
                       ? "You're On The Clock"
                       : "Waiting on"}
                   </div>
-                  <div className="mt-1 flex items-center justify-center gap-2 text-sm font-semibold text-[#f4d37a] sm:text-base">
+                  <div className="mt-1 flex items-center justify-center gap-2 font-semibold text-ink">
                     {betting.isTurnClockTarget && turnClockLabel
                       ? `You have ${turnClockLabel} to decide an action.`
                       : betting.currentTurnPlayerName
                         ? `${betting.currentTurnPlayerName}'s turn`
                         : "next player's turn"}
                     <span className="relative top-px inline-flex shrink-0 items-center gap-1 self-center">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-gold animate-bounce" />
                       <span
-                        className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce"
+                        className="h-1.5 w-1.5 rounded-full bg-gold animate-bounce"
                         style={{ animationDelay: "120ms" }}
                       />
                       <span
-                        className="h-1.5 w-1.5 rounded-full bg-[#f4d37a] animate-bounce"
+                        className="h-1.5 w-1.5 rounded-full bg-gold animate-bounce"
                         style={{ animationDelay: "240ms" }}
                       />
                     </span>
                   </div>
-                  <div className="mt-1 text-[11px] font-medium tracking-[0.12em] text-[#b8b19a]">
+                  <div className="mt-1 font-medium tracking-[0.12em] text-ink/65">
                     {turnClockLabel
                       ? `Clock called on ${turnClockSubjectLabel}${betting.turnClockCallerName ? ` by ${betting.turnClockCallerName}` : ""} - ${turnClockLabel}`
                       : null}

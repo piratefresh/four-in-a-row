@@ -126,10 +126,6 @@ export function isTutorialRoom(room: Pick<Doc<"rooms">, "tutorialId">) {
   return room.tutorialId !== undefined;
 }
 
-export function shouldCreateReplacementOpenRoom(room: Pick<Doc<"rooms">, "tutorialId">) {
-  return !isTutorialRoom(room);
-}
-
 export function canReuseLinkedNextRoom({
   roomStatus,
   activePlayerCount,

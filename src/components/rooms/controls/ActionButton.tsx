@@ -3,23 +3,23 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../../lib/utils";
 
 const actionButtonVariants = cva(
-  "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-xl border px-2.5 py-1 text-[12px] font-semibold tracking-[-0.01em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_18px_rgba(0,0,0,0.28)] transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-150 outline-none hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_24px_rgba(0,0,0,0.32)] active:translate-y-0 active:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_6px_14px_rgba(0,0,0,0.24)] disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-45 xs:min-h-10 xs:px-3.5 xs:py-2 xs:text-[14px] sm:min-h-11 sm:px-4 sm:py-2 sm:text-sm",
+  "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded border px-2 py-2 text-center font-mono text-[9px] uppercase tracking-[0.1em] transition-[background-color,border-color,color,opacity,transform] duration-150 outline-none hover:-translate-y-px active:translate-y-0 disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-45 focus-visible:ring-[3px] focus-visible:ring-gold/35 xs:min-h-10 xs:px-3 xs:text-[10px] sm:min-h-11 sm:px-4 sm:text-[11px]",
   {
     variants: {
       variant: {
         check:
-          "border-[#1f5f46] bg-[linear-gradient(180deg,#1d4f3d_0%,#123026_100%)] text-[#b9f2d0]",
-        call: "border-[#d7ae2b] bg-[linear-gradient(180deg,#f4d45d_0%,#b88917_100%)] text-[#2b1d08]",
+          "border-cream/20 bg-cream/10 text-cream hover:border-cream/30 hover:bg-cream/15",
+        call: "border-cream/20 bg-cream/10 text-cream hover:border-cream/30 hover:bg-cream/15",
         raise:
-          "border-[#404247] bg-[linear-gradient(180deg,#2f3034_0%,#1f2023_100%)] text-[#f6f3ee]",
+          "border-gold-bright bg-gold font-bold text-felt-deep hover:bg-gold-bright",
         fold:
-          "border-[#6f2222] bg-[linear-gradient(180deg,#291414_0%,#140b0b_100%)] text-[#ef6767]",
+          "border-game-red/30 bg-game-red/15 text-[#f0a6a6] hover:border-game-red/45 hover:bg-game-red/20",
         submit:
-          "border-[#d9bf68] bg-[linear-gradient(180deg,#f4e4ac_0%,#d7b85e_100%)] text-[#241708]",
+          "border-gold-bright bg-gold font-bold text-felt-deep hover:bg-gold-bright",
       },
       size: {
-        default: "min-w-[68px] xs:min-w-[96px] sm:min-w-[112px] sm:text-[15px]",
-        wide: "w-full xs:w-auto xs:min-w-[140px] sm:min-w-[156px] sm:text-[15px]",
+        default: "min-w-[68px] xs:min-w-[96px] sm:min-w-[112px]",
+        wide: "w-full xs:w-auto xs:min-w-[140px] sm:min-w-[156px]",
       },
     },
     defaultVariants: {

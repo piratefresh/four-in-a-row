@@ -56,7 +56,7 @@ export function CommunityCardsSection({ tiles, currentBet, betLabel }: Community
                 isChoice={isChoice}
                 showValue={false}
                 size="md"
-                variant={isRevealed ? 'community' : 'hidden'}
+                variant={isRevealed ? 'community' : 'empty'}
               />
             </div>
           )

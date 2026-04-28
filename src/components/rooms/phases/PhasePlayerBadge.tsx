@@ -54,6 +54,7 @@ type PhasePlayerBadgeProps = {
   blindPosition?: "dealer" | "small" | "big";
   isThinking?: boolean;
   mobileInfoPlacement?: "top" | "bottom";
+  infoLayout?: "card" | "compact";
 };
 
 export function PhasePlayerBadge({
@@ -74,6 +75,7 @@ export function PhasePlayerBadge({
   blindPosition,
   isThinking = false,
   mobileInfoPlacement = "bottom",
+  infoLayout = "card",
 }: PhasePlayerBadgeProps) {
   const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -88,9 +90,16 @@ export function PhasePlayerBadge({
     mobileInfoPlacement === "top"
       ? "bottom-full mb-2"
       : "top-full mt-2";
+  const statusLabel = isThinking
+    ? "Thinking..."
+    : actionLabel
+      ? actionLabel
+      : isActiveTurn
+        ? "Thinking..."
+        : "Waiting";
 
   useEffect(() => {
-    if (!mobileInfoOpen) return;
+    if (infoLayout !== "card" || !mobileInfoOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
@@ -111,7 +120,7 @@ export function PhasePlayerBadge({
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [mobileInfoOpen]);
+  }, [infoLayout, mobileInfoOpen]);
 
   const infoCardContent = (
     <>
@@ -150,10 +159,16 @@ export function PhasePlayerBadge({
         ) : null}
         <button
           type="button"
-          className="xs:pointer-events-none"
-          onClick={() => setMobileInfoOpen((open) => !open)}
-          aria-expanded={mobileInfoOpen}
-          aria-label={`Show player info for ${name}`}
+          className={infoLayout === "card" ? "xs:pointer-events-none" : ""}
+          onClick={
+            infoLayout === "card"
+              ? () => setMobileInfoOpen((open) => !open)
+              : undefined
+          }
+          aria-expanded={infoLayout === "card" ? mobileInfoOpen : undefined}
+          aria-label={
+            infoLayout === "card" ? `Show player info for ${name}` : `${name} avatar`
+          }
         >
           <Avatar
             className={`relative z-0 overflow-hidden rounded-full border bg-[#d7d0ff] ${
@@ -180,7 +195,7 @@ export function PhasePlayerBadge({
             </span>
           </div>
         )}
-        {mobileInfoOpen ? (
+        {infoLayout === "card" && mobileInfoOpen ? (
           <div
             className={`absolute left-1/2 z-50 w-max max-w-[160px] -translate-x-1/2 rounded-lg border border-slate-800 bg-black/96 px-2.5 py-2 text-center shadow-[0_10px_28px_rgba(0,0,0,0.45)] xs:hidden ${mobileInfoPopupClassName}`}
           >
@@ -188,15 +203,17 @@ export function PhasePlayerBadge({
           </div>
         ) : null}
       </div>
-      <div
-        className={`border border-slate-800 relative z-10 -mt-3 hidden min-w-20 flex-col items-center justify-center py-2 text-center xs:flex ${
-          isActiveTurn
-            ? "bg-black"
-            : "bg-black shadow-[0_6px_16px_rgba(0,0,0,0.35)]"
-        } ${infoCardClassName}`}
-      >
-        {infoCardContent}
-      </div>
+      {infoLayout === "card" ? (
+        <div
+          className={`border border-slate-800 relative z-10 -mt-3 hidden min-w-20 flex-col items-center justify-center py-2 text-center xs:flex ${
+            isActiveTurn
+              ? "bg-black"
+              : "bg-black shadow-[0_6px_16px_rgba(0,0,0,0.35)]"
+          } ${infoCardClassName}`}
+        >
+          {infoCardContent}
+        </div>
+      ) : null}
       {bet > 0 && (
         <PokerChip
           amount={bet}
@@ -206,6 +223,27 @@ export function PhasePlayerBadge({
           className={`absolute left-0 top-1/2 z-20 -translate-x-1/4 -translate-y-1/2 ${betClassName}`}
         />
       )}
+      {infoLayout === "compact" ? (
+        <div className="mt-1 flex max-w-[112px] flex-col items-center text-center sm:max-w-[140px]">
+          <div className="max-w-full truncate font-mono text-[10px] font-semibold uppercase leading-none text-[#f3f1ea] sm:text-[12px]">
+            {name}
+            {isCurrentPlayer ? (
+              <span className="ml-1 text-[#d7c27a]">(you)</span>
+            ) : null}
+          </div>
+          <div
+            className={`mt-1 max-w-full truncate font-mono text-[8px] font-semibold uppercase leading-none sm:text-[10px] ${
+              isThinking || isActiveTurn
+                ? "text-[#f0a64a]"
+                : actionLabel
+                  ? "text-[#d4af37]"
+                  : "text-[#d4af37]/75"
+            }`}
+          >
+            {statusLabel}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

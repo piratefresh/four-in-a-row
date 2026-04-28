@@ -35,3 +35,11 @@
 - Prefer shared context or focused hooks over long prop chains for room/game state.
 - Keep component prop surfaces small and intentional; extract repeated or deeply nested JSX into named components.
 - Keep components near `<= 250` lines when practical; move large showdown/results/UI sections into `src/components/...`.
+
+<!-- convex-ai-start -->
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
+<!-- convex-ai-end -->

@@ -6,7 +6,7 @@ import {
   getTourCompletionStorageKey,
   wordPokerTours,
 } from "./wordPokerTours";
-import DarkOnboardingCard from "./DarkOnboardingCard";
+import { OnboardingCard } from "./OnboardingCard";
 
 function useTanStackNextStepAdapter() {
   const pathname = useRouterState({
@@ -40,7 +40,7 @@ export function AppTourProvider({ children }: { children: React.ReactNode }) {
   return (
     <NextStepProvider>
       <NextStepReact
-        cardComponent={DarkOnboardingCard}
+        cardComponent={OnboardingCard}
         clickThroughOverlay
         navigationAdapter={navigationAdapter}
         steps={wordPokerTours}

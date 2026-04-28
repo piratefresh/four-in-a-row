@@ -59,7 +59,7 @@ code {
   --color-game-muted: #8a8778;
   --color-game-red: #c23d3d;
   --color-chip-green: #2c7a4f;
-  --color-chip-red: #a23131;
+  --color-chip-red: #c23d3d;
   --color-chip-blue: #2b4f8a;
   --gradient-felt-table: radial-gradient(ellipse at 50% 40%, var(--color-felt-light), var(--color-felt-deep));
   --gradient-felt-splash: radial-gradient(ellipse at center, var(--color-felt-light), var(--color-felt-deep));

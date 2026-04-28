@@ -1,15 +1,32 @@
-import { Spinner } from "@/components/ui/spinner";
+import { PokerChipHero } from "@/components/ui/PokerChipHero";
 
 interface LoadingOverlayProps {
   message?: string;
+  spinning?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
-export function LoadingOverlay({ message = "Loading..." }: LoadingOverlayProps) {
+export function LoadingOverlay({
+  message = "Loading...",
+  spinning = true,
+  actionLabel,
+  onAction,
+}: LoadingOverlayProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-6 rounded-xl border border-slate-700 bg-slate-800/90 px-12 py-10 shadow-2xl">
-        <Spinner size="lg" className="text-slate-300" />
-        <p className="text-xl font-semibold text-slate-200">{message}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-felt-deep">
+      <div className="flex flex-col items-center gap-6">
+        {spinning ? <PokerChipHero tone="gold" size="lg" spinning /> : null}
+        <p className="text-lg font-medium text-cream">{message}</p>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            onClick={onAction}
+            className="rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636]"
+          >
+            {actionLabel}
+          </button>
+        ) : null}
       </div>
     </div>
   );

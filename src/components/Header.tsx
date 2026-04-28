@@ -26,9 +26,6 @@ export default function Header() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const search = useRouterState({
-    select: (state) => state.location.search as { view?: string },
-  });
   const { data: session } = authClient.useSession();
   const [isLeavingRoom, setIsLeavingRoom] = useState(false);
   const displayName =
@@ -51,7 +48,7 @@ export default function Header() {
   );
   const isRoomView = roomCode !== null;
   const isResultsView = resultsMatch !== null;
-  const isOnlineRoomsView = pathname === "/" && search.view === "online";
+  const isOnlineRoomsView = pathname === "/rooms";
 
   const eyebrow = isResultsView
     ? "PHASE 7 . RESULTS"
@@ -94,10 +91,7 @@ export default function Header() {
     }
 
     if (isOnlineRoomsView) {
-      await navigate({
-        to: "/",
-        search: {},
-      });
+      await navigate({ to: "/" });
     }
   };
 
@@ -152,16 +146,11 @@ export default function Header() {
                 : "text-sm text-slate-100"
             }
           >
-            {isRoomView || isResultsView
-              ? `Room ${roomCode}`
-              : isOnlineRoomsView
-                ? "Browse public tables"
-                : null}
+            {isRoomView || isResultsView ? `Room ${roomCode}` : null}
           </p>
         </div>
       </div>
       <div className="flex items-center gap-3">
-
         {session?.user ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

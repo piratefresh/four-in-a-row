@@ -1,176 +1,127 @@
-# Game + AI Tracer Plan
+﻿# Game + AI Observability Plan
 
-## Overview
+### Summary
 
-Build a custom AI + game tracer using Convex DB + a flat-table dashboard at `/admin/traces`.
-No external tracing SDK needed — just lightweight Convex mutations that write trace rows
-inline during game execution.
+Upgrade the current tracer from a raw event stream into a lightweight Confident-style
+observability layer for Word Poker: one timeline for debugging, plus aggregate bot/player
+signals for balancing decisions. Keep full prompts and outputs indefinitely, and keep the
+tooling dev/admin-gated.
 
-## Design Decisions
+The repo already has partial implementation: `gameTraces`, `/admin/traces`, `/admin/stats`,
+AI/game trace inserts, OpenRouter latency, and `playerStats`. The next work should refine
+and harden that system rather than start over.
 
-| Choice | Value |
-|--------|-------|
-| Granularity | Full timeline (~20-30 writes per game) |
-| Dashboard layout | Flat table with filters (not game-first) |
-| Data retention | Keep forever (no auto-purge) |
-| Route guard | Dev-only (`import.meta.env.DEV`) |
-| Trace capture | Inline in game actions (not separate logging action) |
-| Showdown tracing | Yes — even though deterministic, useful for observability |
-| Full prompt storage | Yes — store entire `inputPrompt` for debugging |
+### Key Changes
 
-## Schema: `gameTraces` table
+- Extend `gameTraces` with normalized observability fields: `component`, `operation`,
+  `decisionSource`, `latencyMs`, `provider`, `promptTemplate`, `cacheStatus`, and optional
+  `qualityFlags`.
+- Add game/player-read fields for AI behavior analysis: `bluffDetected` and `believesPlayer`.
+- Keep `gameId` as the trace run id; each row remains a flat event/span in the game timeline.
+- Continue storing full `inputPrompt`, `outputRaw`, and `outputParsed`.
+- Move repeated trace insert shaping into typed helper functions in `convex/aiTracing.ts`.
 
-```ts
-gameTraces: defineTable({
-  gameId: v.id("games"),
-  roomId: v.optional(v.id("rooms")),
+### Backend Implementation
 
-  category: v.union(
-    v.literal("game_start"),
-    v.literal("game_action"),
-    v.literal("stage_change"),
-    v.literal("showdown_submit"),
-    v.literal("game_complete"),
-    v.literal("ai_betting"),
-    v.literal("ai_showdown"),
-    v.literal("ai_dialogue"),
-  ),
+- Fix `playerStats` aggregation to use `gameTraces` for full action counts instead of only
+  `playerHands.lastAction`.
+- Make stat aggregation idempotent per completed game by adding a processed-rollup marker
+  or equivalent guard so repeated completion paths do not double-count.
+- Add core balance metrics: win rate, net chips, showdown reach/win rate, average word score,
+  action mix, fold/raise rate, bluff rate, fallback rate, average hand strength, average
+  latency, and LLM success rate.
+- Enrich betting traces with probabilistic recommendation, final executed action, action
+  override reason when applicable, bluff/player-read fields, latency, model, and fallback source.
+- Enrich showdown traces with LLM word, validation result, deterministic fallback reason,
+  selected score, and candidate metadata where available.
+- Enrich dialogue traces with template/RAG/LLM source, trigger, latency, and whether the
+  message was suppressed or sent.
 
-  // Who
-  playerId: v.optional(v.string()),
-  playerName: v.optional(v.string()),
-  isBot: v.optional(v.boolean()),
+### Admin UI
 
-  // Game action fields
-  action: v.optional(v.string()),
-  stage: v.optional(v.string()),
-  previousStage: v.optional(v.string()),
-  tilesRevealed: v.optional(v.string()),
-  potBefore: v.optional(v.number()),
-  potAfter: v.optional(v.number()),
-  chipsBefore: v.optional(v.number()),
-  chipsAfter: v.optional(v.number()),
-  raiseAmount: v.optional(v.number()),
+- Keep `/admin/traces` as the raw timeline, but add filters for component, decision source,
+  difficulty, character, success, fallback, and game id.
+- Add detail sections for LLM, Game Decision, and Evaluation Signals so prompts, outputs,
+  parsed decisions, and balance metadata are readable without digging through raw JSON.
+- Upgrade `/admin/stats` into the decision dashboard with player vs bot comparison,
+  per-character comparison, action mix, fallback rate, latency, win-rate spread, chip delta,
+  and showdown quality.
+- Keep routes dev-only with `import.meta.env.DEV`.
 
-  // Showdown fields
-  wordSubmitted: v.optional(v.string()),
-  wordScore: v.optional(v.number()),
-  wordScoreBreakdown: v.optional(v.string()),
-  winnerId: v.optional(v.string()),
-  winnerWord: v.optional(v.string()),
-  winnerScore: v.optional(v.number()),
+### Test Plan
 
-  // AI trace fields
-  model: v.optional(v.string()),
-  difficulty: v.optional(v.string()),
-  personality: v.optional(v.string()),
-  handStrength: v.optional(v.number()),
-  isBluffing: v.optional(v.boolean()),
-  inputPrompt: v.optional(v.string()),
-  outputRaw: v.optional(v.string()),
-  outputParsed: v.optional(v.string()),
-  usedFallback: v.optional(v.boolean()),
+- Add focused tests for trace helper payload shaping and undefined stripping.
+- Add aggregation tests proving full action counts come from traces and completed games are
+  not double-counted.
+- Add AI trace tests for fallback, successful LLM parse, invalid LLM showdown word,
+  deterministic showdown, and dialogue source variants.
+- Run `bun run test`, `bunx tsc -p convex/tsconfig.json --pretty false`, and `bun run build`.
 
-  // Dialogue fields
-  dialogueTrigger: v.optional(v.string()),
-  dialogueMessage: v.optional(v.string()),
+### Assumptions
 
-  // Common
-  success: v.boolean(),
-  error: v.optional(v.string()),
-  metadata: v.optional(v.any()),
-  createdAt: v.number(),
-})
-  .index("by_gameId_createdAt", ["gameId", "createdAt"])
-  .index("by_category_createdAt", ["category", "createdAt"])
-  .index("by_createdAt", ["createdAt"])
-```
+- No external tracing SDK will be added.
+- Full prompts and raw outputs are intentionally retained forever.
+- This remains dev/admin observability, not a player-facing feature.
+- Core balance metrics are in scope now; cohort experiments and advanced trend dashboards
+  can come later.
 
-## Trace Categories
+## Progress Checklist
 
-| Category | Trigger | Fields populated |
-|----------|---------|-----------------|
-| `game_start` | `startGame` mutation | gameId, roomId, players, stage, pot |
-| `game_action` | check/call/raise/fold handlers | action, stage, potBefore→After, chipsBefore→After, isBot, playerName |
-| `stage_change` | `advanceStage` | previousStage→stage, tilesRevealed, pot |
-| `showdown_submit` | `submitWord` / bot showdown | wordSubmitted, wordScore, isBot, playerId |
-| `game_complete` | winner determined | winnerId, winnerWord, winnerScore |
-| `ai_betting` | `aiDecideBet` action | model, difficulty, inputPrompt, outputRaw, outputParsed, handStrength, isBluffing, usedFallback |
-| `ai_showdown` | `aiSubmitWord` action | model, difficulty, personality, wordSubmitted, wordScore, usedFallback |
-| `ai_dialogue` | `maybeSendBotDialogue` | model, personality, dialogueTrigger, dialogueMessage, inputPrompt, outputRaw |
+### Current Implementation Audit
 
-## New Files
+- [x] Confirm existing `gameTraces` schema exists
+- [x] Confirm `convex/aiTracing.ts` exists
+- [x] Confirm `/admin/traces` route exists
+- [x] Confirm trace table, detail, and filter components exist
+- [x] Confirm OpenRouter returns `latencyMs`
+- [x] Confirm AI betting and showdown traces are partially instrumented
+- [x] Confirm game action, stage, showdown, and completion traces are partially instrumented
+- [ ] Verify current tracing coverage with a real bot game
 
-| File | Purpose |
-|------|---------|
-| `convex/aiTracing.ts` | `insertGameTrace` internal mutation, typed helpers for each category |
-| `src/routes/admin/traces.tsx` | Dev-gated admin route, flat table with filters |
-| `src/components/admin/TraceTable.tsx` | Data table with category badges, expandable rows |
-| `src/components/admin/TraceDetail.tsx` | Expanded detail panel (prompt, response, context) |
-| `src/components/admin/TraceFilters.tsx` | Filter by category, player, isBot, difficulty |
+### Observability Schema
 
-## Modified Files
+- [ ] Add normalized observability fields: `component`, `operation`, `decisionSource`, `latencyMs`, `provider`, `promptTemplate`, `cacheStatus`
+- [ ] Add game and player-read fields: `bluffDetected`, `believesPlayer`, `qualityFlags`
+- [ ] Add indexes needed for admin filtering
+- [ ] Update trace validators to match schema
 
-| File | Change |
-|------|--------|
-| `convex/schema.ts` | Add `gameTraces` table |
-| `convex/games/gamesSetup.ts` | Log `game_start` on game creation |
-| `convex/games/gamesBetting.ts` | Log `game_action` on check/call/raise/fold + log `ai_dialogue` from `maybeSendBotDialogue` |
-| `convex/games/gamesProgression.ts` | Log `stage_change` on stage transitions + `game_complete` on winner |
-| `convex/games/gamesShowdown.ts` | Log `showdown_submit` on word submission + `game_complete` on resolution |
-| `convex/ai.ts` | Log `ai_betting` / `ai_showdown` after LLM/solver calls |
-| `convex/openRouterClient.ts` | Return `{ content, latencyMs }` so callers can log latency in metadata |
+### Trace Helpers
 
-## Dashboard: `/admin/traces`
+- [ ] Replace loose trace payload construction with typed helper functions
+- [ ] Add helper for game lifecycle traces
+- [ ] Add helper for betting decision traces
+- [ ] Add helper for showdown decision traces
+- [ ] Add helper for dialogue traces
+- [ ] Keep full `inputPrompt`, `outputRaw`, and `outputParsed`
 
-**Flat table view** with:
+### Instrumentation
 
-- **Category badges** — color-coded: game_start (blue), game_action (gray), stage_change (purple), showdown_submit (yellow), game_complete (green), ai_betting (orange), ai_showdown (cyan), ai_dialogue (pink)
-- **Filter tabs** — All / Game / AI / Dialogue
-- **Filter chips** — isBot, difficulty, stage, success/fallback
-- **Expandable rows** — click to see full prompt, raw output, parsed result, metadata
-- **Live-updating** — Convex subscription via `useQuery`
-- **Search** — by player name, word, action
+- [ ] Enrich `ai_betting` traces with final executed action and override reason
+- [ ] Enrich `ai_showdown` traces with LLM word validation and fallback reason
+- [ ] Enrich `ai_dialogue` traces with template/RAG/LLM source and suppression info
+- [ ] Ensure game actions produce the full action timeline
+- [ ] Ensure completion traces include winner and resolution reason
 
-### Example row layout
+### Player And Bot Analytics
 
-```
-Time      Category        Player    Action/Word      Stage    Details
-───────────────────────────────────────────────────────────────────────────
-12:00:01  🎮 game_start   —         4 players        —        Room: abc123
-12:00:05  📋 stage_change —         preflop          preflop  Blinds: 10/20
-12:00:10  ⬆️ game_action  Bob       raise to 40      preflop  Pot: 20→60
-12:00:15  🤖 game_action  🤖Nora    call 40          preflop  Pot: 60→120
-12:00:15  💬 ai_betting   🤖Nora    call             preflop  HS: 0.4, no bluff
-12:00:20  🤖 game_action  🤖Jax     fold             preflop  —
-12:00:20  💬 ai_betting   🤖Jax     fold             preflop  HS: 0.15, no bluff
-12:00:25  ⬇️ game_action  Alice     fold             preflop  —
-12:00:30  📋 stage_change —         flop             flop     Tiles: A• E• S•
-12:00:35  ⬆️ game_action  Bob       raise to 60      flop     Pot: 60→120
-12:00:40  🤖 game_action  🤖Nora    call 60          flop     Pot: 120→180
-12:00:40  💬 ai_betting   🤖Nora    call             flop     HS: 0.7, BLUFFING
-12:00:45  📋 stage_change —         turn             turn     Tile: T•
-12:00:50  ⬆️ game_action  🤖Nora    raise to 80      turn     Pot: 80→160
-12:00:50  💬 ai_betting   🤖Nora    raise            turn     HS: 0.7, bluffing
-12:01:00  ⬇️ game_action  Bob       fold             turn     —
-12:01:05  📝 showdown     🤖Nora    SEAT (6pts)      showdown —
-12:01:05  💬 ai_showdown  🤖Nora    SEAT             showdown Score: 6
-12:01:10  ✅ game_complete 🤖Nora   Winner!          showdown Score: 6
-```
+- [ ] Fix `playerStats` to count all actions from `gameTraces`
+- [ ] Make completed-game aggregation idempotent
+- [ ] Add fallback rate, latency, LLM success rate, bluff rate, and average hand strength
+- [ ] Add player/bot balance metrics for win rate, net chips, showdown quality, and action mix
 
-## Shadcn Components to Install
+### Admin UI
 
-```bash
-bunx shadcn@latest add table tabs badge scroll-area collapsible
-```
+- [ ] Add filters for component, decision source, difficulty, character, success, fallback, and game id
+- [ ] Improve trace detail sections: LLM, Game Decision, Evaluation Signals
+- [ ] Upgrade `/admin/stats` with bot/player comparison and balance metrics
+- [ ] Keep `/admin/traces` and `/admin/stats` dev-only
 
-## Implementation Order
+### Verification
 
-1. **Schema** — Add `gameTraces` table to `convex/schema.ts`
-2. **Tracing mutation** — Create `convex/aiTracing.ts` with `insertGameTrace`
-3. **OpenRouter client** — Return `{ content, latencyMs }`
-4. **AI actions** — Log `ai_betting` / `ai_showdown` in `convex/ai.ts`
-5. **Game mutations** — Log `game_start`, `game_action`, `stage_change`, `showdown_submit`, `game_complete`
-6. **Dialogue** — Log `ai_dialogue` in `gamesBetting.ts`
-7. **Dashboard** — Create route + components
-8. **Install shadcn components** — table, tabs, badge, scroll-area, collapsible
+- [ ] Add tests for trace helper payload shaping
+- [ ] Add tests for full-action stat aggregation
+- [ ] Add tests to prevent double-counting completed games
+- [ ] Add tests for AI fallback and invalid showdown word paths
+- [ ] Run `bun run test`
+- [ ] Run `bunx tsc -p convex/tsconfig.json --pretty false`
+- [ ] Run `bun run build`

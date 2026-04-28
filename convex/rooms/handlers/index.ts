@@ -29,8 +29,6 @@ export {
 } from "./debugMutations";
 
 export {
-  ensureSeedRooms,
-  refreshOpenRooms,
   runCronCleanup,
 } from "./maintenanceMutations";
 

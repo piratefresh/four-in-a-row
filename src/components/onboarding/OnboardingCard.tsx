@@ -34,7 +34,7 @@ interface DarkOnboardingCardProps {
   arrow: React.ReactNode;
 }
 
-const DarkOnboardingCard = ({
+export const OnboardingCard = ({
   step,
   currentStep,
   totalSteps,
@@ -59,7 +59,10 @@ const DarkOnboardingCard = ({
     currentStep === FIRST_BOT_GAME_SHOWDOWN_SUBMIT_STEP;
   const themedArrow = React.isValidElement<{ className?: string }>(arrow)
     ? React.cloneElement(arrow, {
-        className: `${arrow.props.className ?? ""} text-white fill-white stroke-white`,
+        className: cn(
+          arrow.props.className,
+          "text-cream fill-cream stroke-cream",
+        ),
       })
     : arrow;
   const showControls = step.showControls !== false;
@@ -141,15 +144,22 @@ const DarkOnboardingCard = ({
   return (
     <div
       className={cn(
-        "w-full min-w-64 max-w-[min(32rem,calc(100vw-1rem))] rounded-lg bg-white p-4 text-slate-900 shadow-[0_10px_15px_-3px_rgba(0,0,0,0.1),0_4px_6px_-2px_rgba(0,0,0,0.05)]",
+        "w-full min-w-64 max-w-[min(24rem,calc(100vw-1rem))] rounded-[10px] border-b-[3px] border-gold bg-cream px-3 py-2.5 font-body text-[11px] leading-[1.3] text-ink shadow-[0_4px_12px_rgba(0,0,0,0.3)]",
         tutorialStep.cardClassName,
       )}
     >
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-1 flex items-center justify-between gap-3 font-mono text-[8px] font-bold uppercase leading-none tracking-[0.2em] text-gold">
+        <span>COACH</span>
+        <span className="tracking-[0.12em] text-gold/75">
+          {currentStep + 1}/{totalSteps}
+        </span>
+      </div>
+
+      <div className="mb-2 flex items-center gap-2">
         {step.icon && (
           <div
             className={cn(
-              "shrink-0 text-2xl leading-none text-slate-700",
+              "flex size-5 shrink-0 items-center justify-center rounded-sm bg-gold font-mono text-[9px] font-bold leading-none text-felt-deep",
               tutorialStep.iconClassName,
             )}
           >
@@ -158,7 +168,7 @@ const DarkOnboardingCard = ({
         )}
         <h3
           className={cn(
-            "min-w-0 flex-1 text-lg font-bold leading-tight text-slate-900",
+            "min-w-0 flex-1 text-[11px] font-bold leading-[1.3] text-ink",
             tutorialStep.titleClassName,
           )}
         >
@@ -168,17 +178,17 @@ const DarkOnboardingCard = ({
 
       <div
         className={cn(
-          "mb-4 text-sm leading-relaxed text-slate-900",
+          "mb-3 text-[11px] leading-[1.3] text-ink [&_strong]:font-bold [&_strong]:text-ink",
           tutorialStep.contentClassName,
         )}
       >
         {step.content}
       </div>
 
-      <div className="mb-4 h-2.5 rounded-full bg-slate-200">
+      <div className="mb-2 h-1 rounded-full bg-ink/10">
         <div
           className={cn(
-            "h-2.5 rounded-full bg-blue-600 transition-[width]",
+            "h-1 rounded-full bg-gold transition-[width]",
             tutorialStep.progressClassName,
           )}
           style={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
@@ -187,7 +197,7 @@ const DarkOnboardingCard = ({
 
       <div
         className={cn(
-          "flex items-center justify-between gap-4 text-xs text-slate-500",
+          "flex items-center justify-between gap-2 font-mono text-[9px] uppercase tracking-[0.1em] text-ink/55",
           tutorialStep.controlsClassName,
         )}
       >
@@ -195,18 +205,18 @@ const DarkOnboardingCard = ({
           currentStep > 0 ? (
             <button
               onClick={prevStep}
-              className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200"
+              className="min-h-8 rounded border border-ink/15 bg-transparent px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-ink/70 transition-colors hover:bg-ink/5"
             >
               Previous
             </button>
           ) : (
-            <div className="h-9 min-w-[88px]" />
+            <div className="h-8 min-w-[76px]" />
           )
         ) : (
-          <div className="h-9 min-w-[88px]" />
+          <div className="h-8 min-w-[76px]" />
         )}
 
-        <span className="whitespace-nowrap text-xs text-slate-500">
+        <span className="whitespace-nowrap text-[8px] text-ink/45">
           {currentStep + 1} of {totalSteps}
         </span>
 
@@ -216,7 +226,7 @@ const DarkOnboardingCard = ({
               onClick={() => {
                 void handlePauseUntilNextPhase();
               }}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              className="min-h-8 rounded border border-gold-bright bg-gold px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-felt-deep transition-colors hover:bg-gold-bright"
             >
               Continue playing
             </button>
@@ -226,27 +236,27 @@ const DarkOnboardingCard = ({
                 void handleStartTutorialShowdown();
               }}
               disabled={isStartingShowdown}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-default disabled:opacity-70"
+              className="min-h-8 rounded border border-gold-bright bg-gold px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-felt-deep transition-colors hover:bg-gold-bright disabled:cursor-default disabled:opacity-70"
             >
               {isStartingShowdown ? "Starting..." : "Start timer"}
             </button>
           ) : hideNext ? (
-            <div className="h-9 min-w-[88px]" />
+            <div className="h-8 min-w-[76px]" />
           ) : (
             <button
               onClick={nextStep}
               className={cn(
-                "rounded-md px-4 py-2 text-sm font-medium text-white transition-colors",
+                "min-h-8 rounded border px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] transition-colors",
                 currentStep === totalSteps - 1
-                  ? "bg-emerald-500 hover:bg-emerald-600"
-                  : "bg-blue-600 hover:bg-blue-700",
+                  ? "border-felt-light bg-felt text-cream hover:bg-felt-light"
+                  : "border-gold-bright bg-gold text-felt-deep hover:bg-gold-bright",
               )}
             >
               {currentStep === totalSteps - 1 ? "Finish" : "Next"}
             </button>
           )
         ) : (
-          <div className="h-9 min-w-[88px]" />
+          <div className="h-8 min-w-[76px]" />
         )}
       </div>
 
@@ -257,7 +267,7 @@ const DarkOnboardingCard = ({
           onClick={() => {
             void handleSkipTour();
           }}
-          className="mt-4 w-full rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200"
+          className="mt-2 w-full rounded border border-ink/15 bg-transparent px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-ink/60 transition-colors hover:bg-ink/5"
         >
           Skip Tour
         </button>
@@ -265,5 +275,3 @@ const DarkOnboardingCard = ({
     </div>
   );
 };
-
-export default DarkOnboardingCard;

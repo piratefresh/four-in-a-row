@@ -8,9 +8,12 @@ import {
   RoomPageProvider,
   useRoomDetailsController,
 } from "@/components/rooms";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { api } from "../../convex/_generated/api";
-import { ChatSidebar, ChatToggleButton } from "@/components/rooms/chat/ChatSidebar";
+import {
+  ChatSidebar,
+  ChatToggleButton,
+} from "@/components/rooms/chat/ChatSidebar";
 import { useChatSidebar } from "@/components/rooms/chat/useChatSidebar";
 import { RoomTutorialPhaseSync } from "@/components/onboarding/RoomTutorialPhaseSync";
 import { RoomTutorialLauncher } from "@/components/onboarding/RoomTutorialLauncher";
@@ -46,43 +49,15 @@ export const Route = createFileRoute("/rooms/$code")({
   component: RoomDetailsPage,
 });
 
-function StatusScreen({
-  message,
-  showSpinner = true,
-  actionLabel,
-  onAction,
-}: {
-  message: string;
-  showSpinner?: boolean;
-  actionLabel?: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-6 rounded-xl border border-slate-700 bg-slate-800/90 px-12 py-10 text-center shadow-2xl">
-        {showSpinner ? <Spinner size="lg" className="text-slate-300" /> : null}
-        <p className="text-xl font-semibold text-slate-200">{message}</p>
-        {actionLabel && onAction ? (
-          <button
-            type="button"
-            onClick={onAction}
-            className="rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636]"
-          >
-            {actionLabel}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function RoomDetailsPage() {
   const navigate = useNavigate();
   const { code } = Route.useParams();
   const search = Route.useSearch();
   const [isDesktopChatVisible, setIsDesktopChatVisible] = useState(false);
   const [isRestartingTutorial, setIsRestartingTutorial] = useState(false);
-  const restartTutorialRoom = useMutation((api as any).rooms.restartTutorialRoom);
+  const restartTutorialRoom = useMutation(
+    (api as any).rooms.restartTutorialRoom,
+  );
   const {
     session,
     isAuthPending,
@@ -125,29 +100,35 @@ function RoomDetailsPage() {
 
   if (isAuthPending) {
     return (
-      <StatusScreen
-        message={forcedTutorialReplay ? "Opening your guided table..." : "Loading..."}
+      <LoadingOverlay
+        message={
+          forcedTutorialReplay ? "Opening your guided table..." : "Loading..."
+        }
       />
     );
   }
 
   if (!session?.user) {
-    return <StatusScreen message="Redirecting to login..." />;
+    return <LoadingOverlay message="Redirecting to login..." />;
   }
 
   if (roomData === undefined) {
     return (
-      <StatusScreen
-        message={forcedTutorialReplay ? "Joining your first room..." : "Joining room..."}
+      <LoadingOverlay
+        message={
+          forcedTutorialReplay
+            ? "Joining your first room..."
+            : "Joining room..."
+        }
       />
     );
   }
 
   if (roomData === null) {
     return (
-      <StatusScreen
+      <LoadingOverlay
         message="Room not found."
-        showSpinner={false}
+        spinning={false}
         actionLabel="Go home"
         onAction={() => {
           void navigate({ to: "/" });
@@ -158,9 +139,9 @@ function RoomDetailsPage() {
 
   if (roomData.room.status === "closed") {
     return (
-      <StatusScreen
+      <LoadingOverlay
         message="This room has been closed."
-        showSpinner={false}
+        spinning={false}
         actionLabel="Go home"
         onAction={() => {
           void navigate({ to: "/" });
@@ -171,8 +152,12 @@ function RoomDetailsPage() {
 
   if (!game || displayHands.length === 0) {
     return (
-      <StatusScreen
-        message={forcedTutorialReplay ? "Dealing your first hand..." : "Preparing table..."}
+      <LoadingOverlay
+        message={
+          forcedTutorialReplay
+            ? "Dealing your first hand..."
+            : "Preparing table..."
+        }
       />
     );
   }

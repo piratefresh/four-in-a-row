@@ -11,11 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as RoomsRouteImport } from './routes/rooms'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RoomsIndexRouteImport } from './routes/rooms.index'
 import { Route as RoomsCodeRouteImport } from './routes/rooms.$code'
 import { Route as ResultsCodeRouteImport } from './routes/results.$code'
 import { Route as DevTileShowcaseRouteImport } from './routes/dev.tile-showcase'
@@ -40,6 +42,11 @@ const VerifyEmailRoute = VerifyEmailRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoomsRoute = RoomsRouteImport.update({
+  id: '/rooms',
+  path: '/rooms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -67,10 +74,15 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoomsIndexRoute = RoomsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RoomsRoute,
+} as any)
 const RoomsCodeRoute = RoomsCodeRouteImport.update({
-  id: '/rooms/$code',
-  path: '/rooms/$code',
-  getParentRoute: () => rootRouteImport,
+  id: '/$code',
+  path: '/$code',
+  getParentRoute: () => RoomsRoute,
 } as any)
 const ResultsCodeRoute = ResultsCodeRouteImport.update({
   id: '/results/$code',
@@ -149,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/rooms': typeof RoomsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/admin/stats': typeof AdminStatsRoute
@@ -158,6 +171,7 @@ export interface FileRoutesByFullPath {
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
+  '/rooms/': typeof RoomsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
@@ -182,6 +196,7 @@ export interface FileRoutesByTo {
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
+  '/rooms': typeof RoomsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
@@ -198,6 +213,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/rooms': typeof RoomsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
   '/admin/stats': typeof AdminStatsRoute
@@ -207,6 +223,7 @@ export interface FileRoutesById {
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
+  '/rooms/': typeof RoomsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
   '/demo/start/api-request': typeof DemoStartApiRequestRoute
@@ -224,6 +241,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/reset-password'
+    | '/rooms'
     | '/settings'
     | '/verify-email'
     | '/admin/stats'
@@ -233,6 +251,7 @@ export interface FileRouteTypes {
     | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
+    | '/rooms/'
     | '/api/auth/$'
     | '/demo/api/names'
     | '/demo/start/api-request'
@@ -257,6 +276,7 @@ export interface FileRouteTypes {
     | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
+    | '/rooms'
     | '/api/auth/$'
     | '/demo/api/names'
     | '/demo/start/api-request'
@@ -272,6 +292,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/reset-password'
+    | '/rooms'
     | '/settings'
     | '/verify-email'
     | '/admin/stats'
@@ -281,6 +302,7 @@ export interface FileRouteTypes {
     | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
+    | '/rooms/'
     | '/api/auth/$'
     | '/demo/api/names'
     | '/demo/start/api-request'
@@ -297,6 +319,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  RoomsRoute: typeof RoomsRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   AdminStatsRoute: typeof AdminStatsRoute
@@ -305,7 +328,6 @@ export interface RootRouteChildren {
   DemoConvexRoute: typeof DemoConvexRoute
   DevTileShowcaseRoute: typeof DevTileShowcaseRoute
   ResultsCodeRoute: typeof ResultsCodeRoute
-  RoomsCodeRoute: typeof RoomsCodeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   DemoApiNamesRoute: typeof DemoApiNamesRoute
   DemoStartApiRequestRoute: typeof DemoStartApiRequestRoute
@@ -330,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rooms': {
+      id: '/rooms'
+      path: '/rooms'
+      fullPath: '/rooms'
+      preLoaderRoute: typeof RoomsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -367,12 +396,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/rooms/': {
+      id: '/rooms/'
+      path: '/'
+      fullPath: '/rooms/'
+      preLoaderRoute: typeof RoomsIndexRouteImport
+      parentRoute: typeof RoomsRoute
+    }
     '/rooms/$code': {
       id: '/rooms/$code'
-      path: '/rooms/$code'
+      path: '/$code'
       fullPath: '/rooms/$code'
       preLoaderRoute: typeof RoomsCodeRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof RoomsRoute
     }
     '/results/$code': {
       id: '/results/$code'
@@ -475,12 +511,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface RoomsRouteChildren {
+  RoomsCodeRoute: typeof RoomsCodeRoute
+  RoomsIndexRoute: typeof RoomsIndexRoute
+}
+
+const RoomsRouteChildren: RoomsRouteChildren = {
+  RoomsCodeRoute: RoomsCodeRoute,
+  RoomsIndexRoute: RoomsIndexRoute,
+}
+
+const RoomsRouteWithChildren = RoomsRoute._addFileChildren(RoomsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  RoomsRoute: RoomsRouteWithChildren,
   SettingsRoute: SettingsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   AdminStatsRoute: AdminStatsRoute,
@@ -489,7 +538,6 @@ const rootRouteChildren: RootRouteChildren = {
   DemoConvexRoute: DemoConvexRoute,
   DevTileShowcaseRoute: DevTileShowcaseRoute,
   ResultsCodeRoute: ResultsCodeRoute,
-  RoomsCodeRoute: RoomsCodeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   DemoApiNamesRoute: DemoApiNamesRoute,
   DemoStartApiRequestRoute: DemoStartApiRequestRoute,

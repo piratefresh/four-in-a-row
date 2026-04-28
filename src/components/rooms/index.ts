@@ -5,7 +5,8 @@ export { PlayerSeat } from './table/PlayerSeat'
 export { CommunityCardsSection } from './table/CommunityCardsSection'
 export { BottomPlayerArea } from './table/BottomPlayerArea'
 export { ScrabbleTile } from './table/ScrabbleTile'
-export { WordTile } from './table/WordTile'
+export { WordTile } from './table/word-tile-v2'
+export type { WordTileProps, WordTileSize } from './table/word-tile-v2'
 
 // Controls
 export { ActionButton } from './controls/ActionButton'

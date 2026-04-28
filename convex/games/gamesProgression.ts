@@ -66,6 +66,11 @@ function onlyOnePlayerRemains(hands: PlayerHand[]): boolean {
   return activePlayers.length === 1;
 }
 
+function getFirstActivePlayerIndex(hands: PlayerHand[]): number {
+  const activeIndex = hands.findIndex((hand) => !hand.hasFolded);
+  return activeIndex >= 0 ? activeIndex : 0;
+}
+
 async function advanceStage(
   ctx: MutationCtx,
   game: {
@@ -134,7 +139,7 @@ async function advanceStage(
     stage: targetStage,
     communityTiles: updatedCommunityTiles,
     currentBet: 0,
-    currentPlayerIndex: 0,
+    currentPlayerIndex: getFirstActivePlayerIndex(orderedHands),
     raisesThisRound: 0,
     updatedAt: now,
     ...getClearedTurnClockFields(),
@@ -346,6 +351,10 @@ export async function scheduleBotTurnIfNeeded(
   const currentTurnHand = orderedHands[game.currentPlayerIndex];
   if (!currentTurnHand || currentTurnHand.hasFolded) {
     console.log("scheduleBotTurnIfNeeded: Current turn hand not found or has folded");
+    if (orderedHands.some((hand) => !hand.hasFolded)) {
+      await advanceTurn(ctx, game, orderedHands);
+      await scheduleBotTurnIfNeeded(ctx, gameId);
+    }
     return;
   }
 

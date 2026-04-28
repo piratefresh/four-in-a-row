@@ -1,4 +1,4 @@
-import { WordTile, type WordTileSize } from "../table/WordTile";
+import { WordTile, type WordTileSize } from "../table/word-tile-v2";
 import type { BuilderTile } from "./RoomHandsBoard.types";
 
 type PlayerHandProps = {

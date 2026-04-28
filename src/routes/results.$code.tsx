@@ -114,7 +114,7 @@ function ResultsPage() {
     } catch (error) {
       console.error("Error leaving room:", error);
     }
-    void navigate({ to: "/", search: { view: "online" } });
+    void navigate({ to: "/rooms" });
   };
 
   const handleReturnToMainMenu = async () => {

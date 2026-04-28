@@ -1,5 +1,8 @@
+import { AnimatePresence } from "motion/react";
+import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getLetterValue } from "@/lib/letterValues";
+import { WinSplashOverlay } from "./WinSplashOverlay";
 
 type SubmissionTile = {
   letter: string;
@@ -71,8 +74,26 @@ export function ShowdownResultsScreen({
         ? getPlayerName(showdownResults.winnerId)
         : null;
 
+  const [showWinSplash, setShowWinSplash] = useState(
+    () =>
+      playerId != null &&
+      showdownResults.hasWinner &&
+      showdownResults.winnerId === playerId,
+  );
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_top,#19160d_0%,#090909_28%,#050505_100%)] text-white">
+      <AnimatePresence>
+        {showWinSplash && (
+          <WinSplashOverlay
+            pot={pot}
+            winningWord={showdownResults.winningWord}
+            winningScore={showdownResults.winningScore}
+            onDismiss={() => setShowWinSplash(false)}
+          />
+        )}
+      </AnimatePresence>
+
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[430px] flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]">
         <header className="pt-6 text-center">
           <div className="text-5xl font-semibold tracking-tight text-[#e2bd46]">

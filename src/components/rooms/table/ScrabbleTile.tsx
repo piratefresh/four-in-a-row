@@ -1,4 +1,4 @@
-import { WordTile, type WordTileProps } from "./WordTile";
+import { WordTile, type WordTileProps } from "./word-tile-v2";
 
 export type ScrabbleTileProps = WordTileProps;
 

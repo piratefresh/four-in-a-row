@@ -275,10 +275,16 @@ export function useRoomDetailsController(code: string) {
     [playerHands, playerId],
   );
 
+  const isMyTurn =
+    currentTurnPlayerId === playerId &&
+    game?.status === "active" &&
+    !myHand?.hasFolded;
+
   const canCheck = useMemo(() => {
     if (
       !game ||
       !myHand ||
+      myHand.hasFolded ||
       currentTurnPlayerId !== playerId ||
       game.status !== "active"
     ) {
@@ -291,6 +297,7 @@ export function useRoomDetailsController(code: string) {
     if (
       !game ||
       !myHand ||
+      myHand.hasFolded ||
       currentTurnPlayerId !== playerId ||
       game.status !== "active"
     ) {
@@ -370,8 +377,6 @@ export function useRoomDetailsController(code: string) {
     game.stage !== "final" &&
     game.turnStartedAt === undefined;
 
-  const isMyTurn =
-    currentTurnPlayerId === playerId && game?.status === "active";
   const raisesThisRound = game?.raisesThisRound ?? 0;
   const availableRaiseOptions = useMemo(() => {
     if (

@@ -6,7 +6,7 @@ import {
 import { motion, useAnimationControls } from "motion/react";
 import { ActionButton } from "../controls/ActionButton";
 import { ShuffleTilesButton } from "../controls/ShuffleTilesButton";
-import { WordTile, type WordTileSize } from "../table/WordTile";
+import { WordTile, type WordTileSize } from "../table/word-tile-v2";
 import type { BuilderTile } from "./RoomHandsBoard.types";
 import { getLetterValue } from "../../../lib/letterValues";
 import type { ShowdownPreviewScore } from "../../../lib/showdownScore";
@@ -58,7 +58,7 @@ function HiddenBuilderTileSlot({
       <WordTile
         key={tileKey}
         showValue={false}
-        variant="hidden"
+        variant="empty"
         size={tileSize}
       />
     </div>
@@ -194,7 +194,7 @@ export function RoomBottomPanel({
               <WordTile
                 key={`bottom-hidden-${index}`}
                 showValue={false}
-                variant="hidden"
+                variant="empty"
                 size={tileSize}
               />
             ))}

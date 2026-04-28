@@ -81,7 +81,7 @@ export function PlayerSeat({
                   letter=""
                   showValue={false}
                   size="sm"
-                  variant="hidden"
+                  variant="empty"
                 />
               ))}
             </div>
@@ -98,7 +98,7 @@ export function PlayerSeat({
                 letter=""
                 showValue={false}
                 size="sm"
-                variant="hidden"
+                variant="empty"
               />
             ))}
           </div>

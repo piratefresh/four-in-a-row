@@ -61,6 +61,7 @@ export function BlankRoomPhase({
               avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
               initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"
               infoCardClassName="min-w-[82px] px-1.5 py-1 xs:min-w-[92px] xs:px-2 sm:min-w-[118px] sm:px-3 sm:py-1.5"
+              infoLayout="compact"
             />
           </div>
         ))}

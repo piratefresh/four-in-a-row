@@ -11,7 +11,7 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { WordTile } from "../table/WordTile";
+import { WordTile } from "../table/word-tile-v2";
 import { RoomActionControls } from "../controls/RoomActionControls";
 import { RaiseAmountSlider } from "../controls/RaiseAmountSlider";
 import { BlankRoomPhase } from "../phases/BlankRoomPhase";
@@ -30,7 +30,7 @@ import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "./roomBoardLayout";
 import { useRoomGameContext } from "../context/RoomGameContext";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
-import type { WordTileSize } from "../table/WordTile";
+import type { WordTileSize } from "../table/word-tile-v2";
 import {
   FIRST_BOT_GAME_TOUR,
   FIRST_BOT_GAME_WORD_BUILDER_STEP,
@@ -114,12 +114,12 @@ function SortableBuilderTile({
 
 const BET_POSITION_CLASS: Record<"top" | "left" | "right" | "bottom", string> =
   {
-    top: "left-[62%] top-[24%] -translate-x-1/2 -translate-y-1/2 sm:left-[60%] sm:top-[22%]",
-    left: "left-[23%] top-[49%] -translate-x-1/2 -translate-y-1/2 sm:left-[25%]",
+    top: "left-[59%] top-[34%] -translate-x-1/2 -translate-y-1/2 sm:left-[58%] sm:top-[32%]",
+    left: "left-[34%] top-[50%] -translate-x-1/2 -translate-y-1/2 sm:left-[35%]",
     right:
-      "left-[77%] top-[49%] -translate-x-1/2 -translate-y-1/2 sm:left-[75%]",
+      "left-[66%] top-[50%] -translate-x-1/2 -translate-y-1/2 sm:left-[65%]",
     bottom:
-      "left-[64%] top-[72%] -translate-x-1/2 -translate-y-1/2 sm:left-[62%] sm:top-[71%]",
+      "left-[58%] top-[64%] -translate-x-1/2 -translate-y-1/2 sm:left-[57%] sm:top-[63%]",
   };
 
 function formatPlayerActionLabel(
@@ -265,6 +265,7 @@ export function RoomHandsBoardV2({
 
   // Bottom player is always at index 0 after rotation
   const myName = getPlayerName(bottomHand.playerId);
+  const hasBottomPlayerFolded = !!bottomHand.hasFolded;
 
   const boardPhase: "phase0" | RoomHandsBoardProps["gameStage"] =
     showReadyButton ? "phase0" : gameStage;
@@ -280,6 +281,7 @@ export function RoomHandsBoardV2({
   const showInlineBottomPanelShuffle =
     !showBettingControls && gameStage === "showdown" && showShuffleControl;
   const showTableRaiseSlider =
+    !hasBottomPlayerFolded &&
     canRaise &&
     !mySubmission &&
     !!raiseAmount &&
@@ -318,7 +320,7 @@ export function RoomHandsBoardV2({
         }
       }}
     >
-      <div className="flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-black font-serif text-[#f1eee7] [@media(max-height:460px)]:h-[calc(100dvh-4rem)]">
+      <div className="flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-gradient-felt-table font-serif text-[#f1eee7] [@media(max-height:460px)]:h-[calc(100dvh-4rem)]">
         <main className="flex min-h-0 flex-1 flex-col pt-3 sm:pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {tutorialReplayControl ? (
             <div className="px-4 pb-2">{tutorialReplayControl}</div>
@@ -403,7 +405,6 @@ export function RoomHandsBoardV2({
                 </div>
               </div>
             )}
-
           </div>
 
           <div className="flex flex-col items-center gap-1 px-4 sm:gap-4 [@media(max-height:460px)]:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
@@ -465,7 +466,7 @@ export function RoomHandsBoardV2({
                     tileSize={boardTileSize}
                   />
                 )}
-                hasFolded={bottomHand?.hasFolded}
+                hasFolded={hasBottomPlayerFolded}
               />
             )}
 
@@ -495,11 +496,11 @@ export function RoomHandsBoardV2({
               />
             )}
 
-            {(showBettingControls ||
+            {((showBettingControls && !hasBottomPlayerFolded) ||
               (showShuffleControl && !showInlineBottomPanelShuffle)) && (
               <RoomActionControls
                 betting={
-                  showBettingControls
+                  showBettingControls && !hasBottomPlayerFolded
                     ? {
                         isBetting,
                         isMyTurn,
