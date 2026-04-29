@@ -97,7 +97,7 @@ function ResultsPage() {
 
     try {
       await leaveRoom({});
-      const room = await createRoom({ name: displayName });
+      const room = await createRoom({ name: displayName, isBotGame: true });
       await debugFillRoomWithBots({ code: room.code, count: 3 });
       await createGameForRoom({ roomId: room.roomId });
       await navigate({ to: "/rooms/$code", params: { code: room.code } });

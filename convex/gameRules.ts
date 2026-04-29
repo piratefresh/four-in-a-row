@@ -77,12 +77,12 @@ Word Poker is a multiplayer word game combining poker-style betting with strateg
 Players receive private letter tiles and share community tiles, betting on their ability to form high-scoring words.
 
 ## Game Flow
-1. **Pre-Flop**: Players receive 2 private tiles (hidden from others) → Betting round
-2. **Flop**: 2 community tiles revealed (shared by all) → Betting round
-3. **Turn**: 1 additional community tile revealed (3 total) → Betting round
-4. **River**: 1 additional community tile revealed (4 total) → Betting round
-5. **Final**: Last community tile revealed (5 total) → No betting, moves to showdown
-6. **Showdown**: 60-second timer to build best word → Highest score wins pot
+1. **Blinds & Deal**: Small blind and big blind post forced bets; each player receives 2 private tiles
+2. **Pre-Flop**: Betting round using only private tiles
+3. **Flop**: 3 community tiles revealed (shared by all) -> Betting round
+4. **Turn**: 1 additional community tile revealed (4 total) -> Betting round
+5. **River**: 1 additional community tile revealed (5 total) -> Last betting round
+6. **Reveal**: 60-second timer to build best word -> Highest score wins pot
 
 ## Tile System
 - **Private tiles**: 2 tiles only visible to you
@@ -123,7 +123,8 @@ Players receive private letter tiles and share community tiles, betting on their
 - **All-In**: Bet all remaining chips
 
 ## Betting Constants
-- **Ante**: 20 chips (forced bet before each round)
+- **Small blind**: 10 chips
+- **Big blind**: 20 chips
 - **Starting chips**: 1000
 - **Raise ladder**: Fixed increments (20 → 40 → 60 → 80 → 100 → 120 → 140 → 160 → 200)
 
@@ -146,7 +147,7 @@ Players receive private letter tiles and share community tiles, betting on their
 When deciding whether to bet, call, raise, or fold:
 1. **Tile Quality**: Do you have high-value letters? Good vowel-consonant balance?
 2. **Word Potential**: Can you form a valid 5+ letter word? Any 7-letter possibilities?
-3. **Stage**: Pre-flop is riskier (less info). River has full information.
+3. **Stage**: Pre-flop has only private-tile information. River has full information.
 4. **Pot Size**: Is the pot worth competing for?
 5. **Opponent Count**: More opponents = lower win probability
 6. **Chip Stack**: Don't risk too much early if you have limited chips
@@ -161,32 +162,30 @@ export function getStageStrategy(stage: GameStage): string {
     case "preflop":
       return `Pre-Flop Strategy:
 - Only 2 private tiles visible, no community tiles yet
-- Evaluate: Do you have strong letters (E, A, I, R, S, T)?
-- High-value letters (Q, Z, X, J) are risky without support
-- Fold weak hands (no vowels or all consonants)
-- Call/raise if you have good vowel-consonant mix`;
+- Blinds are already posted, so decide whether your private tiles justify calling, raising, or folding
+- Vowel/consonant balance matters more here because community tiles are still unknown`;
 
     case "flop":
-      return `Flop Strategy (2 community tiles revealed):
-- Now you see 4 total tiles (2 hand + 2 community)
-- Can you form a valid 4-letter word?
+      return `Flop Strategy (3 community tiles revealed):
+- Now you see 5 total tiles (2 hand + 3 community)
+- Can you form a valid 5-letter word?
 - Evaluate synergy between your hand and community
 - Fold if tiles don't work together
 - Raise if you see a strong 5+ letter word forming`;
 
     case "turn":
-      return `Turn Strategy (3 community tiles revealed):
-- Now you see 5 total tiles (2 hand + 3 community)
+      return `Turn Strategy (4 community tiles revealed):
+- Now you see 6 total tiles (2 hand + 4 community)
 - You should have a clear 5-letter word in mind
 - Check if others are betting aggressively (they may have better words)
 - Consider pot odds: Is it worth calling to see the river?
 - Fold if you can't form a competitive word`;
 
     case "river":
-      return `River Strategy (4 community tiles revealed):
-- Now you see 6 total tiles (2 hand + 4 community)
-- This is your last chance to bet before final tile
-- You should know if you can make a strong 6-letter word
+      return `River Strategy (5 community tiles revealed):
+- Now you see all 7 tiles (2 hand + 5 community)
+- This is your last chance to bet before showdown
+- You should know your best available word
 - Evaluate: Can you potentially use all 7 tiles? (+10 bonus)
 - Aggressive betting signals strong hands`;
 

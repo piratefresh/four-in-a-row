@@ -8,21 +8,21 @@ export const GAME_RULES = {
   overview: 'A multiplayer word game where players use letter tiles from their hand and shared community tiles to build words.',
 
   gameplay: {
-    initialHand: 'Each player receives letter tiles at the start',
-    communityTiles: 'Shared tiles are revealed in stages (flop, turn, river, final) similar to poker',
-    stages: ['preflop', 'flop', 'turn', 'river', 'final', 'showdown'],
+    initialHand: 'Small and big blinds post, then each player receives 2 private tiles',
+    communityTiles: 'Shared tiles are revealed in stages (flop, turn, river) similar to poker',
+    stages: ['preflop', 'flop', 'turn', 'river', 'reveal', 'showdown'],
     revealSchedule: {
       preflop: '0 community tiles revealed',
-      flop: '2 community tiles revealed',
+      flop: '3 community tiles revealed',
       turn: '1 additional tile',
       river: '1 additional tile',
-      final: '1 additional tile (5 total)',
-      showdown: 'Final scoring'
+      final: 'No additional tiles; river already reveals 5 total',
+      showdown: '60 seconds to build the best word'
     }
   },
 
   wordBuilding: {
-    sources: 'Players can use tiles from their hand AND community tiles',
+    sources: 'Players can use private tiles, community tiles, or any mix of both',
     uniqueness: 'Each tile can only be used once per word',
     validation: 'Words must be valid English dictionary words',
     scoring: 'Points are based on letter values (similar to Scrabble)',
@@ -30,8 +30,8 @@ export const GAME_RULES = {
 
   turns: {
     order: 'Players take turns in order',
-    actions: ['Submit a word', 'Skip round (lose points)'],
-    skipPenalty: 'Skipping costs points and folds the player for that round'
+    actions: ['Fold', 'Check', 'Call', 'Raise', 'Submit a word during reveal'],
+    skipPenalty: 'Folding exits the hand and forfeits bets already made'
   },
 
   winning: {
@@ -47,12 +47,13 @@ export const GAME_RULES = {
 export function getGameRulesPrompt(): string {
   return `Game Rules Summary:
 - Multiplayer word game combining poker-style betting with Scrabble-style word building
-- Players have private letter tiles in their hand
-- Community tiles are revealed in stages (preflop, flop, turn, river, final, showdown)
-- Players build words using tiles from their hand AND community tiles
+- Blinds post before each hand, then every player gets 2 private tiles
+- Pre-flop betting uses only private-tile information
+- Community tiles reveal 3 on the flop, 1 on the turn, and 1 on the river
+- Players build words using private tiles, community tiles, or any mix
 - Each tile can only be used once per word
 - Words must be valid English dictionary words
 - Points are based on letter values (numbers indicate point value)
-- Players can either submit a word or skip/fold (losing points)
+- Reveal gives players 60 seconds to submit a 2-7 letter word
 - Goal: Build the highest-scoring valid word to win the round`
 }

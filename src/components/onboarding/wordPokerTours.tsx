@@ -3,6 +3,7 @@ import { WordTile } from "@/components/rooms/table/word-tile-v2";
 import { calculateShowdownPreviewScore } from "@/lib/showdownScore";
 
 export type TutorialStep = Step & {
+  tourKind?: "tutorial" | "helper";
   cardClassName?: string;
   titleClassName?: string;
   contentClassName?: string;
@@ -17,6 +18,16 @@ type TutorialTour = Omit<Tour, "steps"> & {
 };
 
 export const FIRST_BOT_GAME_TOUR = "first-bot-game";
+export const IN_GAME_HELPER_TOUR = "in-game-helper";
+export const IN_GAME_HELPER_STEPS = {
+  ready: 0,
+  betting: 1,
+  waiting: 2,
+  wordBuilder: 3,
+  communityReveal: 4,
+  tileDetails: 5,
+  showdown: 6,
+} as const;
 export const FIRST_BOT_GAME_WORD_BUILDER_WAIT_STEP = 2;
 export const FIRST_BOT_GAME_WORD_BUILDER_STEP = 3;
 export const FIRST_BOT_GAME_SHOWDOWN_WAIT_STEP = 5;
@@ -249,6 +260,109 @@ export const wordPokerTours = [
         side: "top",
         showControls: true,
         showSkip: true,
+      },
+    ],
+  },
+  {
+    tour: IN_GAME_HELPER_TOUR,
+    steps: [
+      {
+        tourKind: "helper",
+        icon: "1",
+        title: "Ready up",
+        content: (
+          <>
+            Use the ready button when you want the table to deal. The hand
+            starts once everyone is ready.
+          </>
+        ),
+        selector: "#tutorial-room-actions",
+        side: "top",
+        showControls: true,
+      },
+      {
+        tourKind: "helper",
+        icon: "2",
+        title: "Your action",
+        content: (
+          <>
+            Check when the price is zero, call to match the current bet, raise
+            when you want to pressure the table, or fold to leave the hand.
+          </>
+        ),
+        selector: "#tutorial-room-actions",
+        side: "top",
+        showControls: true,
+      },
+      {
+        tourKind: "helper",
+        icon: "3",
+        title: "Waiting",
+        content: (
+          <>
+            This area shows whose turn it is. If a clock is called, the timer
+            shows how long the active player has left to act.
+          </>
+        ),
+        selector: "#tutorial-room-actions",
+        side: "top",
+        showControls: true,
+      },
+      {
+        tourKind: "helper",
+        icon: "4",
+        title: "Build your word",
+        content: (
+          <>
+            Activate letters by clicking them, drag active letters to reorder
+            your word, and keep refining as more community letters appear.
+          </>
+        ),
+        selector: "#tutorial-player-hand",
+        side: "top",
+        showControls: true,
+      },
+      {
+        tourKind: "helper",
+        icon: "5",
+        title: "Community letters",
+        content: (
+          <>
+            Flop, turn, and river reveal shared letters. Each reveal can change
+            your best word and your betting decision.
+          </>
+        ),
+        selector: "#tutorial-community-letters",
+        side: "bottom",
+        showControls: true,
+      },
+      {
+        tourKind: "helper",
+        icon: "6",
+        title: "Special tiles",
+        content: (
+          <>
+            Tile values score directly. `2L` and `3L` multiply one letter, and
+            choice tiles need a letter picked before you submit.
+          </>
+        ),
+        selector: "#tutorial-player-hand",
+        side: "top",
+        showControls: true,
+      },
+      {
+        tourKind: "helper",
+        icon: "7",
+        title: "Showdown",
+        content: (
+          <>
+            Showdown is the final commit. Start the timer when required, then
+            submit your strongest word before time expires.
+          </>
+        ),
+        selector: "#tutorial-player-hand",
+        side: "top",
+        showControls: true,
       },
     ],
   },

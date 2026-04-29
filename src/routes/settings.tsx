@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
+import { api } from "../../convex/_generated/api";
 
 const AVATAR_MAX_FILE_BYTES = 1024 * 1024; // 1MB - Convex limit
 
@@ -32,6 +34,16 @@ function SettingsPage() {
   const [name, setName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [showInGameHelper, setShowInGameHelper] = useState(true);
+  const [isSavingHelperPreference, setIsSavingHelperPreference] =
+    useState(false);
+  const preferences = useQuery(
+    (api as any).userPreferences.getMyPreferences,
+    session?.user ? {} : "skip",
+  );
+  const setShowInGameHelperPreference = useMutation(
+    (api as any).userPreferences.setShowInGameHelper,
+  );
 
   useEffect(() => {
     if (!isPending && !session?.user) {
@@ -42,6 +54,11 @@ function SettingsPage() {
   useEffect(() => {
     setName(session?.user?.name ?? "");
   }, [session?.user?.name]);
+
+  useEffect(() => {
+    if (!preferences) return;
+    setShowInGameHelper(preferences.showInGameHelper);
+  }, [preferences]);
 
   const handleSaveName = async () => {
     const trimmed = name.trim();
@@ -93,6 +110,29 @@ function SettingsPage() {
       toast.error(message);
     } finally {
       setIsSavingAvatar(false);
+    }
+  };
+
+  const handleToggleInGameHelper = async () => {
+    if (isSavingHelperPreference) return;
+
+    const nextValue = !showInGameHelper;
+    setShowInGameHelper(nextValue);
+    setIsSavingHelperPreference(true);
+    try {
+      await setShowInGameHelperPreference({
+        showInGameHelper: nextValue,
+      });
+      toast.success(
+        nextValue ? "In-game helper enabled." : "In-game helper disabled.",
+      );
+    } catch (error) {
+      setShowInGameHelper(!nextValue);
+      const message =
+        error instanceof Error ? error.message : "Failed to update helper setting.";
+      toast.error(message);
+    } finally {
+      setIsSavingHelperPreference(false);
     }
   };
 
@@ -178,6 +218,44 @@ function SettingsPage() {
                   className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-slate-400"
                 >
                   {isSavingAvatar ? "Saving..." : "Saved on upload"}
+                </button>
+              </div>
+            </article>
+
+            <article className="rounded-xl border border-white/10 bg-white/5">
+              <div className="p-4 sm:p-5">
+                <h2 className="text-xl font-medium">In-game helper</h2>
+                <p className="mt-1 text-sm text-slate-300">
+                  Show lightweight coaching tips during regular games outside
+                  the tutorial.
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-4 border-t border-white/10 p-4 sm:p-5">
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    Show in-game helper
+                  </p>
+                  <p className="mt-1 text-xs text-slate-300">
+                    This account setting follows you across devices.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={showInGameHelper}
+                  onClick={() => void handleToggleInGameHelper()}
+                  disabled={preferences === undefined || isSavingHelperPreference}
+                  className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    showInGameHelper
+                      ? "border-[#d7b45e]/80 bg-[#d7b45e]"
+                      : "border-white/20 bg-white/10"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      showInGameHelper ? "translate-x-5" : "translate-x-1"
+                    }`}
+                  />
                 </button>
               </div>
             </article>

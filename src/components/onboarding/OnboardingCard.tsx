@@ -9,12 +9,14 @@ import {
   FIRST_BOT_GAME_SHOWDOWN_SUBMIT_STEP,
   FIRST_BOT_GAME_TOUR,
   FIRST_BOT_GAME_WORD_BUILDER_STEP,
+  IN_GAME_HELPER_TOUR,
   getTourCompletionStorageKey,
   getRoomCodeFromPathname,
   getTourPausedStepStorageKey,
 } from "./wordPokerTours";
 
 type TutorialCardStep = Step & {
+  tourKind?: "tutorial" | "helper";
   cardClassName?: string;
   titleClassName?: string;
   contentClassName?: string;
@@ -52,8 +54,10 @@ export const OnboardingCard = ({
     (api as any).rooms.startTutorialShowdown,
   );
   const [isStartingShowdown, setIsStartingShowdown] = useState(false);
+  const isHelperStep =
+    tutorialStep.tourKind === "helper" || currentTour === IN_GAME_HELPER_TOUR;
   const isPauseableStep =
-    FIRST_BOT_GAME_PAUSEABLE_STEPS[currentStep] !== undefined;
+    !isHelperStep && FIRST_BOT_GAME_PAUSEABLE_STEPS[currentStep] !== undefined;
   const isTutorialShowdownSubmitStep =
     currentTour === FIRST_BOT_GAME_TOUR &&
     currentStep === FIRST_BOT_GAME_SHOWDOWN_SUBMIT_STEP;
@@ -68,6 +72,7 @@ export const OnboardingCard = ({
   const showControls = step.showControls !== false;
   const hideNext = tutorialStep.hideNext === true;
   const shouldResumeTutorialBettingOnClose =
+    !isHelperStep &&
     currentTour === FIRST_BOT_GAME_TOUR &&
     currentStep >= FIRST_BOT_GAME_WORD_BUILDER_STEP &&
     currentStep <= FIRST_BOT_GAME_SHOWDOWN_WAIT_STEP;
@@ -141,6 +146,20 @@ export const OnboardingCard = ({
     skipTour?.();
   };
 
+  const handleCloseHelper = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("word-poker:helper-dismiss", {
+          detail: {
+            tourName: currentTour,
+            step: currentStep,
+          },
+        }),
+      );
+    }
+    closeNextStep();
+  };
+
   return (
     <div
       className={cn(
@@ -149,10 +168,12 @@ export const OnboardingCard = ({
       )}
     >
       <div className="mb-1 flex items-center justify-between gap-3 font-mono text-[8px] font-bold uppercase leading-none tracking-[0.2em] text-gold">
-        <span>COACH</span>
-        <span className="tracking-[0.12em] text-gold/75">
-          {currentStep + 1}/{totalSteps}
-        </span>
+        <span>{isHelperStep ? "HELPER" : "COACH"}</span>
+        {!isHelperStep ? (
+          <span className="tracking-[0.12em] text-gold/75">
+            {currentStep + 1}/{totalSteps}
+          </span>
+        ) : null}
       </div>
 
       <div className="mb-2 flex items-center gap-2">
@@ -185,15 +206,17 @@ export const OnboardingCard = ({
         {step.content}
       </div>
 
-      <div className="mb-2 h-1 rounded-full bg-ink/10">
-        <div
-          className={cn(
-            "h-1 rounded-full bg-gold transition-[width]",
-            tutorialStep.progressClassName,
-          )}
-          style={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
-        />
-      </div>
+      {!isHelperStep ? (
+        <div className="mb-2 h-1 rounded-full bg-ink/10">
+          <div
+            className={cn(
+              "h-1 rounded-full bg-gold transition-[width]",
+              tutorialStep.progressClassName,
+            )}
+            style={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
+          />
+        </div>
+      ) : null}
 
       <div
         className={cn(
@@ -201,7 +224,9 @@ export const OnboardingCard = ({
           tutorialStep.controlsClassName,
         )}
       >
-        {showControls ? (
+        {isHelperStep ? (
+          <div className="h-8 min-w-[76px]" />
+        ) : showControls ? (
           currentStep > 0 ? (
             <button
               onClick={prevStep}
@@ -216,11 +241,24 @@ export const OnboardingCard = ({
           <div className="h-8 min-w-[76px]" />
         )}
 
-        <span className="whitespace-nowrap text-[8px] text-ink/45">
-          {currentStep + 1} of {totalSteps}
-        </span>
+        {!isHelperStep ? (
+          <span className="whitespace-nowrap text-[8px] text-ink/45">
+            {currentStep + 1} of {totalSteps}
+          </span>
+        ) : (
+          <span className="whitespace-nowrap text-[8px] text-ink/45">
+            Context tip
+          </span>
+        )}
 
-        {showControls ? (
+        {isHelperStep ? (
+          <button
+            onClick={handleCloseHelper}
+            className="min-h-8 rounded border border-gold-bright bg-gold px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-felt-deep transition-colors hover:bg-gold-bright"
+          >
+            Close
+          </button>
+        ) : showControls ? (
           isPauseableStep ? (
             <button
               onClick={() => {

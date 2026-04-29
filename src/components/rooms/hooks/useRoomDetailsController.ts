@@ -359,7 +359,9 @@ export function useRoomDetailsController(code: string) {
       return null;
     }
 
-    return Math.max(0, TURN_CLOCK_GRACE_PERIOD_MS - (liveNow - game.turnStartedAt));
+    const turnClockGraceMs =
+      game.config?.turnClockGraceMs ?? TURN_CLOCK_GRACE_PERIOD_MS;
+    return Math.max(0, turnClockGraceMs - (liveNow - game.turnStartedAt));
   }, [
     currentTurnIsAutomated,
     currentTurnPlayerId,
@@ -378,23 +380,57 @@ export function useRoomDetailsController(code: string) {
     game.turnStartedAt === undefined;
 
   const raisesThisRound = game?.raisesThisRound ?? 0;
+  const raiseLadder = game?.config?.raiseLadder ?? RAISE_LADDER;
+  const maxRaisesPerRound =
+    game?.config?.maxRaisesPerRound ?? MAX_RAISES_PER_ROUND;
+const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
+  const turnClockGraceMs = game?.config?.turnClockGraceMs ?? TURN_CLOCK_GRACE_PERIOD_MS;
+  const bettingStructure = game?.config?.bettingStructure;
+  const turnTimeRemaining = useMemo(() => {
+    if (
+      !game ||
+      game.status !== "active" ||
+      game.stage === "final" ||
+      game.stage === "showdown" ||
+      game.turnStartedAt === undefined
+    ) {
+      return null;
+    }
+    return Math.max(0, turnClockGraceMs - (liveNow - game.turnStartedAt));
+  }, [game, liveNow, turnClockGraceMs]);
   const availableRaiseOptions = useMemo(() => {
     if (
       !game ||
       !myHand ||
       !isMyTurn ||
       game.status !== "active" ||
-      raisesThisRound >= MAX_RAISES_PER_ROUND
+      raisesThisRound >= maxRaisesPerRound
     ) {
       return [];
     }
 
-    return RAISE_LADDER.filter(
-      (amount) =>
+    const amountToCall = game.currentBet - myHand.betThisRound;
+    const potLimitMaxRaiseTo =
+      bettingStructure === "potLimit"
+        ? game.pot + Math.max(0, amountToCall)
+        : Number.POSITIVE_INFINITY;
+
+    return raiseLadder.filter((amount) => {
+      return (
         amount > game.currentBet &&
-        amount - myHand.betThisRound <= myHand.chips,
-    );
-  }, [game, isMyTurn, myHand, raisesThisRound]);
+        amount <= potLimitMaxRaiseTo &&
+        amount - myHand.betThisRound <= myHand.chips
+      );
+    });
+  }, [
+    bettingStructure,
+    game,
+    isMyTurn,
+    maxRaisesPerRound,
+    myHand,
+    raiseLadder,
+    raisesThisRound,
+  ]);
   const canRaise = availableRaiseOptions.length > 0;
 
   useEffect(() => {
@@ -566,7 +602,7 @@ export function useRoomDetailsController(code: string) {
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - showdownStart;
-      const remaining = Math.max(0, SHOWDOWN_TIMER_MS - elapsed);
+      const remaining = Math.max(0, showdownTimerMs - elapsed);
 
       setShowdownTimeRemaining(remaining);
 
@@ -593,6 +629,7 @@ export function useRoomDetailsController(code: string) {
     game?.status,
     game?.showdownStartedAt,
     game?._id,
+    showdownTimerMs,
     myHand,
     playerId,
     wordSubmissions,
@@ -635,9 +672,9 @@ export function useRoomDetailsController(code: string) {
     if (!game?._id || !playerId || selectedRaiseAmount === null) {
       return;
     }
-    if (raisesThisRound >= MAX_RAISES_PER_ROUND) {
+    if (raisesThisRound >= maxRaisesPerRound) {
       setGameMessage(
-        `Raise limit reached (${MAX_RAISES_PER_ROUND}/${MAX_RAISES_PER_ROUND}).`,
+        `Raise limit reached (${maxRaisesPerRound}/${maxRaisesPerRound}).`,
       );
       return;
     }
@@ -657,7 +694,14 @@ export function useRoomDetailsController(code: string) {
     } finally {
       setIsBetting(false);
     }
-  }, [game?._id, playerId, raise, raisesThisRound, selectedRaiseAmount]);
+  }, [
+    game?._id,
+    maxRaisesPerRound,
+    playerId,
+    raise,
+    raisesThisRound,
+    selectedRaiseAmount,
+  ]);
 
   const handleFold = useCallback(async () => {
     if (!game?._id || !playerId) return;
@@ -754,7 +798,7 @@ export function useRoomDetailsController(code: string) {
     () => ({
       anteAmount: ANTE_AMOUNT,
       raisesThisRound,
-      maxRaisesPerRound: MAX_RAISES_PER_ROUND,
+      maxRaisesPerRound,
       actionMessage: gameMessage,
       showBettingControls:
         game?.status === "active" &&
@@ -801,6 +845,7 @@ export function useRoomDetailsController(code: string) {
       isTurnClockTarget,
       callClockAvailableInMs,
       showdownTimeRemaining,
+      turnTimeRemaining,
       isShowdownSubmissionOpen:
         game?.stage !== "showdown" ||
         game.status !== "active" ||
@@ -834,6 +879,7 @@ export function useRoomDetailsController(code: string) {
       isTurnClockTarget,
       isTogglingReady,
       isTutorialBettingPaused,
+      maxRaisesPerRound,
       myPlayer?.readyStatus,
       raisesThisRound,
       roomData?.members,
@@ -843,6 +889,7 @@ export function useRoomDetailsController(code: string) {
       turnClockCallerName,
       turnClockTargetName,
       turnClockTimeRemaining,
+      turnTimeRemaining,
     ],
   );
 

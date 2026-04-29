@@ -2,6 +2,13 @@ import { formatDistanceToNow } from "date-fns";
 
 interface RoomCardProps {
   roomCode: string;
+  roomTitle?: string | null;
+  config?: {
+    showdownTimer?: number;
+    bettingStructure?: string;
+    choiceTileFrequency?: string;
+    bonusStructure?: string;
+  };
   activePlayers: number;
   maxPlayers: number;
   lastActiveAt: number;
@@ -23,6 +30,8 @@ export const roomCardGridColumnsClassName =
 
 export function RoomCard({
   roomCode,
+  roomTitle,
+  config,
   activePlayers,
   maxPlayers,
   lastActiveAt,
@@ -32,6 +41,7 @@ export function RoomCard({
   onClick,
 }: RoomCardProps) {
   const state = getRoomState({ activePlayers, maxPlayers, isJoining });
+  const configLabel = formatRoomConfig(config);
 
   return (
     <button
@@ -47,10 +57,10 @@ export function RoomCard({
       <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-gold-bright/70 to-transparent group-hover:via-felt-deep/20" />
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold text-cream group-hover:text-felt-deep sm:text-base">
-          Room {roomCode}
+          {roomTitle || `Room ${roomCode}`}
         </div>
         <div className="mt-1 truncate text-[11px] uppercase tracking-[0.22em] text-gold group-hover:text-felt-deep/70">
-          {state.detail}
+          {configLabel}
         </div>
       </div>
 
@@ -82,6 +92,18 @@ export function RoomCard({
       </div>
     </button>
   );
+}
+
+function formatRoomConfig(config: RoomCardProps["config"]) {
+  const seconds = Math.round((config?.showdownTimer ?? 60_000) / 1000);
+  const betting =
+    config?.bettingStructure === "potLimit"
+      ? "Pot"
+      : config?.bettingStructure === "fixedLimit"
+        ? "Fixed"
+        : "No limit";
+  const tiles = (config?.choiceTileFrequency ?? "high") === "high" ? "2-3 tiles" : "0-1 tiles";
+  return `${seconds}s ${betting} ${tiles}`;
 }
 
 function getRoomState({

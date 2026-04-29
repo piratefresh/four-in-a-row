@@ -20,7 +20,7 @@ import {
   leavePlayer,
   joinAuthenticatedUserToRoom,
   syncOfflineBotsToRoom,
-  createRoomWithHost,
+  createRoomWithHostOptions,
   rejoinRoomMember,
 } from "../players";
 import { PLAYER_NAME_MAX_LENGTH } from "../../constants";
@@ -31,21 +31,23 @@ import { roomConfigValidator } from "../../gameConfig";
 export const createRoom = mutation({
   args: {
     name: v.string(),
+    roomTitle: v.optional(v.string()),
     difficulty: v.optional(v.union(
       v.literal("easy"),
       v.literal("medium"),
       v.literal("hard"),
     )),
+    isBotGame: v.optional(v.boolean()),
     config: v.optional(roomConfigValidator),
   },
   handler: async (ctx, args) => {
     await requireVerifiedUser(ctx);
-    return createRoomWithHost(
-      ctx,
-      args.name,
-      (args.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM,
-      args.config,
-    );
+    return createRoomWithHostOptions(ctx, args.name, {
+      title: args.roomTitle?.trim() || undefined,
+      isBotGame: args.isBotGame ?? args.difficulty !== undefined,
+      difficulty: (args.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM,
+      config: args.config,
+    });
   },
 });
 
@@ -251,6 +253,7 @@ export const continueToNextRoom = mutation({
     if (!nextRoom || nextRoom.status !== "open") {
       const { roomId: nextRoomId } = await createOpenRoom(ctx, {
         sourceRoomId: room._id,
+        title: room.title,
         isBotGame: room.isBotGame,
         difficulty: room.difficulty as AIDifficulty | undefined,
         config: room.config,

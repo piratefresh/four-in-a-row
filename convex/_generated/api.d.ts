@@ -58,6 +58,7 @@ import type * as showdownSolver from "../showdownSolver.js";
 import type * as simpleBots from "../simpleBots.js";
 import type * as stats from "../stats.js";
 import type * as testDeck from "../testDeck.js";
+import type * as userPreferences from "../userPreferences.js";
 import type * as validateWord from "../validateWord.js";
 import type * as verifyUser from "../verifyUser.js";
 
@@ -118,6 +119,7 @@ declare const fullApi: ApiFromModules<{
   simpleBots: typeof simpleBots;
   stats: typeof stats;
   testDeck: typeof testDeck;
+  userPreferences: typeof userPreferences;
   validateWord: typeof validateWord;
   verifyUser: typeof verifyUser;
 }>;

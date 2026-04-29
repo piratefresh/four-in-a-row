@@ -87,12 +87,12 @@ Word Poker is a multiplayer word game combining poker-style betting with strateg
 Players receive private letter tiles and share community tiles, betting on their ability to form high-scoring words.
 
 ## Game Flow
-1. Pre-Flop: 2 private tiles → Betting round
-2. Flop: 2 community tiles revealed → Betting round
-3. Turn: 1 more community tile (3 total) → Betting round
-4. River: 1 more community tile (4 total) → Betting round
-5. Final: Last community tile (5 total) → No betting
-6. Showdown: 60 seconds to build best word → Highest score wins pot
+1. Blinds & Deal: small blind and big blind post forced bets; each player receives 2 private tiles
+2. Pre-Flop: bet using only your 2 private tiles
+3. Flop: 3 community tiles revealed -> Betting round
+4. Turn: 1 more community tile (4 total) -> Betting round
+5. River: 1 more community tile (5 total) -> Last betting round
+6. Reveal: 60 seconds to build best word -> Highest score wins pot
 
 ## Letter Values
 - 1 pt: A, E, I, O, U
@@ -238,13 +238,13 @@ Do not include any other text, explanations, or markdown. Only the JSON object.`
 function getStageAdvice(stage: GameStage): string {
   switch (stage) {
     case "preflop":
-      return "Only 2 private tiles visible — you have very little information. It's cheap to see the flop. Call most hands unless your tiles are truly terrible. Don't fold early.";
+      return "Only 2 private tiles are visible. This is a betting round with blinds posted; judge whether to call, raise, or fold before seeing community tiles.";
     case "flop":
-      return "2 community tiles now visible (4 total). You can start seeing word potential. If you have a reasonable mix, call to see more tiles. Only fold if your tiles are clearly poor.";
+      return "3 community tiles now visible (5 total). You can start seeing word potential. If you have a reasonable mix, call to see more tiles. Only fold if your tiles are clearly poor.";
     case "turn":
-      return "3 community tiles visible (5 total). You should have a 5-letter word in mind. Consider pot odds.";
+      return "4 community tiles visible (6 total). You should have a strong word candidate in mind. Consider pot odds.";
     case "river":
-      return "4 community tiles visible (6 total). Last betting chance. Strong hand = aggressive bet. Weak = fold.";
+      return "5 community tiles visible (7 total). Last betting chance before showdown. Strong hand = aggressive bet. Weak = fold.";
     case "final":
       return "All tiles visible. No more betting. Plan your best word for showdown.";
     case "showdown":

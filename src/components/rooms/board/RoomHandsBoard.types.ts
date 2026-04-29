@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import type { InGameHelperContext } from "@/components/onboarding/RoomInGameHelperSync";
 
 export type Tile =
   | {
@@ -32,6 +33,8 @@ export type PlayerHand = {
 
 export type RoomHandsBoardProps = {
   gameId: Id<"games">;
+  activePlayerId?: string;
+  helperTip?: InGameHelperContext | null;
   roomCode?: string;
   currentTurnPlayerId?: string | null;
   gameStage: "preflop" | "flop" | "turn" | "river" | "final" | "showdown";

@@ -78,9 +78,14 @@ function toCommunityTile(tile: GameDeckTile): GameTile {
       };
 }
 
+function hideCommunityTiles(communityTiles: GameTile[]) {
+  return communityTiles.map((tile) => ({ ...tile, revealed: false }));
+}
+
 export function createChoiceTileDeal(
   sourceDeck: GameDeckTile[],
   participantCount: number,
+  config = resolveConfig(),
 ) {
   if (participantCount <= 0) {
     throw new ConvexError({
@@ -101,9 +106,15 @@ export function createChoiceTileDeal(
 
   const availableChoiceTiles = deck.filter((tile) => tile.kind === "choice").length;
   const availableSingleTiles = deck.length - availableChoiceTiles;
+  const privateChoiceTileCount =
+    config.choiceTileFrequency === "low" ? 0 : PREFERRED_PRIVATE_CHOICE_TILE_COUNT;
+  const minCommunityChoiceTileCount =
+    config.choiceTileFrequency === "low" ? 0 : MIN_COMMUNITY_CHOICE_TILE_COUNT;
+  const maxCommunityChoiceTileCount =
+    config.choiceTileFrequency === "low" ? 1 : MAX_COMMUNITY_CHOICE_TILE_COUNT;
   const minChoiceTilesNeeded =
-    participantCount * PREFERRED_PRIVATE_CHOICE_TILE_COUNT +
-    MIN_COMMUNITY_CHOICE_TILE_COUNT;
+    participantCount * privateChoiceTileCount +
+    minCommunityChoiceTileCount;
 
   if (availableChoiceTiles < minChoiceTilesNeeded) {
     throw new ConvexError({
@@ -113,21 +124,21 @@ export function createChoiceTileDeal(
   }
 
   const maxCommunityChoiceTiles = Math.min(
-    MAX_COMMUNITY_CHOICE_TILE_COUNT,
+    maxCommunityChoiceTileCount,
     availableChoiceTiles -
-      participantCount * PREFERRED_PRIVATE_CHOICE_TILE_COUNT,
+      participantCount * privateChoiceTileCount,
   );
   const communityChoiceTileCount =
-    maxCommunityChoiceTiles <= MIN_COMMUNITY_CHOICE_TILE_COUNT
-      ? MIN_COMMUNITY_CHOICE_TILE_COUNT
-      : MIN_COMMUNITY_CHOICE_TILE_COUNT +
+    maxCommunityChoiceTiles <= minCommunityChoiceTileCount
+      ? minCommunityChoiceTileCount
+      : minCommunityChoiceTileCount +
         randomIndex(
           maxCommunityChoiceTiles -
-            MIN_COMMUNITY_CHOICE_TILE_COUNT +
+            minCommunityChoiceTileCount +
             1,
         );
   const totalChoiceTilesNeeded =
-    participantCount * PREFERRED_PRIVATE_CHOICE_TILE_COUNT +
+    participantCount * privateChoiceTileCount +
     communityChoiceTileCount;
   const totalSingleTilesNeeded = totalTilesNeeded - totalChoiceTilesNeeded;
 
@@ -147,14 +158,14 @@ export function createChoiceTileDeal(
     hands[participantIndex]!.push(
       ...drawMatchingTiles(
         deck,
-        PREFERRED_PRIVATE_CHOICE_TILE_COUNT,
+        privateChoiceTileCount,
         (tile) => tile.kind === "choice",
       ),
     );
     hands[participantIndex]!.push(
       ...drawMatchingTiles(
         deck,
-        INITIAL_HAND_SIZE - PREFERRED_PRIVATE_CHOICE_TILE_COUNT,
+        INITIAL_HAND_SIZE - privateChoiceTileCount,
         (tile) => tile.kind === "single",
       ),
     );
@@ -279,7 +290,6 @@ async function dealHands(
       });
     }
 
-    // Determine blind amount for this player
     let blindAmount = 0;
     if (participantIndex === smallBlindIndex) {
       blindAmount = config.smallBlind;
@@ -300,9 +310,9 @@ async function dealHands(
       playerId: participantId,
       tiles,
       chips: config.startingChips - blindAmount,
-      betThisRound: 0,
+      betThisRound: blindAmount,
       totalBet: blindAmount,
-      hasActed: participantIndex !== smallBlindIndex && participantIndex !== bigBlindIndex,
+      hasActed: false,
       hasFolded: false,
       lastAction: undefined,
       createdAt: handCreatedAt,
@@ -374,7 +384,7 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
   console.log(`Deck generated: ${deck.length} total cards, ${choiceCards.length} choice cards`);
 
   await clearHands(ctx, game._id);
-  const roundDeal = createChoiceTileDeal(deck, participantIds.length);
+  const roundDeal = createChoiceTileDeal(deck, participantIds.length, config);
 
   const now = Date.now();
 
@@ -385,8 +395,9 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
     participantIds.length
   );
 
-  const totalBlinds = config.smallBlind + config.bigBlind;
   const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
+  const openingCommunityTiles = hideCommunityTiles(roundDeal.communityTiles);
+  const totalBlinds = config.smallBlind + config.bigBlind;
 
   await dealHands(
     ctx,
@@ -400,7 +411,8 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
   );
   await ctx.db.patch(game._id, {
     status: "active",
-    communityTiles: roundDeal.communityTiles,
+    stage: "preflop",
+    communityTiles: openingCommunityTiles,
     deck: roundDeal.deck,
     pot: totalBlinds,
     currentBet: config.bigBlind,
@@ -418,6 +430,10 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
     roomId: room._id,
     category: "game_start",
     stage: "preflop",
+    tilesRevealed: openingCommunityTiles
+      .filter((tile) => tile.revealed)
+      .map((tile) => tile.kind === "single" ? tile.letter : `[${tile.options.join("/")}]`)
+      .join(" "),
     potAfter: totalBlinds,
     metadata: {
       participantIds,
@@ -466,7 +482,7 @@ export async function internalStartGameHandler(
   const deck = createShuffledDeck();
 
   await clearHands(ctx, game._id);
-  const roundDeal = createChoiceTileDeal(deck, participantIds.length);
+  const roundDeal = createChoiceTileDeal(deck, participantIds.length, config);
 
   const now = Date.now();
 
@@ -477,8 +493,9 @@ export async function internalStartGameHandler(
     participantIds.length
   );
 
-  const totalBlinds = config.smallBlind + config.bigBlind;
   const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
+  const openingCommunityTiles = hideCommunityTiles(roundDeal.communityTiles);
+  const totalBlinds = config.smallBlind + config.bigBlind;
 
   await dealHands(
     ctx,
@@ -492,7 +509,8 @@ export async function internalStartGameHandler(
   );
   await ctx.db.patch(game._id, {
     status: "active",
-    communityTiles: roundDeal.communityTiles,
+    stage: "preflop",
+    communityTiles: openingCommunityTiles,
     deck: roundDeal.deck,
     pot: totalBlinds,
     currentBet: config.bigBlind,
@@ -510,6 +528,10 @@ export async function internalStartGameHandler(
     roomId: room._id,
     category: "game_start",
     stage: "preflop",
+    tilesRevealed: openingCommunityTiles
+      .filter((tile) => tile.revealed)
+      .map((tile) => tile.kind === "single" ? tile.letter : `[${tile.options.join("/")}]`)
+      .join(" "),
     potAfter: totalBlinds,
     metadata: {
       participantIds,

@@ -86,7 +86,7 @@ function App() {
     try {
       const room = onboarding
         ? await createTutorialBotRoom({ name: displayName })
-        : await createRoom({ name: displayName, difficulty });
+        : await createRoom({ name: displayName, difficulty, isBotGame: true });
 
       setOnboardingSetupStage(onboarding ? "bots" : null);
       if (!onboarding) {

@@ -16,6 +16,7 @@ export const RAG_TOP_K = 5;
 export const appTables = {
   rooms: defineTable({
     code: v.string(),
+    title: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("closed")),
     maxPlayers: v.number(),
     tutorialId: v.optional(v.union(v.literal("first-bot-game"))),
@@ -195,6 +196,11 @@ export const appTables = {
     .index("by_characterId", ["characterId"])
     .index("by_isBot", ["isBot"])
     .index("by_winRate", ["winRate"]),
+  userPreferences: defineTable({
+    authUserId: v.string(),
+    showInGameHelper: v.boolean(),
+    updatedAt: v.number(),
+  }).index("by_authUserId", ["authUserId"]),
   gameTraces: defineTable({
     gameId: v.id("games"),
     roomId: v.optional(v.id("rooms")),

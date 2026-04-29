@@ -2,6 +2,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { OnlineRooms } from "@/components/rooms/OnlineRooms";
+import {
+  CreateRoomConfigDialog,
+  type CreateRoomConfigValues,
+} from "@/components/rooms/lobby/CreateRoomConfigDialog";
 import { RoomDrawer } from "@/components/RoomDrawer";
 import { authClient } from "@/lib/auth-client";
 import { api } from "../../convex/_generated/api";
@@ -25,6 +29,7 @@ function OnlineRoomsRoute() {
   const [selectedRoomCode, setSelectedRoomCode] = useState<string | null>(null);
   const [isDevRejoining, setIsDevRejoining] = useState(false);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [isCreateRoomOpen, setIsCreateRoomOpen] = useState(false);
 
   const getDisplayName = () => {
     if (!session?.user) {
@@ -101,7 +106,7 @@ function OnlineRoomsRoute() {
     }
   };
 
-  const handleCreateRoom = async () => {
+  const handleCreateRoom = async (values: CreateRoomConfigValues) => {
     const displayName = getDisplayName();
     if (!displayName) return;
 
@@ -109,7 +114,12 @@ function OnlineRoomsRoute() {
     setJoinMessage(null);
 
     try {
-      const result = await createRoom({ name: displayName });
+      const result = await createRoom({
+        name: displayName,
+        roomTitle: values.roomTitle,
+        config: values.config,
+      });
+      setIsCreateRoomOpen(false);
       await navigate({ to: "/rooms/$code", params: { code: result.code } });
     } catch (error) {
       const message =
@@ -136,11 +146,18 @@ function OnlineRoomsRoute() {
         rooms={rooms}
         stats={stats}
         onOpenRoom={handleOpenDrawer}
-        onCreateRoom={() => {
-          void handleCreateRoom();
-        }}
+        onCreateRoom={() => setIsCreateRoomOpen(true)}
         onResumeRoom={() => {
           void handleResumeRoom();
+        }}
+      />
+
+      <CreateRoomConfigDialog
+        open={isCreateRoomOpen}
+        isCreating={isCreatingRoom}
+        onOpenChange={setIsCreateRoomOpen}
+        onCreateRoom={(values) => {
+          void handleCreateRoom(values);
         }}
       />
 

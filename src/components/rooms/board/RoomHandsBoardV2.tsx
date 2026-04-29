@@ -18,6 +18,7 @@ import { BlankRoomPhase } from "../phases/BlankRoomPhase";
 import { PhasePlayerBadge } from "../phases/PhasePlayerBadge";
 import { RoomBottomPanel } from "./RoomBottomPanel";
 import { RoomCommunityStrip } from "./RoomCommunityStrip";
+import { RoomHelperTipTrigger } from "@/components/onboarding/RoomHelperTipTrigger";
 import { PlayerHand } from "./PlayerHand";
 import {
   RoomOpponentLayer,
@@ -135,6 +136,8 @@ function renderEmptyBuilderTile() {
 
 export function RoomHandsBoardV2({
   gameId,
+  activePlayerId,
+  helperTip,
   currentTurnPlayerId,
   gameStage,
   communityTiles,
@@ -265,7 +268,10 @@ export function RoomHandsBoardV2({
 
   // Bottom player is always at index 0 after rotation
   const myName = getPlayerName(bottomHand.playerId);
-  const hasBottomPlayerFolded = !!bottomHand.hasFolded;
+  const hasBottomPlayerFolded =
+    !!activePlayerId &&
+    bottomHand.playerId === activePlayerId &&
+    !!bottomHand.hasFolded;
 
   const boardPhase: "phase0" | RoomHandsBoardProps["gameStage"] =
     showReadyButton ? "phase0" : gameStage;
@@ -276,7 +282,7 @@ export function RoomHandsBoardV2({
     !isPhase0 &&
     !isPhase1 &&
     !mySubmission &&
-    !bottomHand?.hasFolded &&
+    !hasBottomPlayerFolded &&
     builderTiles.length > 1;
   const showInlineBottomPanelShuffle =
     !showBettingControls && gameStage === "showdown" && showShuffleControl;
@@ -285,7 +291,8 @@ export function RoomHandsBoardV2({
     canRaise &&
     !mySubmission &&
     !!raiseAmount &&
-    (raiseOptions?.length ?? 0) > 1;
+    (raiseOptions?.length ?? 0) > 1 &&
+    gameStage !== "showdown";
   const opponentBets = useMemo(
     () =>
       opponents
@@ -329,6 +336,11 @@ export function RoomHandsBoardV2({
             tiles={communityTiles}
             hidden={isPhase0 || isPhase1}
             tileSize={boardTileSize}
+            helperTip={
+              helperTip?.target === "community" ? (
+                <RoomHelperTipTrigger step={helperTip.step} />
+              ) : null
+            }
           />
 
           <div className="relative flex min-h-0 flex-1 flex-col justify-center">
@@ -467,6 +479,11 @@ export function RoomHandsBoardV2({
                   />
                 )}
                 hasFolded={hasBottomPlayerFolded}
+                helperTip={
+                  helperTip?.target === "builder" ? (
+                    <RoomHelperTipTrigger step={helperTip.step} />
+                  ) : null
+                }
               />
             )}
 
@@ -493,6 +510,11 @@ export function RoomHandsBoardV2({
                   isTogglingReady,
                   onReady,
                 }}
+                helperTip={
+                  helperTip?.target === "actions" ? (
+                    <RoomHelperTipTrigger step={helperTip.step} />
+                  ) : null
+                }
               />
             )}
 
@@ -534,6 +556,11 @@ export function RoomHandsBoardV2({
                         disableShuffle: isValidating,
                       }
                     : undefined
+                }
+                helperTip={
+                  helperTip?.target === "actions" ? (
+                    <RoomHelperTipTrigger step={helperTip.step} />
+                  ) : null
                 }
               />
             )}

@@ -27,6 +27,7 @@ export type OfflineBotSourcePlayer = {
 
 export type CreateOpenRoomOptions = {
   sourceRoomId?: Id<"rooms">;
+  title?: string;
   tutorialId?: typeof FIRST_BOT_GAME_TUTORIAL_ID;
   isBotGame?: boolean;
   difficulty?: AIDifficulty;

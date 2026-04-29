@@ -5,6 +5,13 @@ import { Button } from "../ui/button";
 type RoomListItem = {
   _id: string;
   code: string;
+  title?: string | null;
+  config?: {
+    showdownTimer?: number;
+    bettingStructure?: string;
+    choiceTileFrequency?: string;
+    bonusStructure?: string;
+  };
   activePlayers: number;
   maxPlayers: number;
   lastActiveAt: number;

@@ -449,11 +449,11 @@ export function getRevealCountForStage(stage: GameStage): number {
     case "preflop":
       return 0;
     case "flop":
-      return 2;
-    case "turn":
       return 3;
-    case "river":
+    case "turn":
       return 4;
+    case "river":
+      return 5;
     case "final":
       return 5;
     case "showdown":
@@ -467,13 +467,13 @@ export function getNewRevealCountForStage(stage: GameStage): number {
     case "preflop":
       return 0;
     case "flop":
-      return 2; // 0 -> 2
+      return 3; // 0 -> 3
     case "turn":
-      return 1; // 2 -> 3
-    case "river":
       return 1; // 3 -> 4
-    case "final":
+    case "river":
       return 1; // 4 -> 5
+    case "final":
+      return 0; // River already completes the board
     case "showdown":
       return 0;
   }

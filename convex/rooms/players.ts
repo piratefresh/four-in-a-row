@@ -286,6 +286,7 @@ export async function createRoomWithHostOptions(
   ctx: MutationCtx,
   rawName: string,
   options: {
+    title?: string;
     tutorialId?: "first-bot-game";
     isBotGame?: boolean;
     difficulty?: AIDifficulty;
@@ -314,6 +315,7 @@ export async function createRoomWithHostOptions(
   }
 
   const { roomId, code, now } = await createOpenRoom(ctx, {
+    title: options.title,
     tutorialId: options.tutorialId,
     isBotGame: options.isBotGame,
     difficulty: options.difficulty,
@@ -346,8 +348,9 @@ export async function createRoomWithHost(
   rawName: string,
   difficulty: AIDifficulty = AI_DIFFICULTY.MEDIUM,
   config?: RoomConfig,
+  title?: string,
 ) {
-  return createRoomWithHostOptions(ctx, rawName, { isBotGame: true, difficulty, config });
+  return createRoomWithHostOptions(ctx, rawName, { title, isBotGame: true, difficulty, config });
 }
 
 // ==================== Rejoin Room ====================

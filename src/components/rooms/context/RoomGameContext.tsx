@@ -40,6 +40,7 @@ type RoomGameContextValue = {
   isTurnClockTarget: boolean;
   callClockAvailableInMs: number | null;
   showdownTimeRemaining: number | null;
+  turnTimeRemaining: number | null;
   isShowdownSubmissionOpen: boolean;
   isTutorialBettingPaused: boolean;
 };

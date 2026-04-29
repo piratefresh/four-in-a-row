@@ -2,7 +2,11 @@ import { ConvexError } from "convex/values";
 import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { ActionCtx, MutationCtx } from "../_generated/server";
-import { resolveConfig, type ResolvedGameConfig } from "../gameConfig";
+import {
+  completeResolvedConfig,
+  resolveConfig,
+  type ResolvedGameConfig,
+} from "../gameConfig";
 import {
   advanceTurn,
   handlePostActionProgression,
@@ -44,7 +48,7 @@ function logBotTurn(
 }
 
 function getGameConfig(game: Doc<"games">): ResolvedGameConfig {
-  return game.config ?? resolveConfig();
+  return completeResolvedConfig(game.config ?? resolveConfig());
 }
 
 function assertActiveBettingGame(game: Doc<"games"> | null) {
@@ -244,6 +248,16 @@ export async function raiseHandler(
   if (!validRaiseOptions.includes(raiseToAmount)) throw new ConvexError({ code: "INVALID_RAISE_AMOUNT", message: `Raise amount must match a valid ladder level above ${game.currentBet}: ${validRaiseOptions.join(", ")}.` });
   const { orderedHands, currentTurnHand } = await getCurrentTurnHand(ctx, game, playerId);
   const additionalChipsNeeded = raiseToAmount - currentTurnHand.betThisRound;
+  const amountToCall = game.currentBet - currentTurnHand.betThisRound;
+  if (
+    config.bettingStructure === "potLimit" &&
+    raiseToAmount > game.pot + Math.max(0, amountToCall)
+  ) {
+    throw new ConvexError({
+      code: "POT_LIMIT_EXCEEDED",
+      message: `Pot limit raise cannot exceed ${game.pot + Math.max(0, amountToCall)}.`,
+    });
+  }
   if (currentTurnHand.chips < additionalChipsNeeded) throw new ConvexError({ code: "INSUFFICIENT_CHIPS", message: `You need ${additionalChipsNeeded} chips to raise to ${raiseToAmount}, but only have ${currentTurnHand.chips}.` });
   const now = Date.now();
   await ctx.db.patch(currentTurnHand._id, { chips: currentTurnHand.chips - additionalChipsNeeded, betThisRound: raiseToAmount, totalBet: currentTurnHand.totalBet + additionalChipsNeeded, hasActed: true, lastAction: "raise", updatedAt: now });

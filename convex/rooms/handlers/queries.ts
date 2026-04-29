@@ -54,8 +54,10 @@ export const listRooms = query({
       result.push({
         _id: room._id,
         code: room.code,
+        title: room.title ?? null,
         status: room.status,
         maxPlayers: room.maxPlayers,
+        config: room.config,
         lastActiveAt: room.lastActiveAt,
         createdAt: room.createdAt,
         activePlayers: activePlayers.length,
@@ -133,8 +135,10 @@ export const getRoomMembers = query({
       room: {
         _id: room._id,
         code: room.code,
+        title: room.title ?? null,
         status: room.status,
         maxPlayers: room.maxPlayers,
+        config: room.config,
         lastActiveAt: room.lastActiveAt,
         tutorialId: room.tutorialId ?? null,
       },

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { NextStepProvider, NextStepReact } from "nextstepjs";
 import { useRouterState } from "@tanstack/react-router";
 import {
+  FIRST_BOT_GAME_TOUR,
   getRoomCodeFromPathname,
   getTourCompletionStorageKey,
   wordPokerTours,
@@ -46,11 +47,21 @@ export function AppTourProvider({ children }: { children: React.ReactNode }) {
         steps={wordPokerTours}
         disableConsoleLogs
         onComplete={(tourName) => {
-          if (!tourName || typeof window === "undefined") return;
+          if (
+            tourName !== FIRST_BOT_GAME_TOUR ||
+            typeof window === "undefined"
+          ) {
+            return;
+          }
           window.localStorage.setItem(getScopedCompletionKey(tourName), "true");
         }}
         onSkip={(_, tourName) => {
-          if (!tourName || typeof window === "undefined") return;
+          if (
+            tourName !== FIRST_BOT_GAME_TOUR ||
+            typeof window === "undefined"
+          ) {
+            return;
+          }
           window.localStorage.setItem(getScopedCompletionKey(tourName), "true");
         }}
       >

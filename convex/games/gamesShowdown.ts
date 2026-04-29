@@ -3,6 +3,7 @@ import { api, internal } from "../_generated/api";
 import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import type { GameTile } from "../gameState";
+import { resolveConfig } from "../gameConfig";
 import { getBotCharacterForAuthUserId, getBotCharacterForSeed, isBluffLikely, shouldBelievePlayer } from "../aiStrategy";
 import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 import { calculateScore, getHighestScoringTileValue } from "./gamesScoring";
@@ -277,9 +278,12 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
   for (let i = 0; i < wordLetters.length; i++) if (wordLetters[i] !== tileLetters[i]) throw new ConvexError({ code: "WORD_TILE_MISMATCH", message: "Word does not match tile letters." });
 
   const now = Date.now();
+  const gameConfig = {
+    fullRackBonus: game.config?.fullRackBonus ?? resolveConfig().fullRackBonus,
+  };
   const score = invalidWord
     ? { total: 0, basePoints: 0, multiplierBonus: 0, fullRackBonus: 0 }
-    : calculateScore(tiles);
+    : calculateScore(tiles, gameConfig);
   await ctx.db.insert("wordSubmissions", {
     gameId,
     playerId: normalizedPlayerId,

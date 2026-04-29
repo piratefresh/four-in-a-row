@@ -36,13 +36,19 @@ export function getHighestScoringTileValue(tiles: ShowdownScoringTile[]) {
   );
 }
 
-function calculateScoreBreakdown(tiles: ShowdownScoringTile[]): ShowdownScoreBreakdown {
+function calculateScoreBreakdown(
+  tiles: ShowdownScoringTile[],
+  options?: { fullRackBonus?: number },
+): ShowdownScoreBreakdown {
   const basePoints = tiles.reduce((total, tile) => total + tile.baseValue, 0);
   const multiplierBonus = tiles.reduce((total, tile) => {
     const multiplierFactor = getMultiplierFactor(tile.multiplier);
     return total + tile.baseValue * (multiplierFactor - 1);
   }, 0);
-  const fullRackBonus = tiles.length === FULL_RACK_TILE_COUNT ? FULL_RACK_BONUS : 0;
+  const fullRackBonus =
+    tiles.length === FULL_RACK_TILE_COUNT
+      ? (options?.fullRackBonus ?? FULL_RACK_BONUS)
+      : 0;
 
   return {
     basePoints,
@@ -53,8 +59,9 @@ function calculateScoreBreakdown(tiles: ShowdownScoringTile[]): ShowdownScoreBre
 
 export function calculateScore(
   tiles: ShowdownScoringTile[],
+  options?: { fullRackBonus?: number },
 ) {
-  const breakdown = calculateScoreBreakdown(tiles);
+  const breakdown = calculateScoreBreakdown(tiles, options);
 
   return {
     ...breakdown,

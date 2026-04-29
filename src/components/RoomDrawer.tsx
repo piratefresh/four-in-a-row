@@ -65,6 +65,8 @@ export function RoomDrawer({
   }, [roomCode, roomData, onClose]);
 
   const maxPlayers = roomData?.room.maxPlayers ?? 4;
+  const title = roomData?.room.title || `Room ${roomCode}`;
+  const configSummary = formatRoomConfig(roomData?.room.config);
   const members = roomData?.members ?? [];
   const hasOpenSeat = members.length < maxPlayers;
   const shouldShowRejoinPreview = useMemo(() => {
@@ -103,10 +105,10 @@ export function RoomDrawer({
       <DrawerContent className="border-white/10 bg-[#050505] text-white">
         <DrawerHeader className="px-5 pb-0 pt-5 text-center sm:text-center">
           <DrawerTitle className="text-center font-serif text-[2.25rem] tracking-tight text-white sm:text-center">
-            Room {roomCode}
+            {title}
           </DrawerTitle>
           <DrawerDescription className="text-center text-sm text-white/60 sm:text-center">
-            Ante ${ANTE_AMOUNT} • {maxPlayers} seats • Tap an open seat to join
+            {configSummary} - {maxPlayers} seats - Tap an open seat to join
           </DrawerDescription>
         </DrawerHeader>
 
@@ -147,4 +149,24 @@ export function RoomDrawer({
       </DrawerContent>
     </Drawer>
   );
+}
+
+function formatRoomConfig(config?: {
+  showdownTimer?: number;
+  bettingStructure?: string;
+  choiceTileFrequency?: string;
+  bonusStructure?: string;
+}) {
+  const seconds = Math.round((config?.showdownTimer ?? 30_000) / 1000);
+  const betting =
+    config?.bettingStructure === "potLimit"
+      ? "Pot Limit"
+      : config?.bettingStructure === "fixedLimit"
+        ? "Fixed Limit"
+        : "No Limit";
+  const tiles =
+    config?.choiceTileFrequency === "high"
+      ? "2-3 two-letter tiles"
+      : "0-1 two-letter tiles";
+  return `${seconds}s rounds - ${betting} - ${tiles}`;
 }

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { useMutation } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import {
   RoomDevTools,
   RoomGameProvider,
@@ -17,6 +17,7 @@ import {
 import { useChatSidebar } from "@/components/rooms/chat/useChatSidebar";
 import { RoomTutorialPhaseSync } from "@/components/onboarding/RoomTutorialPhaseSync";
 import { RoomTutorialLauncher } from "@/components/onboarding/RoomTutorialLauncher";
+import { deriveInGameHelperContext } from "@/components/onboarding/RoomInGameHelperSync";
 import { FIRST_BOT_GAME_TOUR } from "@/components/onboarding/wordPokerTours";
 
 type RoomSearch = {
@@ -77,6 +78,10 @@ function RoomDetailsPage() {
     onDevRejoinRoom,
     onDevFillRoomWithBots,
   } = useRoomDetailsController(code);
+  const preferences = useQuery(
+    (api as any).userPreferences.getMyPreferences,
+    session?.user ? {} : "skip",
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1441px)");
@@ -97,6 +102,40 @@ function RoomDetailsPage() {
     search.tutorial === "intro" || search.tutorial === "restart";
   const tutorialId = roomData?.room.tutorialId ?? null;
   const isTutorialRoom = tutorialId === FIRST_BOT_GAME_TOUR;
+  const helperContext = useMemo(() => {
+    const activePlayerId = myPlayer?._id ? String(myPlayer._id) : undefined;
+    const activePlayerHand = activePlayerId
+      ? displayHands.find((hand) => hand.playerId === activePlayerId)
+      : undefined;
+
+    if (
+      !game ||
+      isTutorialRoom ||
+      preferences?.showInGameHelper !== true ||
+      (activePlayerHand !== undefined &&
+        "hasFolded" in activePlayerHand &&
+        activePlayerHand.hasFolded)
+    ) {
+      return null;
+    }
+
+    return deriveInGameHelperContext({
+      gameStage: game.stage,
+      bottomPlayerId,
+      hands: displayHands,
+      communityTiles: game.communityTiles,
+      roomGame: roomGameContextValue,
+    });
+  }, [
+    bottomPlayerId,
+    displayHands,
+    game,
+    isTutorialRoom,
+    myPlayer?._id,
+    preferences?.showInGameHelper,
+    roomGameContextValue,
+  ]);
+  const activePlayerId = myPlayer?._id ? String(myPlayer._id) : undefined;
 
   if (isAuthPending) {
     return (
@@ -200,6 +239,8 @@ function RoomDetailsPage() {
         <RoomGameProvider value={roomGameContextValue}>
           <RoomHandsBoardV2
             gameId={game._id}
+            activePlayerId={activePlayerId}
+            helperTip={helperContext}
             roomCode={code}
             currentTurnPlayerId={currentTurnPlayerId}
             gameStage={game.stage}

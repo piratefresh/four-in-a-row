@@ -4,7 +4,6 @@ import type { MutationCtx } from "../_generated/server";
 import {
   getNewRevealCountForStage,
   getNextStage,
-  SHOWDOWN_TIMER_MS,
 } from "../gameState";
 import type { GameDeckTile, GameStage, GameTile } from "../gameState";
 import { resolveConfig } from "../gameConfig";

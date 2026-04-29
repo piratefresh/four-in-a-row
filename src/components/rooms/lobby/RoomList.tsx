@@ -15,6 +15,13 @@ import { Button } from "@/components/ui/button";
 type RoomListItem = {
   _id: string;
   code: string;
+  title?: string | null;
+  config?: {
+    showdownTimer?: number;
+    bettingStructure?: string;
+    choiceTileFrequency?: string;
+    bonusStructure?: string;
+  };
   activePlayers: number;
   maxPlayers: number;
   lastActiveAt: number;
@@ -50,6 +57,8 @@ export function RoomList({
           return (
             <RoomCard
               roomCode={room.code}
+              roomTitle={room.title}
+              config={room.config}
               activePlayers={room.activePlayers}
               maxPlayers={room.maxPlayers}
               lastActiveAt={room.lastActiveAt}

@@ -28,16 +28,16 @@ describe("Stage Progression Helpers", () => {
       expect(getRevealCountForStage("preflop")).toBe(0);
     });
 
-    test("should return 2 for flop", () => {
-      expect(getRevealCountForStage("flop")).toBe(2);
+    test("should return 3 for flop", () => {
+      expect(getRevealCountForStage("flop")).toBe(3);
     });
 
-    test("should return 3 for turn", () => {
-      expect(getRevealCountForStage("turn")).toBe(3);
+    test("should return 4 for turn", () => {
+      expect(getRevealCountForStage("turn")).toBe(4);
     });
 
-    test("should return 4 for river", () => {
-      expect(getRevealCountForStage("river")).toBe(4);
+    test("should return 5 for river", () => {
+      expect(getRevealCountForStage("river")).toBe(5);
     });
 
     test("should return 5 for final and showdown", () => {
@@ -45,9 +45,9 @@ describe("Stage Progression Helpers", () => {
       expect(getRevealCountForStage("showdown")).toBe(5);
     });
 
-    test("canonical sequence: 0 -> 2 -> 3 -> 4 -> 5", () => {
+    test("canonical sequence: 0 -> 3 -> 4 -> 5 -> 5", () => {
       const stages: GameStage[] = ["preflop", "flop", "turn", "river", "final"];
-      const expectedCounts = [0, 2, 3, 4, 5];
+      const expectedCounts = [0, 3, 4, 5, 5];
 
       stages.forEach((stage, index) => {
         expect(getRevealCountForStage(stage)).toBe(expectedCounts[index]);
@@ -60,8 +60,8 @@ describe("Stage Progression Helpers", () => {
       expect(getNewRevealCountForStage("preflop")).toBe(0);
     });
 
-    test("should return 2 for flop (first reveal)", () => {
-      expect(getNewRevealCountForStage("flop")).toBe(2);
+    test("should return 3 for flop (first reveal)", () => {
+      expect(getNewRevealCountForStage("flop")).toBe(3);
     });
 
     test("should return 1 for turn (one more)", () => {
@@ -72,8 +72,8 @@ describe("Stage Progression Helpers", () => {
       expect(getNewRevealCountForStage("river")).toBe(1);
     });
 
-    test("should return 1 for final (one more)", () => {
-      expect(getNewRevealCountForStage("final")).toBe(1);
+    test("should return 0 for final (river completes the board)", () => {
+      expect(getNewRevealCountForStage("final")).toBe(0);
     });
 
     test("should return 0 for showdown (no new reveals)", () => {
@@ -130,22 +130,22 @@ describe("Stage Progression Helpers", () => {
  * 6. Canonical Reveal: Preflop -> Flop
  *    - Setup: 5 unrevealed community tiles, 2 players
  *    - Action: Both players act, trigger stage advance
- *    - Expected: Stage="flop", exactly 2 tiles revealed
+ *    - Expected: Stage="flop", exactly 3 community tiles revealed
  *
  * 7. Canonical Reveal: Flop -> Turn
- *    - Setup: 2 revealed, 3 unrevealed tiles
+ *    - Setup: 3 revealed, 2 unrevealed tiles
  *    - Action: Both players act, trigger stage advance
- *    - Expected: Stage="turn", exactly 3 tiles revealed total
+ *    - Expected: Stage="turn", exactly 4 community tiles revealed total
  *
  * 8. Canonical Reveal: Turn -> River
- *    - Setup: 3 revealed, 2 unrevealed tiles
- *    - Action: Both players act
- *    - Expected: Stage="river", exactly 4 tiles revealed total
- *
- * 9. Canonical Reveal: River -> Final
  *    - Setup: 4 revealed, 1 unrevealed tile
  *    - Action: Both players act
- *    - Expected: Stage="final", all 5 tiles revealed
+ *    - Expected: Stage="river", exactly 5 community tiles revealed total
+ *
+ * 9. Canonical Reveal: River -> Final
+ *    - Setup: 5 revealed, 0 unrevealed tiles
+ *    - Action: Both players act
+ *    - Expected: Stage="final", all 5 community tiles remain revealed
  *
  * 10. Raise Reopens Betting
  *    - Setup: 3 players, players 1 and 2 have hasActed=true

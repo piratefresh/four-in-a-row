@@ -19,6 +19,7 @@ export async function createOpenRoom(
   const now = Date.now();
   const roomId = await ctx.db.insert("rooms", {
     code,
+    title: options?.title,
     status: "open",
     maxPlayers: ROOM_MAX_PLAYERS,
     tutorialId: options?.tutorialId,
