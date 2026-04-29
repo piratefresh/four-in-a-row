@@ -1,31 +1,56 @@
 import { ConvexHttpClient } from "convex/browser";
+import { loadEnv } from "vite";
 import { api, internal } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+
+const env = loadEnv("test", process.cwd(), "");
+for (const [key, value] of Object.entries(env)) {
+  process.env[key] ??= value;
+}
+if (process.env.CONVEX_TEST_URL) {
+  process.env.VITE_CONVEX_URL = process.env.CONVEX_TEST_URL;
+}
 
 /**
  * Convex API helpers for seeding test rooms/games and cleanup.
  *
- * Tests run against a real Convex deployment. The CONVEX_URL env var
- * should point to the deployment (e.g. http://127.0.0.1:3210 for local dev).
+ * Tests run against a real Convex deployment. CONVEX_TEST_URL (preview)
+ * is preferred, then VITE_CONVEX_URL (dev), otherwise local Convex dev.
  */
 
-const CONVEX_URL = process.env.CONVEX_URL ?? "http://127.0.0.1:3210";
+export const CONVEX_URL =
+  process.env.CONVEX_TEST_URL ??
+  process.env.VITE_CONVEX_URL ??
+  "http://127.0.0.1:3210";
+
+export const CONVEX_SITE_URL =
+  process.env.CONVEX_TEST_SITE_URL ??
+  process.env.VITE_CONVEX_SITE_URL ??
+  "";
+
+if (!process.env.CONVEX_TEST_URL && !process.env.VITE_CONVEX_URL) {
+  console.warn(
+    `[e2e] No CONVEX_TEST_URL / VITE_CONVEX_URL set — falling back to local Convex at ${CONVEX_URL}. ` +
+    `Run "bun run deploy:preview" to create a preview deployment, then set CONVEX_TEST_URL.`,
+  );
+}
 
 export function createConvexClient(): ConvexHttpClient {
   return new ConvexHttpClient(CONVEX_URL);
 }
 
 export type TestRoomResult = {
-  roomId: Id<"rooms">;
+  roomId: string;
   code: string;
   playerId: Id<"players">;
   seatIndex: number;
   maxPlayers: number;
+  authUserId: string;
 };
 
 /**
- * Create a test room with a given number of bots, all marked ready.
- * Returns the room info so tests can navigate to it.
+ * Create a test room with bots, no auth required.
+ * Uses the e2eCreateTestRoom internal mutation which bypasses auth.
  */
 export async function createTestRoom(
   client: ConvexHttpClient,
@@ -37,23 +62,18 @@ export async function createTestRoom(
 ): Promise<TestRoomResult> {
   const playerName = options.playerName ?? `TestPlayer-${Date.now()}`;
 
-  // Create room (auth required — we rely on cookie/session from Playwright login)
-  const room = await client.mutation(api.rooms.createRoom, {
-    name: playerName,
-  });
-
-  // Fill with bots
-  const botCount = options.botCount ?? 2;
-  if (botCount > 0) {
-    await client.mutation(api.rooms.debugFillRoomWithBots, {
-      code: room.code,
-      count: botCount,
-    });
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const room = await (client as any).mutation(
+    "rooms:e2eCreateTestRoom",
+    {
+      playerName,
+      botCount: options.botCount ?? 2,
+    },
+  );
 
   // Create a game for the room
   await client.mutation(api.games.createGameForRoom, {
-    roomId: String(room.roomId),
+    roomId: room.roomId,
   });
 
   // If ready, toggle ready to start the game
@@ -61,13 +81,16 @@ export async function createTestRoom(
     await client.mutation(api.rooms.toggleReady, {
       code: room.code,
     });
-
-    // Bots are already ready=true from debugFillRoomWithBots,
-    // but we need all players ready to auto-start.
-    // The human player just toggled ready above.
   }
 
-  return room;
+  return {
+    roomId: room.roomId,
+    code: room.code,
+    playerId: room.playerId,
+    seatIndex: room.seatIndex,
+    maxPlayers: room.maxPlayers,
+    authUserId: room.authUserId,
+  };
 }
 
 /**

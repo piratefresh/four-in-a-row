@@ -4,8 +4,10 @@ import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc } from "../_generated/dataModel";
 import type { GameTile } from "../gameState";
 import { resolveConfig } from "../gameConfig";
+import { FIRST_BOT_GAME_TUTORIAL_ID } from "../rooms/helpers";
 import { getBotCharacterForAuthUserId, getBotCharacterForSeed, isBluffLikely, shouldBelievePlayer } from "../aiStrategy";
 import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
+import { tutorialBotShowdownWord } from "../tutorialBots";
 import { calculateScore, getHighestScoringTileValue } from "./gamesScoring";
 
 export type SubmitWordArgs = {
@@ -553,6 +555,48 @@ export async function internalProcessBotShowdownHandler(ctx: ActionCtx, args: Sh
     });
     return { ok: false, reason: "Bot hand not found or already folded" };
   }
+
+  if (runtimeState.room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID) {
+    const tutorialResult = tutorialBotShowdownWord({
+      handTiles: botHand.tiles,
+      communityTiles: game.communityTiles,
+    });
+
+    if (!tutorialResult || !tutorialResult.word) {
+      logBotShowdown("tutorial bot could not form a word, forfeiting", {
+        gameId: args.gameId,
+        playerId: args.playerId,
+      });
+      await ctx.runMutation(api.games.forfeitShowdown, { gameId: args.gameId, playerId: args.playerId });
+      return { ok: false, reason: "Tutorial bot could not form a word" };
+    }
+
+    logBotShowdown("tutorial bot showdown word", {
+      gameId: args.gameId,
+      playerId: args.playerId,
+      word: tutorialResult.word,
+      estimatedScore: tutorialResult.estimatedScore,
+      reasoning: tutorialResult.reasoning,
+    });
+
+    const result = await ctx.runAction(api.games.submitWord, {
+      gameId: args.gameId,
+      playerId: args.playerId,
+      word: tutorialResult.word,
+      tiles: tutorialResult.tiles,
+      choiceResolutions: tutorialResult.choiceResolutions,
+    });
+
+    logBotShowdown("tutorial bot submitted showdown word", {
+      gameId: args.gameId,
+      playerId: args.playerId,
+      word: tutorialResult.word,
+      score: result.score,
+    });
+
+    return { ok: true, word: tutorialResult.word, score: result.score, reasoning: tutorialResult.reasoning };
+  }
+
   try {
     const botPlayer = runtimeState.players.find((player) => String(player._id) === args.playerId);
     const botCharacter =

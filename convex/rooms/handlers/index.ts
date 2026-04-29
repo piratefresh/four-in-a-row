@@ -26,6 +26,7 @@ export {
   debugRejoinRoom,
   debugFillRoomWithBots,
   clearAllData,
+  e2eCreateTestRoom,
 } from "./debugMutations";
 
 export {

@@ -93,7 +93,9 @@ export function RoomDrawer({
       : []),
   ];
   const shouldShowDevRejoin =
-    showDevTools && Boolean(roomData?.viewerSeatPreview) && Boolean(onDevRejoin);
+    showDevTools &&
+    Boolean(roomData?.viewerSeatPreview) &&
+    Boolean(onDevRejoin);
   const joinButtonLabel = isJoining
     ? "Taking seat..."
     : hasOpenSeat
@@ -102,7 +104,7 @@ export function RoomDrawer({
 
   return (
     <Drawer open={!!roomCode} onOpenChange={(open) => !open && onClose()}>
-      <DrawerContent className="border-white/10 bg-[#050505] text-white">
+      <DrawerContent className="border-white/10 bg-felt text-white">
         <DrawerHeader className="px-5 pb-0 pt-5 text-center sm:text-center">
           <DrawerTitle className="text-center font-serif text-[2.25rem] tracking-tight text-white sm:text-center">
             {title}

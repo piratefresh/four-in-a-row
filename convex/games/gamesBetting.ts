@@ -7,6 +7,8 @@ import {
   resolveConfig,
   type ResolvedGameConfig,
 } from "../gameConfig";
+import { FIRST_BOT_GAME_TUTORIAL_ID } from "../rooms/helpers";
+import { tutorialBotBettingDecision } from "../tutorialBots";
 import {
   advanceTurn,
   handlePostActionProgression,
@@ -81,29 +83,6 @@ async function getOrderedHandsAndCurrentTurnHand(
   if (!currentTurnHand) throw new ConvexError({ code: "INVALID_TURN_INDEX", message: "Current turn index is out of range." });
   if (currentTurnHand.hasFolded) throw new ConvexError({ code: "PLAYER_ALREADY_FOLDED", message: "Current turn player has already folded." });
   return { orderedHands, currentTurnHand };
-}
-
-async function isAutomatedTurnPlayer(
-  ctx: MutationCtx,
-  game: Doc<"games">,
-  playerId: string,
-) {
-  if (playerId === AI_DEALER_PLAYER_ID) {
-    return true;
-  }
-
-  const normalizedPlayerId = ctx.db.normalizeId("players", playerId);
-  if (!normalizedPlayerId) {
-    return false;
-  }
-
-  const player = await ctx.db.get(normalizedPlayerId);
-  return (
-    !!player &&
-    player.roomId === game.roomId &&
-    player.status === "active" &&
-    player.authUserId.startsWith(DEV_BOT_AUTH_PREFIX)
-  );
 }
 
 async function getTracePlayerInfo(
@@ -310,100 +289,6 @@ export async function foldHandler(ctx: MutationCtx, args: PlayerActionArgs) {
   return { ok: true, action: "fold" as const, playerId };
 }
 
-export async function callClockHandler(
-  ctx: MutationCtx,
-  args: PlayerActionArgs,
-) {
-  const game = assertActiveBettingGame(await ctx.db.get(args.gameId));
-  const config = getGameConfig(game);
-  const callerPlayerId = args.playerId.trim();
-  const { orderedHands, currentTurnHand } = await getOrderedHandsAndCurrentTurnHand(
-    ctx,
-    game,
-  );
-
-  if (!callerPlayerId) {
-    throw new ConvexError({
-      code: "INVALID_PLAYER_ID",
-      message: "Player ID is required.",
-    });
-  }
-
-  const callerHand = orderedHands.find((hand) => hand.playerId === callerPlayerId);
-  if (!callerHand || callerHand.hasFolded) {
-    throw new ConvexError({
-      code: "CLOCK_CALLER_NOT_ACTIVE",
-      message: "Only active players in the hand can call the clock.",
-    });
-  }
-
-  if (currentTurnHand.playerId === callerPlayerId) {
-    throw new ConvexError({
-      code: "CLOCK_CANNOT_TARGET_SELF",
-      message: "You cannot call the clock on your own turn.",
-    });
-  }
-
-  if (await isAutomatedTurnPlayer(ctx, game, currentTurnHand.playerId)) {
-    throw new ConvexError({
-      code: "CLOCK_NOT_AVAILABLE",
-      message: "Automated players cannot be put on the clock.",
-    });
-  }
-
-  const now = Date.now();
-  if (game.turnClockExpiresAt !== undefined) {
-    throw new ConvexError({
-      code: "CLOCK_ALREADY_RUNNING",
-      message: "The clock is already running for this turn.",
-    });
-  }
-
-  if (game.turnStartedAt === undefined) {
-    throw new ConvexError({
-      code: "CLOCK_NOT_AVAILABLE",
-      message: "The current turn has not started yet.",
-    });
-  }
-
-  const elapsed = now - game.turnStartedAt;
-  if (elapsed < config.turnClockGraceMs) {
-    const secondsRemaining = Math.ceil(
-      (config.turnClockGraceMs - elapsed) / 1000,
-    );
-    throw new ConvexError({
-      code: "CLOCK_TOO_EARLY",
-      message: `Clock becomes available in ${secondsRemaining}s.`,
-    });
-  }
-
-  const turnClockExpiresAt = now + config.turnClockCalledDurationMs;
-  await ctx.db.patch(game._id, {
-    turnClockCalledAt: now,
-    turnClockExpiresAt,
-    turnClockCallerPlayerId: callerPlayerId,
-    turnClockTargetPlayerId: currentTurnHand.playerId,
-    updatedAt: now,
-  });
-
-  await ctx.scheduler.runAfter(
-    config.turnClockCalledDurationMs,
-    (internal as typeof internal).games.internalResolveExpiredTurnClock,
-    {
-      gameId: game._id,
-      playerId: currentTurnHand.playerId,
-      turnClockExpiresAt,
-    },
-  );
-
-  return {
-    ok: true,
-    callerPlayerId,
-    targetPlayerId: currentTurnHand.playerId,
-    turnClockExpiresAt,
-  };
-}
-
 export async function internalResolveExpiredTurnClockHandler(
   ctx: MutationCtx,
   args: PlayerActionArgs & { turnClockExpiresAt: number },
@@ -417,7 +302,19 @@ export async function internalResolveExpiredTurnClockHandler(
     game.turnClockExpiresAt !== args.turnClockExpiresAt ||
     game.turnClockTargetPlayerId !== args.playerId
   ) {
-    return { ok: false, reason: "Clock expired against a stale turn." };
+    return { ok: false, reason: "Turn timer expired against a stale turn." };
+  }
+
+  const room = await ctx.db.get(game.roomId as Id<"rooms">);
+  if (room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID) {
+    await ctx.db.patch(game._id, {
+      turnClockCalledAt: undefined,
+      turnClockExpiresAt: undefined,
+      turnClockCallerPlayerId: undefined,
+      turnClockTargetPlayerId: undefined,
+      updatedAt: Date.now(),
+    });
+    return { ok: false, reason: "Turn timer is disabled for tutorial games." };
   }
 
   const { currentTurnHand } = await getOrderedHandsAndCurrentTurnHand(ctx, game);
@@ -509,9 +406,31 @@ export async function internalProcessBotTurnHandler(
   const runCall = () => ctx.runMutation(api.games.call, { gameId: args.gameId, playerId: args.playerId });
   const runFold = () => ctx.runMutation(api.games.fold, { gameId: args.gameId, playerId: args.playerId });
 
+  const roomId = game.roomId as Id<"rooms">;
+  const room = runtimeState.room;
+
+  if (room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID) {
+    const tutorialDecision = tutorialBotBettingDecision({
+      currentBet: game.currentBet,
+      betThisRound: currentTurnHand.betThisRound,
+      chips: currentTurnHand.chips,
+    });
+    logBotTurn("tutorial bot betting decision", {
+      gameId: args.gameId,
+      playerId: args.playerId,
+      action: tutorialDecision.action,
+      reasoning: tutorialDecision.reasoning,
+    });
+    if (tutorialDecision.action === "call") {
+      await runCall();
+      return { ok: true, action: "call" as const, playerId: args.playerId, reasoning: tutorialDecision.reasoning };
+    }
+    await runCheck();
+    return { ok: true, action: "check" as const, playerId: args.playerId, reasoning: tutorialDecision.reasoning };
+  }
+
   const botPlayer = runtimeState.players.find((p) => String(p._id) === args.playerId);
   const botAuthUserId = botPlayer?.authUserId ?? "";
-  const roomId = game.roomId as Id<"rooms">;
   const difficulty = (runtimeState.room?.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM;
 
   const sendDialogue = async (action: string) => {

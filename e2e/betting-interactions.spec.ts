@@ -131,7 +131,7 @@ test.describe("Betting interactions", () => {
     expect(typeof isDisabled).toBe("boolean");
   });
 
-  test("call clock available after grace period", async ({
+  test("call clock button is removed", async ({
     createTestRoom,
     roomPage,
   }) => {
@@ -146,11 +146,8 @@ test.describe("Betting interactions", () => {
     // Wait for betting controls
     await roomPage.waitForBettingControls();
 
-    // Call clock button may or may not be visible depending on timing
-    // Just verify the UI element exists
-    const callClockButton = roomPage.callClockButton;
-    const isVisible = await callClockButton.isVisible().catch(() => false);
-    // This test is more about verifying the element exists
-    expect(callClockButton.or(roomPage.page.locator("body"))).toBeDefined();
+    await expect(
+      roomPage.page.getByRole("button", { name: /call clock/i }),
+    ).toHaveCount(0);
   });
 });

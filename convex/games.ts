@@ -2,7 +2,6 @@ import { v } from "convex/values";
 import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { gameDeckTileValidator } from "./gameState";
 import {
-  callClockHandler,
   callHandler,
   checkHandler,
   foldHandler,
@@ -97,11 +96,6 @@ export const raise = mutation({
 export const fold = mutation({
   args: { gameId: v.id("games"), playerId: v.string() },
   handler: foldHandler,
-});
-
-export const callClock = mutation({
-  args: { gameId: v.id("games"), playerId: v.string() },
-  handler: callClockHandler,
 });
 
 export const internalResolveExpiredTurnClock = internalMutation({

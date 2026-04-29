@@ -1,5 +1,5 @@
-import { AnimatePresence } from "motion/react";
-import { useState } from "react";
+import { motion } from "motion/react";
+import { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getLetterValue } from "@/lib/letterValues";
 import { WinSplashOverlay } from "./WinSplashOverlay";
@@ -54,6 +54,8 @@ const PLAYER_GRADIENTS = [
   "from-[#ff9b54] to-[#ef5f3c]",
 ] as const;
 
+type ResultsStep = "scoring" | "win" | "results";
+
 export function ShowdownResultsScreen({
   pot,
   playerId,
@@ -67,6 +69,21 @@ export function ShowdownResultsScreen({
   isStartingNewGame,
 }: ShowdownResultsScreenProps) {
   const submissions = showdownResults.allSubmissions ?? [];
+  const currentPlayerSubmission = useMemo(() => {
+    if (!playerId) return null;
+    return (
+      submissions.find((submission) => submission.playerId === playerId) ?? null
+    );
+  }, [playerId, submissions]);
+  const scoringSubmission =
+    currentPlayerSubmission ??
+    submissions.find((submission) => submission.playerId === showdownResults.winnerId) ??
+    submissions[0] ??
+    null;
+  const currentPlayerWon =
+    playerId != null &&
+    showdownResults.hasWinner &&
+    showdownResults.winnerId === playerId;
   const winnerName =
     showdownResults.winnerId && showdownResults.winnerId === playerId
       ? "You"
@@ -74,32 +91,51 @@ export function ShowdownResultsScreen({
         ? getPlayerName(showdownResults.winnerId)
         : null;
 
-  const [showWinSplash, setShowWinSplash] = useState(
-    () =>
-      playerId != null &&
-      showdownResults.hasWinner &&
-      showdownResults.winnerId === playerId,
+  const [resultsStep, setResultsStep] = useState<ResultsStep>(() =>
+    scoringSubmission ? "scoring" : currentPlayerWon ? "win" : "results",
   );
 
-  return (
-    <div className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_top,#19160d_0%,#090909_28%,#050505_100%)] text-white">
-      <AnimatePresence>
-        {showWinSplash && (
-          <WinSplashOverlay
-            pot={pot}
-            winningWord={showdownResults.winningWord}
-            winningScore={showdownResults.winningScore}
-            onDismiss={() => setShowWinSplash(false)}
-          />
-        )}
-      </AnimatePresence>
+  const advanceFromScoring = () => {
+    setResultsStep(currentPlayerWon ? "win" : "results");
+  };
 
+  if (resultsStep === "scoring" && scoringSubmission) {
+    return (
+      <ScoringScreen
+        submission={scoringSubmission}
+        onContinue={advanceFromScoring}
+      />
+    );
+  }
+
+  if (resultsStep === "win") {
+    return (
+      <WinSplashOverlay
+        pot={pot}
+        winningWord={showdownResults.winningWord}
+        winningScore={showdownResults.winningScore}
+        onDismiss={() => setResultsStep("results")}
+      />
+    );
+  }
+
+  return (
+    <div
+      data-testid="results-content"
+      className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_top,#19160d_0%,#090909_28%,#050505_100%)] text-white"
+    >
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[430px] flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]">
         <header className="pt-6 text-center">
-          <div className="text-5xl font-semibold tracking-tight text-[#e2bd46]">
+          <div
+            data-testid="pot-amount"
+            className="text-5xl font-semibold tracking-tight text-[#e2bd46]"
+          >
             ${pot}
           </div>
-          <p className="mt-4 text-[14px] uppercase tracking-[0.2em] text-white/48">
+          <p
+            data-testid="winner-name"
+            className="mt-4 text-[14px] uppercase tracking-[0.2em] text-white/48"
+          >
             {showdownResults.hasWinner && winnerName
               ? `${winnerName} wins the pot`
               : "No winning submission"}
@@ -203,6 +239,7 @@ function ShowdownSubmissionCard({
 
   return (
     <article
+      data-testid="player-result"
       className={`rounded-[16px] border px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] ${
         isWinner
           ? "border-[#8b6f1b] bg-[linear-gradient(180deg,rgba(41,34,15,0.96),rgba(27,24,14,0.96))] shadow-[0_0_0_1px_rgba(212,175,55,0.15),0_16px_40px_rgba(0,0,0,0.32)]"
@@ -225,10 +262,14 @@ function ShowdownSubmissionCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="truncate text-[19px] font-semibold text-white">
+              <div
+                data-testid="player-name"
+                className="truncate text-[19px] font-semibold text-white"
+              >
                 {playerName}
               </div>
               <div
+                data-testid="player-word"
                 className={`mt-0.5 text-[12px] font-medium uppercase tracking-[0.12em] ${
                   submission.status === "submitted"
                     ? "text-white/55"
@@ -244,9 +285,9 @@ function ShowdownSubmissionCard({
               submission.scoreBreakdown ? (
                 <div className="mt-1 text-[11px] tracking-[0.08em] text-white/42">
                   Base {submission.scoreBreakdown.basePoints}
-                  {" • "}
+                  {" | "}
                   Mult {submission.scoreBreakdown.multiplierBonus}
-                  {" • "}
+                  {" | "}
                   Rack {submission.scoreBreakdown.fullRackBonus}
                 </div>
               ) : null}
@@ -254,6 +295,7 @@ function ShowdownSubmissionCard({
 
             <div className="shrink-0 text-right">
               <div
+                data-testid="player-score"
                 className={`text-[32px] leading-none font-semibold ${
                   isWinner ? "text-[#f1c84c]" : "text-white"
                 }`}
@@ -287,6 +329,103 @@ function ShowdownSubmissionCard({
         </div>
       </div>
     </article>
+  );
+}
+
+function ScoringScreen({
+  submission,
+  onContinue,
+}: {
+  submission: Submission;
+  onContinue: () => void;
+}) {
+  const word =
+    submission.status === "submitted" && submission.word
+      ? submission.word.toUpperCase()
+      : submission.status === "forfeited"
+        ? "FORFEITED"
+        : "NO SUBMISSION";
+  const breakdown = submission.scoreBreakdown;
+  const rows = breakdown
+    ? [
+        { label: "Letter values", value: `+${breakdown.basePoints}` },
+        { label: "Multiplier bonus", value: `+${breakdown.multiplierBonus}` },
+        { label: "Full rack bonus", value: `+${breakdown.fullRackBonus}` },
+      ]
+    : [{ label: "Submitted score", value: `+${submission.score}` }];
+
+  useEffect(() => {
+    const timer = window.setTimeout(onContinue, 2400);
+    return () => window.clearTimeout(timer);
+  }, [onContinue]);
+
+  return (
+    <div
+      data-testid="scoring-screen"
+      className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-felt-deep px-5 py-[max(20px,env(safe-area-inset-top))] text-cream"
+      onClick={onContinue}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          onContinue();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <section
+        aria-label="Score breakdown"
+        className="w-full max-w-[390px] px-1"
+      >
+        <motion.div
+          className="text-center font-display text-[28px] font-extrabold tracking-[0.1em] text-gold"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+        >
+          {word.split("").join(" ")}
+        </motion.div>
+
+        <div className="mt-6">
+          {rows.map((row, index) => (
+            <motion.div
+              key={row.label}
+              className="flex justify-between border-b border-cream/10 py-2.5 text-xs text-cream"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, delay: 0.15 + index * 0.15 }}
+            >
+              <span>{row.label}</span>
+              <span className="font-mono font-bold text-gold">
+                {row.value}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+
+        <motion.div
+          className="mt-4 rounded-[8px] bg-gold px-4 py-3 text-center text-felt-deep"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: 0.15 + rows.length * 0.15 }}
+        >
+          <div className="font-display text-[32px] font-black leading-none">
+            + {submission.score}
+          </div>
+          <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em]">
+            Stronger words win bigger pots
+          </div>
+        </motion.div>
+
+        <motion.div
+          className="mt-4 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-gold"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2, duration: 0.3 }}
+        >
+          Tap to continue
+        </motion.div>
+      </section>
+    </div>
   );
 }
 

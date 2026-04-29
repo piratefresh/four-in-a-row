@@ -4,6 +4,14 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { getAuthenticatedUserId, getRoomByCode } from "../helpers";
 import { addDevBotsToRoom, rejoinRoomMember } from "../players";
+import { normalizeName } from "../helpers";
+import { PLAYER_NAME_MAX_LENGTH } from "../../constants";
+import { createOpenRoom } from "../lifecycle";
+import { AI_DIFFICULTY, type AIDifficulty } from "../../aiBettingConstants";
+import { roomConfigValidator } from "../../gameConfig";
+
+const IS_E2E = process.env.E2E_TESTING === "true";
+const E2E_USER_ID = "e2e-test-user";
 
 export const debugRejoinRoom = mutation({
   args: { code: v.string(), name: v.optional(v.string()) },
@@ -84,6 +92,81 @@ export const clearAllData = mutation({
         players: allPlayers.length,
         rooms: allRooms.length,
       },
+    };
+  },
+});
+
+export const e2eCreateTestRoom = mutation({
+  args: {
+    playerName: v.string(),
+    botCount: v.optional(v.number()),
+    roomTitle: v.optional(v.string()),
+    difficulty: v.optional(v.union(
+      v.literal("easy"),
+      v.literal("medium"),
+      v.literal("hard"),
+    )),
+    isBotGame: v.optional(v.boolean()),
+    config: v.optional(roomConfigValidator),
+  },
+  handler: async (ctx, args) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eCreateTestRoom is only available in E2E testing mode.",
+      });
+    }
+
+    const authUserId = E2E_USER_ID;
+
+    const name = normalizeName(args.playerName);
+    if (name.length === 0 || name.length > PLAYER_NAME_MAX_LENGTH) {
+      throw new ConvexError({
+        code: "INVALID_NAME",
+        message: `Name must be between 1 and ${PLAYER_NAME_MAX_LENGTH} characters.`,
+      });
+    }
+
+    const existingPlayer = await ctx.db
+      .query("players")
+      .withIndex("authUserId_status", (q) => q.eq("authUserId", authUserId).eq("status", "active"))
+      .first();
+    if (existingPlayer) {
+      await ctx.db.patch(existingPlayer._id, { status: "left" });
+    }
+
+    const { roomId, code, now } = await createOpenRoom(ctx, {
+      title: args.roomTitle?.trim() || undefined,
+      isBotGame: args.isBotGame ?? args.difficulty !== undefined,
+      difficulty: (args.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM,
+      config: args.config,
+    });
+
+    const playerId = await ctx.db.insert("players", {
+      roomId,
+      authUserId,
+      name,
+      seatIndex: 0,
+      isHost: true,
+      status: "active",
+      lastSeenAt: now,
+    });
+
+    await ctx.db.patch(roomId, { hostPlayerId: playerId });
+
+    const botCount = args.botCount ?? 2;
+    const room = await getRoomByCode(ctx, code);
+    if (botCount > 0) {
+      await addDevBotsToRoom(ctx, room, botCount);
+    }
+
+    return {
+      roomId: String(roomId),
+      code,
+      playerId,
+      seatIndex: 0,
+      authUserId,
+      maxPlayers: room.maxPlayers,
     };
   },
 });

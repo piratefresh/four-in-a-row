@@ -36,7 +36,6 @@ type HomeModeMenuProps = {
   onStartOffline: (difficulty: OfflineDifficulty) => void;
   onPlayTutorial: () => void;
   onResumeRoom?: () => void;
-  onReplayTutorial?: () => void;
 };
 
 export function HomeModeMenu({
@@ -51,11 +50,8 @@ export function HomeModeMenu({
   onStartOffline,
   onPlayTutorial,
   onResumeRoom,
-  onReplayTutorial,
 }: HomeModeMenuProps) {
-  const offlineCtaLabel = isStartingOffline
-    ? "Setting up table..."
-    : "Start offline game";
+  const canResumeActiveRoom = Boolean(activeRoomCode && !activeRoomTutorialId);
 
   return (
     <main className="relative flex flex-1 overflow-hidden text-white">
@@ -70,27 +66,15 @@ export function HomeModeMenu({
         </div>
 
         <div className="grid w-full max-w-3xl flex-1 content-center gap-3 py-4 sm:gap-4 sm:py-8">
-          {activeRoomCode ? (
+          {canResumeActiveRoom ? (
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={onResumeRoom}
                 className="inline-flex items-center rounded-md border border-white/12 bg-black/25 px-4 py-2 text-sm font-medium text-cream transition-colors hover:border-gold/35 hover:text-white"
               >
-                {activeRoomTutorialId
-                  ? `Resume your tutorial table ${activeRoomCode}`
-                  : `Resume playing in room ${activeRoomCode}`}
+                Resume playing in room {activeRoomCode}
               </button>
-
-              {activeRoomTutorialId ? (
-                <button
-                  type="button"
-                  onClick={onReplayTutorial}
-                  className="inline-flex items-center rounded-md border border-gold/30 bg-ink/70 px-4 py-2 text-sm font-medium text-gold-bright transition-colors hover:border-gold/55 hover:text-cream"
-                >
-                  Replay tutorial
-                </button>
-              ) : null}
             </div>
           ) : null}
 

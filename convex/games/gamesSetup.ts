@@ -14,6 +14,8 @@ import {
   type GameTile,
 } from "../gameState";
 import { resolveConfig, type ResolvedGameConfig } from "../gameConfig";
+import { FIRST_BOT_GAME_TUTORIAL_ID } from "../rooms/helpers";
+import { createTutorialDeal } from "../tutorialDeck";
 import { scheduleBotTurnIfNeeded, setRoomUsersActiveGameId } from "./gamesProgression";
 import {
   AI_DEALER_PLAYER_ID,
@@ -379,12 +381,17 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
   }
   assertMinimumPlayersToStart(participantIds);
 
-  const deck = createShuffledDeck();
-  const choiceCards = deck.filter((card) => card.kind === "choice");
-  console.log(`Deck generated: ${deck.length} total cards, ${choiceCards.length} choice cards`);
+  const isTutorial = room.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
+  const deck = isTutorial ? [] : createShuffledDeck();
+  if (!isTutorial) {
+    const choiceCards = deck.filter((card) => card.kind === "choice");
+    console.log(`Deck generated: ${deck.length} total cards, ${choiceCards.length} choice cards`);
+  }
 
   await clearHands(ctx, game._id);
-  const roundDeal = createChoiceTileDeal(deck, participantIds.length, config);
+  const roundDeal = isTutorial
+    ? createTutorialDeal(participantIds.length, config)
+    : createChoiceTileDeal(deck, participantIds.length, config);
 
   const now = Date.now();
 
@@ -479,10 +486,13 @@ export async function internalStartGameHandler(
     return { ok: false, reason: "At least 2 active players are required" };
   }
 
-  const deck = createShuffledDeck();
+  const isTutorial = room.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
+  const deck = isTutorial ? [] : createShuffledDeck();
 
   await clearHands(ctx, game._id);
-  const roundDeal = createChoiceTileDeal(deck, participantIds.length, config);
+  const roundDeal = isTutorial
+    ? createTutorialDeal(participantIds.length, config)
+    : createChoiceTileDeal(deck, participantIds.length, config);
 
   const now = Date.now();
 

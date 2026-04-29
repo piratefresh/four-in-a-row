@@ -2,6 +2,8 @@ import type { Step, Tour } from "nextstepjs";
 import { WordTile } from "@/components/rooms/table/word-tile-v2";
 import { calculateShowdownPreviewScore } from "@/lib/showdownScore";
 
+export const TUTORIAL_TARGET_WORD = "STRONG";
+
 export type TutorialStep = Step & {
   tourKind?: "tutorial" | "helper";
   cardClassName?: string;
@@ -28,14 +30,14 @@ export const IN_GAME_HELPER_STEPS = {
   tileDetails: 5,
   showdown: 6,
 } as const;
-export const FIRST_BOT_GAME_WORD_BUILDER_WAIT_STEP = 2;
-export const FIRST_BOT_GAME_WORD_BUILDER_STEP = 3;
-export const FIRST_BOT_GAME_SHOWDOWN_WAIT_STEP = 5;
-export const FIRST_BOT_GAME_SHOWDOWN_STEP = 6;
-export const FIRST_BOT_GAME_SHOWDOWN_SUBMIT_STEP =
-  FIRST_BOT_GAME_SHOWDOWN_STEP + 2;
+export const FIRST_BOT_GAME_WORD_BUILDER_WAIT_STEP = 3;
+export const FIRST_BOT_GAME_SHUFFLE_STEP = 4;
+export const FIRST_BOT_GAME_WORD_BUILDER_STEP = 5;
+export const FIRST_BOT_GAME_SHOWDOWN_WAIT_STEP = 8;
+export const FIRST_BOT_GAME_SHOWDOWN_STEP = 9;
+export const FIRST_BOT_GAME_SHOWDOWN_SUBMIT_STEP = 11;
 export const FIRST_BOT_GAME_PAUSEABLE_STEPS: Record<number, number> = {
-  [FIRST_BOT_GAME_WORD_BUILDER_WAIT_STEP]: FIRST_BOT_GAME_WORD_BUILDER_STEP,
+  [FIRST_BOT_GAME_WORD_BUILDER_WAIT_STEP]: FIRST_BOT_GAME_SHUFFLE_STEP,
   [FIRST_BOT_GAME_SHOWDOWN_WAIT_STEP]: FIRST_BOT_GAME_SHOWDOWN_STEP,
 };
 
@@ -57,6 +59,17 @@ export function getTourPausedStepStorageKey(
   return normalizedRoomCode
     ? `word-poker.tour.paused-step.${tourName}.${normalizedRoomCode}`
     : `word-poker.tour.paused-step.${tourName}`;
+}
+
+export function getTourStepStorageKey(
+  tourName: string,
+  stepName: string,
+  roomCode?: string | null,
+) {
+  const normalizedRoomCode = roomCode?.trim().toUpperCase();
+  return normalizedRoomCode
+    ? `word-poker.tour.step.${tourName}.${stepName}.${normalizedRoomCode}`
+    : `word-poker.tour.step.${tourName}.${stepName}`;
 }
 
 export function getRoomCodeFromPathname(pathname: string) {
@@ -86,6 +99,8 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-room-actions",
         side: "top",
+        pointerPadding: 0,
+        pointerRadius: 0,
         hideNext: true,
       },
       {
@@ -102,50 +117,13 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-room-actions",
         side: "top",
+        pointerPadding: 0,
+        pointerRadius: 0,
         showControls: true,
         showSkip: true,
       },
       {
         icon: "C",
-        title: "Play to the flop",
-        content: (
-          <>
-            You have the basics.
-            <br />
-            Close the tutorial for now, play the hand normally, and it will pop
-            back open when the flop reveals.
-          </>
-        ),
-        selector: "#pot-amount",
-        side: "top",
-        showControls: true,
-        showSkip: true,
-      },
-      {
-        icon: "D",
-        title: "Activate, drag, reorder",
-        content: (
-          <div className="space-y-3">
-            <div>
-              This is your word builder once the flop starts.
-              <br />
-              Click a letter to turn it off, drag letters to reorder them, and
-              keep refining your best word as more community letters reveal.
-            </div>
-            <img
-              src="/activate_reorder.gif"
-              alt="Activating, dragging, and reordering letters in the word builder."
-              className="max-h-52 w-full rounded-xl border border-white/10 object-cover"
-            />
-          </div>
-        ),
-        selector: "#tutorial-player-hand",
-        side: "top",
-        showControls: true,
-        showSkip: true,
-      },
-      {
-        icon: "E",
         title: "Phase flow",
         content: (
           <>
@@ -156,13 +134,106 @@ export const wordPokerTours = [
             as the community letters open up.
           </>
         ),
-        selector: "#tutorial-player-hand",
-        side: "bottom-right",
+        selector: "#tutorial-phase-title",
+        side: "bottom",
+        pointerPadding: 0,
+        pointerRadius: 0,
+        showControls: true,
+        showSkip: true,
+      },
+      {
+        icon: "D",
+        title: "Play to the turn",
+        content: (
+          <>
+            You have the basics.
+            <br />
+            Close the tutorial for now, play the hand normally, and it will pop
+            back open when the turn reveals the letters you need.
+          </>
+        ),
+        selector: "#tutorial-phase-title",
+        side: "bottom",
+        pointerPadding: 0,
+        pointerRadius: 0,
+        showControls: true,
+        showSkip: true,
+      },
+      {
+        icon: "E",
+        title: "Shuffle your tiles",
+        content: (
+          <>
+            Stuck on your letters? Hit Shuffle and your tiles will rearrange
+            randomly - sometimes a fresh layout is all you need to spot a great
+            word!
+          </>
+        ),
+        selector: "#tutorial-shuffle-button",
+        side: "top",
+        pointerPadding: 0,
+        pointerRadius: 0,
         showControls: true,
         showSkip: true,
       },
       {
         icon: "F",
+        title: "Activate, drag, reorder",
+        content: (
+          <div className="space-y-3">
+            <div>
+              The turn has given you everything you need.
+              <br />
+              Activate the right letters, then drag them into order until your
+              word spells <strong>{TUTORIAL_TARGET_WORD}</strong>.
+              <br />
+              This step will continue once your active word is exactly{" "}
+              <strong>{TUTORIAL_TARGET_WORD}</strong>.
+            </div>
+            <img
+              src="/activate_reorder.gif"
+              alt="Activating, dragging, and reordering letters in the word builder."
+              className="max-h-52 w-full rounded-xl border border-white/10 object-cover"
+            />
+          </div>
+        ),
+        selector: "#tutorial-player-hand",
+        side: "top",
+        pointerPadding: 70,
+        pointerRadius: 16,
+        showControls: true,
+        hideNext: true,
+      },
+      {
+        icon: "G",
+        title: "Opponent thinking",
+        content: (
+          <>
+            While your opponent is thinking, use that time to plan your best
+            possible word!
+          </>
+        ),
+        selector: "#tutorial-room-actions",
+        side: "top",
+        pointerPadding: 0,
+        pointerRadius: 0,
+        showControls: true,
+        showSkip: true,
+      },
+      {
+        icon: "H",
+        title: "FAQ and tips",
+        content: <>Tap the ? below anytime to pull up the FAQ.</>,
+        selector: "#tutorial-help-menu-button",
+        side: "left",
+        pointerPadding: 8,
+        pointerRadius: 18,
+        cardClassName: "max-w-[18rem]",
+        showControls: true,
+        showSkip: true,
+      },
+      {
+        icon: "I",
         title: "Play to showdown",
         content: (
           <>
@@ -175,11 +246,13 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-player-hand",
         side: "top",
+        pointerPadding: 0,
+        pointerRadius: 0,
         showControls: true,
         showSkip: true,
       },
       {
-        icon: "G",
+        icon: "J",
         title: "How you win",
         content: (
           <>
@@ -191,11 +264,13 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-player-hand",
         side: "top",
+        pointerPadding: 70,
+        pointerRadius: 16,
         showControls: true,
         showSkip: true,
       },
       {
-        icon: "H",
+        icon: "K",
         title: "Tile values",
         content: (
           <div className="space-y-3">
@@ -242,22 +317,25 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-submit-word",
         side: "top",
+        pointerPadding: 0,
+        pointerRadius: 0,
         showControls: true,
         showSkip: true,
       },
       {
-        icon: "I",
+        icon: "L",
         title: "Submit your word",
         content: (
           <>
             Showdown is the final commit.
             <br />
-            Click `Start timer` first, then submit your word here before time
-            runs out.
+            Submit your strongest word here to score and win the pot.
           </>
         ),
         selector: "#tutorial-submit-word",
         side: "top",
+        pointerPadding: 0,
+        pointerRadius: 0,
         showControls: true,
         showSkip: true,
       },
@@ -278,6 +356,8 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-room-actions",
         side: "top",
+        pointerPadding: 80,
+        pointerRadius: 16,
         showControls: true,
       },
       {
@@ -287,11 +367,15 @@ export const wordPokerTours = [
         content: (
           <>
             Check when the price is zero, call to match the current bet, raise
-            when you want to pressure the table, or fold to leave the hand.
+            when you want to pressure the table, or fold to leave the hand. When
+            Shuffle appears, use it to quickly rearrange your available letters
+            before choosing your action.
           </>
         ),
         selector: "#tutorial-room-actions",
         side: "top",
+        pointerPadding: 80,
+        pointerRadius: 16,
         showControls: true,
       },
       {
@@ -300,12 +384,14 @@ export const wordPokerTours = [
         title: "Waiting",
         content: (
           <>
-            This area shows whose turn it is. If a clock is called, the timer
-            shows how long the active player has left to act.
+            This area shows whose turn it is. The timer above the community
+            letters shows how long the active player has left to act.
           </>
         ),
         selector: "#tutorial-room-actions",
         side: "top",
+        pointerPadding: 80,
+        pointerRadius: 16,
         showControls: true,
       },
       {
@@ -320,6 +406,8 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-player-hand",
         side: "top",
+        pointerPadding: 70,
+        pointerRadius: 16,
         showControls: true,
       },
       {
@@ -334,6 +422,8 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-community-letters",
         side: "bottom",
+        pointerPadding: 60,
+        pointerRadius: 16,
         showControls: true,
       },
       {
@@ -348,6 +438,8 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-player-hand",
         side: "top",
+        pointerPadding: 70,
+        pointerRadius: 16,
         showControls: true,
       },
       {
@@ -362,6 +454,8 @@ export const wordPokerTours = [
         ),
         selector: "#tutorial-player-hand",
         side: "top",
+        pointerPadding: 70,
+        pointerRadius: 16,
         showControls: true,
       },
     ],

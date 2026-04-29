@@ -6,7 +6,10 @@ import { authClient } from "@/lib/auth-client";
 import { HomeModeMenu } from "@/components/home/HomeModeMenu";
 import { OnboardingSetupScreen } from "@/components/home/OnboardingSetupScreen";
 import { SplashScreen } from "@/components/home/SplashScreen";
-import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import {
+  LoadingOverlay,
+  WORD_POKER_LOADING_TIPS,
+} from "@/components/ui/loading-overlay";
 
 type HomeSearch = {
   onboarding?: "bot";
@@ -29,7 +32,6 @@ function App() {
   const activeRoom = useQuery(api.rooms.getMyActiveRoom);
   const createRoom = useMutation(api.rooms.createRoom);
   const createTutorialBotRoom = useMutation(api.rooms.createTutorialBotRoom);
-  const restartTutorialRoom = useMutation((api as any).rooms.restartTutorialRoom);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
   const onboardingBotGameStartedRef = useRef(false);
@@ -161,17 +163,6 @@ function App() {
     await navigate({ to: "/rooms/$code", params: { code: activeRoom.code } });
   };
 
-  const handleReplayTutorial = async () => {
-    if (!activeRoom?.code || !activeRoom.tutorialId) return;
-    setJoinMessage(null);
-    await restartTutorialRoom({ code: activeRoom.code });
-    await navigate({
-      to: "/rooms/$code",
-      params: { code: activeRoom.code },
-      search: { tutorial: "restart" },
-    });
-  };
-
   const handlePlayTutorial = async () => {
     const displayName = getDisplayName();
     if (!displayName) return;
@@ -180,17 +171,6 @@ function App() {
     setJoinMessage(null);
 
     try {
-      if (activeRoom?.code && activeRoom.tutorialId) {
-        setJoinMessage("Resetting your tutorial table...");
-        await restartTutorialRoom({ code: activeRoom.code });
-        await navigate({
-          to: "/rooms/$code",
-          params: { code: activeRoom.code },
-          search: { tutorial: "restart" },
-        });
-        return;
-      }
-
       setJoinMessage("Setting up a fresh tutorial table...");
       const room = await createTutorialBotRoom({ name: displayName });
       await navigate({
@@ -220,7 +200,10 @@ function App() {
       {showSplash ? (
         <SplashScreen onComplete={() => setShowSplash(false)} />
       ) : isLoadingOverlayVisible ? (
-        <LoadingOverlay message={loadingOverlayMessage} />
+        <LoadingOverlay
+          message={loadingOverlayMessage}
+          subtitles={WORD_POKER_LOADING_TIPS}
+        />
       ) : showOnboardingSetupScreen ? (
         <OnboardingSetupScreen stage={onboardingSetupStage} />
       ) : (
@@ -241,9 +224,6 @@ function App() {
           }}
           onResumeRoom={() => {
             void handleResumeRoom();
-          }}
-          onReplayTutorial={() => {
-            void handleReplayTutorial();
           }}
         />
       )}

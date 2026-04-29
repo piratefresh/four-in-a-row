@@ -236,9 +236,15 @@ export async function getRoomByCode(ctx: MutationCtx | QueryCtx, rawCode: string
 
 // ==================== Auth Utilities ====================
 
+const IS_E2E = process.env.E2E_TESTING === "true";
+const E2E_USER_ID = "e2e-test-user";
+
 export async function getAuthenticatedUserId(
   ctx: MutationCtx | QueryCtx,
 ): Promise<string | undefined> {
+  if (IS_E2E) {
+    return E2E_USER_ID;
+  }
   const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
   const session = await auth.api.getSession({ headers });
   const rawUserId = session?.user?.id ?? session?.session?.userId;
@@ -253,7 +259,7 @@ export async function getAuthUserByPlayerAuthUserId(
   ctx: MutationCtx | QueryCtx,
   authUserId: string | undefined,
 ) {
-  if (!authUserId || authUserId.startsWith("dev-bot:")) {
+  if (!authUserId || authUserId.startsWith("dev-bot:") || authUserId === E2E_USER_ID) {
     return null;
   }
 

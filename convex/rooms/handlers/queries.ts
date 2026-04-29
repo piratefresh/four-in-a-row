@@ -172,7 +172,7 @@ export const getMyActiveRoom = query({
     }
 
     const room = await ctx.db.get(activePlayer.roomId);
-    if (!room || room.status !== "open") {
+    if (!room || room.status !== "open" || isTutorialRoom(room)) {
       return null;
     }
 

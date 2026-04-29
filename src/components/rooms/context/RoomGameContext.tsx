@@ -19,13 +19,11 @@ type RoomGameContextValue = {
   canCall: boolean;
   canRaise: boolean;
   canFold: boolean;
-  canCallClock: boolean;
   currentTurnPlayerName: string | null;
   onCheck?: () => void;
   onCall?: () => void;
   onRaise?: () => void;
   onFold?: () => void;
-  onCallClock?: () => void;
   onRaiseAmountChange?: (amount: number) => void;
   onLeaveRoom?: () => void;
   callLabel: string;
@@ -33,16 +31,14 @@ type RoomGameContextValue = {
   raiseLabel: string;
   raiseAmount: number | null;
   raiseOptions: number[];
-  isCallingClock: boolean;
   turnClockTimeRemaining: number | null;
-  turnClockCallerName: string | null;
   turnClockTargetName: string | null;
   isTurnClockTarget: boolean;
-  callClockAvailableInMs: number | null;
   showdownTimeRemaining: number | null;
   turnTimeRemaining: number | null;
   isShowdownSubmissionOpen: boolean;
   isTutorialBettingPaused: boolean;
+  isTutorialRoom: boolean;
 };
 
 const RoomGameContext = createContext<RoomGameContextValue | null>(null);

@@ -44,7 +44,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
+      sendOnSignUp: process.env.E2E_TESTING !== "true",
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
         await requireActionCtx(ctx).runAction(api.emails.sendVerificationEmail, {

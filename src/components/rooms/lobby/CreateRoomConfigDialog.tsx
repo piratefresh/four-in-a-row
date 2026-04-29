@@ -54,10 +54,11 @@ const bettingOptions: Array<{ value: BettingStructure; label: string }> = [
   { value: "fixedLimit", label: "Fixed Limit" },
 ];
 
-const choiceTileOptions: Array<{ value: ChoiceTileFrequency; label: string }> = [
-  { value: "low", label: "0-1" },
-  { value: "high", label: "2-3" },
-];
+const choiceTileOptions: Array<{ value: ChoiceTileFrequency; label: string }> =
+  [
+    { value: "low", label: "0-1" },
+    { value: "high", label: "2-3" },
+  ];
 
 const bonusOptions: Array<{ value: BonusStructure; label: string }> = [
   { value: "classic", label: "Classic" },
@@ -85,7 +86,7 @@ export function CreateRoomConfigDialog({
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg border-cream/10 bg-[#080806] p-0 text-cream sm:max-w-lg">
+        <DialogContent className="max-w-lg border border-gold bg-felt-deep p-0 text-cream sm:max-w-lg">
           <DialogHeader className="px-5 pt-5">
             <DialogTitle>Create room</DialogTitle>
             <DialogDescription>
@@ -103,7 +104,7 @@ export function CreateRoomConfigDialog({
       <DrawerContent className="max-h-[92svh] border-cream/10 bg-[#080806] text-cream">
         <DrawerHeader className="px-5 pt-5 text-left">
           <DrawerTitle>Create room</DrawerTitle>
-          <DrawerDescription>
+          <DrawerDescription className="text-white">
             Set the table rules before the first hand is dealt.
           </DrawerDescription>
         </DrawerHeader>
@@ -124,7 +125,7 @@ function CreateRoomConfigForm({
   const [bettingStructure, setBettingStructure] =
     useState<BettingStructure>("noLimit");
   const [choiceTileFrequency, setChoiceTileFrequency] =
-    useState<ChoiceTileFrequency>("high");
+    useState<ChoiceTileFrequency>("low");
   const [bonusStructure, setBonusStructure] =
     useState<BonusStructure>("classic");
 
@@ -247,14 +248,7 @@ function getRoomNameWords() {
         .map((word) => word.trim())
         .filter((word) => /^[A-Z]{4,9}$/.test(word) && !word.endsWith("S")),
     )
-    .catch(() => [
-      "BINGO",
-      "QUARTZ",
-      "JUMBLE",
-      "LEXICON",
-      "RACK",
-      "SCORE",
-    ]);
+    .catch(() => ["BINGO", "QUARTZ", "JUMBLE", "LEXICON", "RACK", "SCORE"]);
 
   return roomNameWordsPromise;
 }

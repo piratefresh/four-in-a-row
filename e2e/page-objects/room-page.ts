@@ -14,7 +14,6 @@ export class RoomPage {
   readonly callButton: Locator;
   readonly raiseButton: Locator;
   readonly foldButton: Locator;
-  readonly callClockButton: Locator;
   readonly raiseSlider: Locator;
 
   // Word builder controls
@@ -39,7 +38,6 @@ export class RoomPage {
     this.callButton = page.getByRole("button", { name: /call/i });
     this.raiseButton = page.getByRole("button", { name: /raise/i });
     this.foldButton = page.getByRole("button", { name: /fold/i });
-    this.callClockButton = page.getByRole("button", { name: /call clock/i });
     this.raiseSlider = page.locator('[data-testid="raise-slider"]');
     this.submitWordButton = page.getByRole("button", { name: /submit word/i });
     this.shuffleTilesButton = page.getByRole("button", { name: /shuffle/i });
@@ -83,10 +81,6 @@ export class RoomPage {
 
   async clickFold() {
     await this.foldButton.click();
-  }
-
-  async clickCallClock() {
-    await this.callClockButton.click();
   }
 
   async setRaiseAmount(amount: number) {

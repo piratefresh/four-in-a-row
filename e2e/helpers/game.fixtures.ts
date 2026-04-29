@@ -1,4 +1,4 @@
-import { test as base, type Page } from "@playwright/test";
+import { test as base } from "@playwright/test";
 import {
   createConvexClient,
   createTestRoom,
@@ -7,6 +7,7 @@ import {
   archiveRoom,
   leaveCurrentRoom,
 } from "./convex.setup";
+import { createAuthenticatedClient } from "./auth.setup";
 import { HomePage } from "../page-objects/home-page";
 import { RoomPage } from "../page-objects/room-page";
 import { ResultsPage } from "../page-objects/results-page";
@@ -18,7 +19,7 @@ type TestFixtures = {
   roomPage: (code: string) => RoomPage;
   /** Get results page object for a given room code */
   resultsPage: (code: string) => ResultsPage;
-  /** Convex HTTP client for direct API calls */
+  /** Authenticated Convex HTTP client for direct API calls */
   convex: ReturnType<typeof createConvexClient>;
   /**
    * Create a test room with bots and return its info.
@@ -55,7 +56,7 @@ type TestFixtures = {
 
 export const test = base.extend<TestFixtures>({
   convex: async ({}, use) => {
-    const client = createConvexClient();
+    const client = createAuthenticatedClient();
     await use(client);
   },
 
@@ -97,7 +98,6 @@ export const test = base.extend<TestFixtures>({
 
     await use(createTestRoomFn);
 
-    // Cleanup: archive all created rooms
     for (const code of createdRooms) {
       await archiveRoom(convex, code);
     }

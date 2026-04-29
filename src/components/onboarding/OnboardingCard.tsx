@@ -5,10 +5,10 @@ import { api } from "../../../convex/_generated/api";
 import { cn } from "@/lib/utils";
 import {
   FIRST_BOT_GAME_PAUSEABLE_STEPS,
+  FIRST_BOT_GAME_SHUFFLE_STEP,
   FIRST_BOT_GAME_SHOWDOWN_WAIT_STEP,
   FIRST_BOT_GAME_SHOWDOWN_SUBMIT_STEP,
   FIRST_BOT_GAME_TOUR,
-  FIRST_BOT_GAME_WORD_BUILDER_STEP,
   IN_GAME_HELPER_TOUR,
   getTourCompletionStorageKey,
   getRoomCodeFromPathname,
@@ -74,7 +74,7 @@ export const OnboardingCard = ({
   const shouldResumeTutorialBettingOnClose =
     !isHelperStep &&
     currentTour === FIRST_BOT_GAME_TOUR &&
-    currentStep >= FIRST_BOT_GAME_WORD_BUILDER_STEP &&
+    currentStep >= FIRST_BOT_GAME_SHUFFLE_STEP &&
     currentStep <= FIRST_BOT_GAME_SHOWDOWN_WAIT_STEP;
 
   const resumeTutorialBettingIfNeeded = async () => {
@@ -276,7 +276,7 @@ export const OnboardingCard = ({
               disabled={isStartingShowdown}
               className="min-h-8 rounded border border-gold-bright bg-gold px-3 py-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-felt-deep transition-colors hover:bg-gold-bright disabled:cursor-default disabled:opacity-70"
             >
-              {isStartingShowdown ? "Starting..." : "Start timer"}
+              {isStartingShowdown ? "Starting..." : "Submit word"}
             </button>
           ) : hideNext ? (
             <div className="h-8 min-w-[76px]" />

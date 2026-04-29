@@ -46,6 +46,7 @@ export {
   rejoinRoomByCode,
   debugRejoinRoom,
   debugFillRoomWithBots,
+  e2eCreateTestRoom,
   leaveRoom,
   leaveRoomByCode,
   archiveRoomByCode,

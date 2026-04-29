@@ -13,7 +13,6 @@ import { getBotCharacterForAuthUserId } from "../../../../convex/aiStrategy";
 import {
   RAISE_LADDER,
   SHOWDOWN_TIMER_MS,
-  TURN_CLOCK_GRACE_PERIOD_MS,
 } from "../../../../convex/gameState";
 import type { RoomGameContextValue } from "../context/RoomGameContext";
 import type { RoomPageContextValue } from "../context/RoomPageContext";
@@ -28,7 +27,6 @@ function isTransientActionMessage(message: string | null) {
   return (
     !!message &&
     (message === "Checked." ||
-      message === "Clock called." ||
       message === "Folded." ||
       message.startsWith("Matched ") ||
       message.startsWith("Raised to "))
@@ -66,7 +64,6 @@ export function useRoomDetailsController(code: string) {
   const call = useMutation((api as any).games.call);
   const raise = useMutation((api as any).games.raise);
   const fold = useMutation((api as any).games.fold);
-  const callClock = useMutation((api as any).games.callClock);
   const forfeitShowdown = useMutation(api.games.forfeitShowdown);
 
   const myPlayer = useMemo(() => {
@@ -112,7 +109,6 @@ export function useRoomDetailsController(code: string) {
   const [gameMessage, setGameMessage] = useState<string | null>(null);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [isBetting, setIsBetting] = useState(false);
-  const [isCallingClock, setIsCallingClock] = useState(false);
   const [isTogglingReady, setIsTogglingReady] = useState(false);
   const [isDevRejoining, setIsDevRejoining] = useState(false);
   const [isDevFillingBots, setIsDevFillingBots] = useState(false);
@@ -258,15 +254,6 @@ export function useRoomDetailsController(code: string) {
     () => (currentTurnPlayerId ? getPlayerName(currentTurnPlayerId) : null),
     [currentTurnPlayerId, getPlayerName],
   );
-  const currentTurnIsAutomated = useMemo(() => {
-    if (!currentTurnPlayerId) return false;
-    if (currentTurnPlayerId === DEALER_PLAYER_ID) return true;
-    return (
-      memberById.get(currentTurnPlayerId)?.authUserId?.startsWith("dev-bot:") ??
-      false
-    );
-  }, [currentTurnPlayerId, memberById]);
-
   const myHand = useMemo(
     () =>
       playerId
@@ -318,13 +305,6 @@ export function useRoomDetailsController(code: string) {
     if (game?.turnClockExpiresAt === undefined) return null;
     return Math.max(0, game.turnClockExpiresAt - liveNow);
   }, [game?.turnClockExpiresAt, liveNow]);
-  const turnClockCallerName = useMemo(
-    () =>
-      game?.turnClockCallerPlayerId
-        ? getPlayerName(game.turnClockCallerPlayerId)
-        : null,
-    [game?.turnClockCallerPlayerId, getPlayerName],
-  );
   const turnClockTargetName = useMemo(
     () =>
       game?.turnClockTargetPlayerId
@@ -341,39 +321,9 @@ export function useRoomDetailsController(code: string) {
       ),
     [game?.turnClockTargetPlayerId, hasPendingTurnClock, playerId],
   );
-  const callClockAvailableInMs = useMemo(() => {
-    if (
-      !game ||
-      game.status !== "active" ||
-      game.stage === "final" ||
-      game.stage === "showdown" ||
-      !playerId ||
-      !myHand ||
-      myHand.hasFolded ||
-      !currentTurnPlayerId ||
-      currentTurnPlayerId === playerId ||
-      currentTurnIsAutomated ||
-      hasPendingTurnClock ||
-      game.turnStartedAt === undefined
-    ) {
-      return null;
-    }
-
-    const turnClockGraceMs =
-      game.config?.turnClockGraceMs ?? TURN_CLOCK_GRACE_PERIOD_MS;
-    return Math.max(0, turnClockGraceMs - (liveNow - game.turnStartedAt));
-  }, [
-    currentTurnIsAutomated,
-    currentTurnPlayerId,
-    game,
-    hasPendingTurnClock,
-    liveNow,
-    myHand,
-    playerId,
-  ]);
-  const canCallClock = callClockAvailableInMs === 0;
+const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
   const isTutorialBettingPaused =
-    roomData?.room.tutorialId === "first-bot-game" &&
+    isTutorialRoom &&
     game?.status === "active" &&
     game.stage !== "showdown" &&
     game.stage !== "final" &&
@@ -383,21 +333,11 @@ export function useRoomDetailsController(code: string) {
   const raiseLadder = game?.config?.raiseLadder ?? RAISE_LADDER;
   const maxRaisesPerRound =
     game?.config?.maxRaisesPerRound ?? MAX_RAISES_PER_ROUND;
-const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
-  const turnClockGraceMs = game?.config?.turnClockGraceMs ?? TURN_CLOCK_GRACE_PERIOD_MS;
+  const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
   const bettingStructure = game?.config?.bettingStructure;
   const turnTimeRemaining = useMemo(() => {
-    if (
-      !game ||
-      game.status !== "active" ||
-      game.stage === "final" ||
-      game.stage === "showdown" ||
-      game.turnStartedAt === undefined
-    ) {
-      return null;
-    }
-    return Math.max(0, turnClockGraceMs - (liveNow - game.turnStartedAt));
-  }, [game, liveNow, turnClockGraceMs]);
+    return turnClockTimeRemaining;
+  }, [turnClockTimeRemaining]);
   const availableRaiseOptions = useMemo(() => {
     if (
       !game ||
@@ -608,6 +548,7 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
 
       if (remaining === 0) {
         clearInterval(interval);
+        if (isTutorialRoom) return;
         const hasSubmitted = wordSubmissions?.submissions?.some(
           (submission) => submission.playerId === playerId,
         );
@@ -634,6 +575,7 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
     playerId,
     wordSubmissions,
     forfeitShowdown,
+    isTutorialRoom,
   ]);
 
   const handleCheck = useCallback(async () => {
@@ -718,23 +660,6 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
       setIsBetting(false);
     }
   }, [fold, game?._id, playerId]);
-
-  const handleCallClock = useCallback(async () => {
-    if (!game?._id || !playerId) return;
-
-    setIsCallingClock(true);
-    setGameMessage(null);
-    try {
-      await callClock({ gameId: game._id, playerId });
-      setGameMessage("Clock called.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to call the clock.";
-      setGameMessage(message);
-    } finally {
-      setIsCallingClock(false);
-    }
-  }, [callClock, game?._id, playerId]);
 
   const handleToggleReady = useCallback(async () => {
     setIsTogglingReady(true);
@@ -821,13 +746,11 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
       canCall,
       canRaise,
       canFold: isMyTurn,
-      canCallClock,
       currentTurnPlayerName,
       onCheck: canCheck ? handleCheck : undefined,
       onCall: canCall ? handleCall : undefined,
       onRaise: isMyTurn ? handleRaise : undefined,
       onFold: isMyTurn ? handleFold : undefined,
-      onCallClock: canCallClock ? handleCallClock : undefined,
       onRaiseAmountChange: canRaise ? setSelectedRaiseAmount : undefined,
       onLeaveRoom: handleBack,
       callLabel: callAmount > 0 ? `Call ${callAmount}` : "Call",
@@ -838,12 +761,9 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
           : "Raise Maxed",
       raiseAmount: selectedRaiseAmount,
       raiseOptions: availableRaiseOptions,
-      isCallingClock,
       turnClockTimeRemaining,
-      turnClockCallerName,
       turnClockTargetName,
       isTurnClockTarget,
-      callClockAvailableInMs,
       showdownTimeRemaining,
       turnTimeRemaining,
       isShowdownSubmissionOpen:
@@ -851,13 +771,12 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
         game.status !== "active" ||
         game.showdownStartedAt !== undefined,
       isTutorialBettingPaused,
+      isTutorialRoom,
     }),
     [
       availableRaiseOptions,
-      callClockAvailableInMs,
       callAmount,
       canCall,
-      canCallClock,
       canCheck,
       canRaise,
       currentTurnPlayerName,
@@ -868,17 +787,16 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
       gameMessage,
       handleBack,
       handleCall,
-      handleCallClock,
       handleCheck,
       handleFold,
       handleRaise,
       handleToggleReady,
       isBetting,
-      isCallingClock,
       isMyTurn,
       isTurnClockTarget,
       isTogglingReady,
-      isTutorialBettingPaused,
+isTutorialBettingPaused,
+      isTutorialRoom,
       maxRaisesPerRound,
       myPlayer?.readyStatus,
       raisesThisRound,
@@ -886,7 +804,6 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
       roomData?.room.tutorialId,
       selectedRaiseAmount,
       showdownTimeRemaining,
-      turnClockCallerName,
       turnClockTargetName,
       turnClockTimeRemaining,
       turnTimeRemaining,
@@ -912,7 +829,6 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
         canCheck,
         canCall,
         canRaise,
-        canCallClock,
         callAmount,
         turnClockTimeRemaining,
         effectiveNextRaiseLevel: selectedRaiseAmount ?? undefined,
@@ -928,7 +844,6 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
         call: handleCall,
         raise: handleRaise,
         fold: handleFold,
-        callClock: handleCallClock,
         devRejoinRoom: import.meta.env.DEV ? handleDevRejoinRoom : undefined,
         devFillRoomWithBots: import.meta.env.DEV
           ? handleDevFillRoomWithBots
@@ -943,7 +858,6 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
     [
       callAmount,
       canCall,
-      canCallClock,
       canCheck,
       canRaise,
       code,
@@ -954,7 +868,6 @@ const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
       getPlayerPersonality,
       handleBack,
       handleCall,
-      handleCallClock,
       handleCheck,
       handleDevFillRoomWithBots,
       handleDevRejoinRoom,

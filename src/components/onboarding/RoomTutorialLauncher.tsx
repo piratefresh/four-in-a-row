@@ -4,6 +4,7 @@ import { useNextStep } from "nextstepjs";
 import {
   getTourCompletionStorageKey,
   getTourPausedStepStorageKey,
+  getTourStepStorageKey,
 } from "./wordPokerTours";
 
 type RoomTutorialLauncherProps = {
@@ -30,9 +31,15 @@ export function RoomTutorialLauncher({
 
     const completionKey = getTourCompletionStorageKey(tutorialName, roomCode);
     const pausedStepKey = getTourPausedStepStorageKey(tutorialName, roomCode);
+    const shuffleStepKey = getTourStepStorageKey(
+      tutorialName,
+      "shuffle",
+      roomCode,
+    );
     if (typeof window !== "undefined" && forceStart) {
       window.localStorage.removeItem(completionKey);
       window.localStorage.removeItem(pausedStepKey);
+      window.localStorage.removeItem(shuffleStepKey);
     }
 
     const hasCompletedTour =

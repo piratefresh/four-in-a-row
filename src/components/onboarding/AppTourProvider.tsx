@@ -43,6 +43,8 @@ export function AppTourProvider({ children }: { children: React.ReactNode }) {
       <NextStepReact
         cardComponent={OnboardingCard}
         clickThroughOverlay
+        shadowRgb="7, 36, 25"
+        shadowOpacity="0.65"
         navigationAdapter={navigationAdapter}
         steps={wordPokerTours}
         disableConsoleLogs

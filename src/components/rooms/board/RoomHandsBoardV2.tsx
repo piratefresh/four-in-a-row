@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useNextStep } from "nextstepjs";
 import {
   DndContext,
@@ -18,6 +18,7 @@ import { BlankRoomPhase } from "../phases/BlankRoomPhase";
 import { PhasePlayerBadge } from "../phases/PhasePlayerBadge";
 import { RoomBottomPanel } from "./RoomBottomPanel";
 import { RoomCommunityStrip } from "./RoomCommunityStrip";
+import { RoomHelpMenu } from "./RoomHelpMenu";
 import { RoomHelperTipTrigger } from "@/components/onboarding/RoomHelperTipTrigger";
 import { PlayerHand } from "./PlayerHand";
 import {
@@ -33,8 +34,13 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
 import type { WordTileSize } from "../table/word-tile-v2";
 import {
+  FIRST_BOT_GAME_SHUFFLE_STEP,
   FIRST_BOT_GAME_TOUR,
   FIRST_BOT_GAME_WORD_BUILDER_STEP,
+  IN_GAME_HELPER_STEPS,
+  TUTORIAL_TARGET_WORD,
+  getRoomCodeFromPathname,
+  getTourStepStorageKey,
 } from "@/components/onboarding/wordPokerTours";
 
 type SortableBuilderTileProps = {
@@ -137,7 +143,7 @@ function renderEmptyBuilderTile() {
 export function RoomHandsBoardV2({
   gameId,
   activePlayerId,
-  helperTip,
+  helperTipsEnabled,
   currentTurnPlayerId,
   gameStage,
   communityTiles,
@@ -181,22 +187,17 @@ export function RoomHandsBoardV2({
     canCall,
     canRaise,
     canFold,
-    canCallClock,
     currentTurnPlayerName,
     onCheck,
     onCall,
     onRaise,
     onFold,
-    onCallClock,
     onRaiseAmountChange,
     callLabel,
     callAmount,
     raiseLabel,
     raiseAmount,
     raiseOptions,
-    isCallingClock,
-    turnClockTimeRemaining,
-    turnClockCallerName,
     isShowdownSubmissionOpen,
   } = useRoomGameContext();
 
@@ -264,6 +265,69 @@ export function RoomHandsBoardV2({
     communityTiles,
   });
 
+  const normalizedWordPreview = wordPreview.replace(/[^a-z]/gi, "").toUpperCase();
+  const normalizedActiveBuilderWord = useMemo(
+    () =>
+      builderTiles
+        .filter((tile) => !tile.disabled)
+        .map((tile) => {
+          if (tile.isChoice) {
+            return choiceSelections[tile.id] ?? tile.letters?.[0] ?? "";
+          }
+
+          return tile.letter ?? "";
+        })
+        .join("")
+        .replace(/[^a-z]/gi, "")
+        .toUpperCase(),
+    [builderTiles, choiceSelections],
+  );
+  const hasBuiltTutorialTarget =
+    normalizedWordPreview === TUTORIAL_TARGET_WORD ||
+    normalizedActiveBuilderWord === TUTORIAL_TARGET_WORD;
+
+  useEffect(() => {
+    if (
+      currentTour !== FIRST_BOT_GAME_TOUR ||
+      currentStep !== FIRST_BOT_GAME_WORD_BUILDER_STEP ||
+      !hasBuiltTutorialTarget
+    ) {
+      return;
+    }
+
+    setCurrentStep(FIRST_BOT_GAME_WORD_BUILDER_STEP + 1, 50);
+  }, [
+    currentStep,
+    currentTour,
+    hasBuiltTutorialTarget,
+    setCurrentStep,
+  ]);
+
+  const handleShuffleTilesWithTutorialAdvance = () => {
+    handleShuffleTiles();
+
+    if (
+      currentTour === FIRST_BOT_GAME_TOUR &&
+      currentStep === FIRST_BOT_GAME_SHUFFLE_STEP
+    ) {
+      let roomCode: string | null = null;
+      if (typeof window !== "undefined") {
+        roomCode = getRoomCodeFromPathname(window.location.pathname);
+        const stepKey = getTourStepStorageKey(
+          FIRST_BOT_GAME_TOUR,
+          "shuffle",
+          roomCode,
+        );
+        window.localStorage.setItem(
+          stepKey,
+          "true",
+        );
+      }
+
+      setCurrentStep(FIRST_BOT_GAME_WORD_BUILDER_STEP, 50);
+    }
+  };
+
   if (!bottomHand) return null;
 
   // Bottom player is always at index 0 after rotation
@@ -272,6 +336,15 @@ export function RoomHandsBoardV2({
     !!activePlayerId &&
     bottomHand.playerId === activePlayerId &&
     !!bottomHand.hasFolded;
+  const hasRevealedSpecialTile = useMemo(() => {
+    const visibleTiles = [
+      ...(bottomHand?.tiles ?? []),
+      ...communityTiles.filter((tile) => tile.revealed !== false),
+    ];
+    return visibleTiles.some(
+      (tile) => tile.kind === "choice" || Boolean(tile.multiplier),
+    );
+  }, [bottomHand?.tiles, communityTiles]);
 
   const boardPhase: "phase0" | RoomHandsBoardProps["gameStage"] =
     showReadyButton ? "phase0" : gameStage;
@@ -305,14 +378,26 @@ export function RoomHandsBoardV2({
         .filter((bet) => bet.amount > 0),
     [getPlayerName, opponents],
   );
-  const advanceTutorialFromWordBuilderStep = () => {
-    if (
-      currentTour === FIRST_BOT_GAME_TOUR &&
-      currentStep === FIRST_BOT_GAME_WORD_BUILDER_STEP
-    ) {
-      setCurrentStep(FIRST_BOT_GAME_WORD_BUILDER_STEP + 1, 50);
-    }
-  };
+  const actionsHelperStep = showReadyButton
+    ? IN_GAME_HELPER_STEPS.ready
+    : showBettingControls && isMyTurn
+      ? IN_GAME_HELPER_STEPS.betting
+      : IN_GAME_HELPER_STEPS.waiting;
+  const builderHelperStep =
+    gameStage === "showdown"
+      ? IN_GAME_HELPER_STEPS.showdown
+      : hasRevealedSpecialTile
+        ? IN_GAME_HELPER_STEPS.tileDetails
+        : IN_GAME_HELPER_STEPS.wordBuilder;
+  const communityHelperTip = helperTipsEnabled ? (
+    <RoomHelperTipTrigger step={IN_GAME_HELPER_STEPS.communityReveal} />
+  ) : null;
+  const builderHelperTip = helperTipsEnabled ? (
+    <RoomHelperTipTrigger step={builderHelperStep} />
+  ) : null;
+  const actionsHelperTip = helperTipsEnabled ? (
+    <RoomHelperTipTrigger step={actionsHelperStep} />
+  ) : null;
 
   return (
     <DndContext
@@ -322,12 +407,12 @@ export function RoomHandsBoardV2({
       onDragCancel={handleDragCancel}
       onDragEnd={(event) => {
         handleDragEnd(event);
-        if (event.over && event.active.id !== event.over.id) {
-          advanceTutorialFromWordBuilderStep();
-        }
       }}
     >
-      <div className="flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-gradient-felt-table font-serif text-[#f1eee7] [@media(max-height:460px)]:h-[calc(100dvh-4rem)]">
+      <div className="relative flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-gradient-felt-table font-serif text-[#f1eee7] [@media(max-height:460px)]:h-[calc(100dvh-4rem)]">
+        <div className="absolute right-3 top-3 z-40 sm:right-4 sm:top-4">
+          <RoomHelpMenu />
+        </div>
         <main className="flex min-h-0 flex-1 flex-col pt-3 sm:pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {tutorialReplayControl ? (
             <div className="px-4 pb-2">{tutorialReplayControl}</div>
@@ -336,11 +421,7 @@ export function RoomHandsBoardV2({
             tiles={communityTiles}
             hidden={isPhase0 || isPhase1}
             tileSize={boardTileSize}
-            helperTip={
-              helperTip?.target === "community" ? (
-                <RoomHelperTipTrigger step={helperTip.step} />
-              ) : null
-            }
+            helperTip={communityHelperTip}
           />
 
           <div className="relative flex min-h-0 flex-1 flex-col justify-center">
@@ -440,6 +521,7 @@ export function RoomHandsBoardV2({
                   isShowdownSubmissionOpen={true}
                   handleSubmitWord={() => {}}
                   renderBuilderTile={renderEmptyBuilderTile}
+                  helperTip={builderHelperTip}
                 />
               </div>
             ) : (
@@ -461,7 +543,9 @@ export function RoomHandsBoardV2({
                 isShowdownSubmissionOpen={isShowdownSubmissionOpen}
                 handleSubmitWord={handleSubmitWord}
                 onShuffleTiles={
-                  showInlineBottomPanelShuffle ? handleShuffleTiles : undefined
+                  showInlineBottomPanelShuffle
+                    ? handleShuffleTilesWithTutorialAdvance
+                    : undefined
                 }
                 disableShuffle={
                   showInlineBottomPanelShuffle ? isValidating : undefined
@@ -472,18 +556,13 @@ export function RoomHandsBoardV2({
                     tile={tile}
                     onToggleDisabled={(tileId) => {
                       handleToggleDisabled(tileId);
-                      advanceTutorialFromWordBuilderStep();
                     }}
                     selectedLetter={choiceSelections[tile.id]}
                     tileSize={boardTileSize}
                   />
                 )}
                 hasFolded={hasBottomPlayerFolded}
-                helperTip={
-                  helperTip?.target === "builder" ? (
-                    <RoomHelperTipTrigger step={helperTip.step} />
-                  ) : null
-                }
+                helperTip={builderHelperTip}
               />
             )}
 
@@ -510,11 +589,7 @@ export function RoomHandsBoardV2({
                   isTogglingReady,
                   onReady,
                 }}
-                helperTip={
-                  helperTip?.target === "actions" ? (
-                    <RoomHelperTipTrigger step={helperTip.step} />
-                  ) : null
-                }
+                helperTip={actionsHelperTip}
               />
             )}
 
@@ -530,38 +605,29 @@ export function RoomHandsBoardV2({
                         canCall,
                         canRaise,
                         canFold,
-                        canCallClock,
                         currentTurnPlayerName,
                         onCheck,
                         onCall,
                         onRaise,
                         onFold,
-                        onCallClock,
                         onRaiseAmountChange,
                         callLabel,
                         callAmount,
                         raiseLabel,
                         raiseAmount,
                         raiseOptions,
-                        isCallingClock,
-                        turnClockTimeRemaining,
-                        turnClockCallerName,
                       }
                     : undefined
                 }
                 utility={
                   showShuffleControl && !showInlineBottomPanelShuffle
                     ? {
-                        onShuffleTiles: handleShuffleTiles,
+                        onShuffleTiles: handleShuffleTilesWithTutorialAdvance,
                         disableShuffle: isValidating,
                       }
                     : undefined
                 }
-                helperTip={
-                  helperTip?.target === "actions" ? (
-                    <RoomHelperTipTrigger step={helperTip.step} />
-                  ) : null
-                }
+                helperTip={actionsHelperTip}
               />
             )}
           </div>

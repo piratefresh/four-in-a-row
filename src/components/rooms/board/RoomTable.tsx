@@ -206,7 +206,7 @@ export function RoomTable({
     : BET_THROW_TRANSITION;
   const potDisplay = (
     <div className="flex flex-col items-center gap-1 text-center leading-none">
-      <div className="text-[8px] font-semibold uppercase tracking-[0.2em] text-[#d7c48e]/75 xs:text-[9px] sm:text-xs">
+      <div className="font-semibold uppercase tracking-[0.2em] text-[#d7c48e]/75 xs:text-[9px] sm:text-xs">
         Pot
       </div>
       <div

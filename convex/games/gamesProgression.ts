@@ -94,7 +94,7 @@ async function advanceStage(
   const roomId = game.roomId as Id<"rooms">;
   const room = await ctx.db.get(roomId);
   const shouldPauseTutorialBetting =
-    nextStage === "flop" && room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
+    nextStage === "turn" && room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
   const shouldPauseTutorialShowdown =
     nextStage === "final" && room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
 
@@ -209,6 +209,8 @@ async function scheduleBotShowdownSubmissions(
     return;
   }
 
+  const room = await ctx.db.get(game.roomId as Id<"rooms">);
+
   const hands = await ctx.db
     .query("playerHands")
     .withIndex("by_game", (q) => q.eq("gameId", gameId))
@@ -230,7 +232,10 @@ async function scheduleBotShowdownSubmissions(
   }
 
   for (const botHand of botHands) {
-    const delay = 3000 + Math.floor(Math.random() * 12000);
+    const isTutorial = room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
+    const delay = isTutorial
+      ? 1500
+      : 3000 + Math.floor(Math.random() * 12000);
 
     await ctx.scheduler.runAfter(
       delay,
@@ -264,6 +269,37 @@ async function scheduleShowdownResolution(
     {
       gameId,
       showdownStartedAt: game.showdownStartedAt,
+    },
+  );
+}
+
+async function scheduleTurnTimeout(
+  ctx: MutationCtx,
+  args: {
+    gameId: Id<"games">;
+    playerId: string;
+    turnStartedAt: number;
+    timeoutMs: number;
+  },
+) {
+  const turnClockExpiresAt = args.turnStartedAt + args.timeoutMs;
+  const now = Date.now();
+
+  await ctx.db.patch(args.gameId, {
+    turnClockExpiresAt,
+    turnClockTargetPlayerId: args.playerId,
+    turnClockCallerPlayerId: undefined,
+    turnClockCalledAt: undefined,
+    updatedAt: now,
+  });
+
+  await ctx.scheduler.runAfter(
+    Math.max(0, turnClockExpiresAt - now),
+    (internal as typeof internal).games.internalResolveExpiredTurnClock,
+    {
+      gameId: args.gameId,
+      playerId: args.playerId,
+      turnClockExpiresAt,
     },
   );
 }
@@ -368,7 +404,33 @@ export async function scheduleBotTurnIfNeeded(
   console.log(`scheduleBotTurnIfNeeded: isBot=${isBot}`);
 
   if (!isBot) {
-    console.log("scheduleBotTurnIfNeeded: Current player is not a bot, skipping");
+    if (room?.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID) {
+      if (game.turnClockExpiresAt !== undefined) {
+        await ctx.db.patch(game._id, {
+          ...getClearedTurnClockFields(),
+          updatedAt: Date.now(),
+        });
+      }
+      console.log("scheduleBotTurnIfNeeded: Turn timer is disabled for tutorial player turns");
+      return;
+    }
+
+    if (
+      game.turnStartedAt !== undefined &&
+      game.turnClockExpiresAt === undefined
+    ) {
+      console.log(
+        `scheduleBotTurnIfNeeded: Scheduling turn timeout for ${currentTurnHand.playerId}`,
+      );
+      const config = game.config ?? resolveConfig();
+      await scheduleTurnTimeout(ctx, {
+        gameId,
+        playerId: currentTurnHand.playerId,
+        turnStartedAt: game.turnStartedAt,
+        timeoutMs: config.turnClockGraceMs,
+      });
+    }
+    console.log("scheduleBotTurnIfNeeded: Current player is not a bot, skipping bot action");
     return;
   }
 

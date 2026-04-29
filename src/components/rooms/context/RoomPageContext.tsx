@@ -41,7 +41,6 @@ type RoomPageState = {
   canCheck: boolean;
   canCall: boolean;
   canRaise: boolean;
-  canCallClock: boolean;
   callAmount: number;
   turnClockTimeRemaining: number | null;
   effectiveNextRaiseLevel: number | undefined;
@@ -58,7 +57,6 @@ type RoomPageActions = {
   call: () => Promise<void>;
   raise: () => Promise<void>;
   fold: () => Promise<void>;
-  callClock: () => Promise<void>;
   devRejoinRoom?: () => Promise<void>;
   devFillRoomWithBots?: () => Promise<void>;
 };

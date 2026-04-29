@@ -122,7 +122,7 @@ export default function Header() {
           </button>
         ) : null}
 
-        <div className="min-w-0">
+        <div className="min-w-0" id="tutorial-phase-title">
           <h1
             id="tutorial-phase-step"
             className={

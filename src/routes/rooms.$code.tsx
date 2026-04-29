@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   RoomDevTools,
@@ -8,7 +8,10 @@ import {
   RoomPageProvider,
   useRoomDetailsController,
 } from "@/components/rooms";
-import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import {
+  LoadingOverlay,
+  WORD_POKER_LOADING_TIPS,
+} from "@/components/ui/loading-overlay";
 import { api } from "../../convex/_generated/api";
 import {
   ChatSidebar,
@@ -17,7 +20,6 @@ import {
 import { useChatSidebar } from "@/components/rooms/chat/useChatSidebar";
 import { RoomTutorialPhaseSync } from "@/components/onboarding/RoomTutorialPhaseSync";
 import { RoomTutorialLauncher } from "@/components/onboarding/RoomTutorialLauncher";
-import { deriveInGameHelperContext } from "@/components/onboarding/RoomInGameHelperSync";
 import { FIRST_BOT_GAME_TOUR } from "@/components/onboarding/wordPokerTours";
 
 type RoomSearch = {
@@ -95,47 +97,25 @@ function RoomDetailsPage() {
     return () => {
       mediaQuery.removeEventListener("change", syncDesktopChatVisibility);
     };
-  }, []);
+}, []);
 
-  const chat = useChatSidebar(roomData?.room._id, isDesktopChatVisible);
   const forcedTutorialReplay =
     search.tutorial === "intro" || search.tutorial === "restart";
   const tutorialId = roomData?.room.tutorialId ?? null;
   const isTutorialRoom = tutorialId === FIRST_BOT_GAME_TOUR;
-  const helperContext = useMemo(() => {
-    const activePlayerId = myPlayer?._id ? String(myPlayer._id) : undefined;
-    const activePlayerHand = activePlayerId
-      ? displayHands.find((hand) => hand.playerId === activePlayerId)
-      : undefined;
-
-    if (
-      !game ||
-      isTutorialRoom ||
-      preferences?.showInGameHelper !== true ||
-      (activePlayerHand !== undefined &&
-        "hasFolded" in activePlayerHand &&
-        activePlayerHand.hasFolded)
-    ) {
-      return null;
-    }
-
-    return deriveInGameHelperContext({
-      gameStage: game.stage,
-      bottomPlayerId,
-      hands: displayHands,
-      communityTiles: game.communityTiles,
-      roomGame: roomGameContextValue,
-    });
-  }, [
-    bottomPlayerId,
-    displayHands,
-    game,
-    isTutorialRoom,
-    myPlayer?._id,
-    preferences?.showInGameHelper,
-    roomGameContextValue,
-  ]);
+  const chat = useChatSidebar(isTutorialRoom ? undefined : roomData?.room._id, isDesktopChatVisible);
   const activePlayerId = myPlayer?._id ? String(myPlayer._id) : undefined;
+  const activePlayerHand = activePlayerId
+    ? displayHands.find((hand) => hand.playerId === activePlayerId)
+    : undefined;
+  const activePlayerHasFolded =
+    activePlayerHand !== undefined &&
+    "hasFolded" in activePlayerHand &&
+    activePlayerHand.hasFolded;
+  const helperTipsEnabled =
+    !isTutorialRoom &&
+    preferences?.showInGameHelper === true &&
+    !activePlayerHasFolded;
 
   if (isAuthPending) {
     return (
@@ -143,6 +123,7 @@ function RoomDetailsPage() {
         message={
           forcedTutorialReplay ? "Opening your guided table..." : "Loading..."
         }
+        subtitles={WORD_POKER_LOADING_TIPS}
       />
     );
   }
@@ -159,6 +140,7 @@ function RoomDetailsPage() {
             ? "Joining your first room..."
             : "Joining room..."
         }
+        subtitles={WORD_POKER_LOADING_TIPS}
       />
     );
   }
@@ -197,6 +179,7 @@ function RoomDetailsPage() {
             ? "Dealing your first hand..."
             : "Preparing table..."
         }
+        subtitles={WORD_POKER_LOADING_TIPS}
       />
     );
   }
@@ -234,13 +217,23 @@ function RoomDetailsPage() {
         roomCode={code}
         forceStart={forcedTutorialReplay}
       />
-      <RoomTutorialPhaseSync gameStage={game.stage} roomCode={code} />
-      <div className="relative [@media(min-width:1441px)]:pr-[400px]">
+      <RoomTutorialPhaseSync
+        gameStage={game.stage}
+        roomCode={code}
+        tutorialName={tutorialId}
+        isTutorialBettingPaused={
+          isTutorialRoom &&
+          game.stage !== "showdown" &&
+          game.stage !== "final" &&
+          game.turnStartedAt === undefined
+        }
+      />
+      <div className="relative [@media(min-width:1441px)]:pr-[400px]" data-testid="room-content">
         <RoomGameProvider value={roomGameContextValue}>
           <RoomHandsBoardV2
             gameId={game._id}
             activePlayerId={activePlayerId}
-            helperTip={helperContext}
+            helperTipsEnabled={helperTipsEnabled}
             roomCode={code}
             currentTurnPlayerId={currentTurnPlayerId}
             gameStage={game.stage}
@@ -273,22 +266,26 @@ function RoomDetailsPage() {
           />
         ) : null}
 
-        {/* Chat toggle button */}
-        <div className="fixed bottom-6 right-6 z-30">
-          <ChatToggleButton
-            onClick={chat.toggleChat}
-            unreadCount={chat.unreadCount}
-          />
-        </div>
+        {/* Chat — hidden in tutorial rooms */}
+        {!isTutorialRoom && (
+          <>
+            <div className="fixed bottom-6 right-6 z-30">
+              <ChatToggleButton
+                onClick={chat.toggleChat}
+                unreadCount={chat.unreadCount}
+              />
+            </div>
 
-        <ChatSidebar
-          isOpen={chat.isOpen}
-          onClose={chat.closeChat}
-          messages={chat.messages}
-          draftMessage={chat.draftMessage}
-          onDraftMessageChange={chat.setDraftMessage}
-          onSendMessage={chat.sendMessage}
-        />
+            <ChatSidebar
+              isOpen={chat.isOpen}
+              onClose={chat.closeChat}
+              messages={chat.messages}
+              draftMessage={chat.draftMessage}
+              onDraftMessageChange={chat.setDraftMessage}
+              onSendMessage={chat.sendMessage}
+            />
+          </>
+        )}
       </div>
     </RoomPageProvider>
   );

@@ -50,19 +50,19 @@ export function OnlineRooms({
   onCreateRoom,
   onResumeRoom,
 }: OnlineRoomsProps) {
+  const canResumeActiveRoom = Boolean(activeRoomCode && !activeRoomTutorialId);
+
   return (
     <main className="min-h-screen bg-felt text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {activeRoomCode ? (
+          {canResumeActiveRoom ? (
             <button
               type="button"
               onClick={onResumeRoom}
               className="rounded-full border border-[#d7b45e]/30 bg-[#1a1509] px-4 py-2 text-sm font-medium text-[#f4d99d] transition-colors hover:border-[#d7b45e]/50 hover:text-[#fff0cb]"
             >
-              {activeRoomTutorialId
-                ? `Resume tutorial table ${activeRoomCode}`
-                : `Resume room ${activeRoomCode}`}
+              Resume room {activeRoomCode}
             </button>
           ) : null}
         </div>
