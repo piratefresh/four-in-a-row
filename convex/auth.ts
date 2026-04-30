@@ -16,6 +16,19 @@ const siteUrl =
   process.env.SITE_URL ||
   "http://localhost:3000";
 
+const trustedOrigins = Array.from(
+  new Set(
+    [
+      siteUrl,
+      "https://wordpoker.app",
+      "https://www.wordpoker.app",
+      ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
+    ]
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  ),
+);
+
 // The component client has methods needed for integrating Convex with Better Auth,
 // as well as helper methods for general use.
 export const authComponent = createClient<DataModel>(components.betterAuth);
@@ -23,6 +36,7 @@ export const authComponent = createClient<DataModel>(components.betterAuth);
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
     baseURL: siteUrl,
+    trustedOrigins,
     database: authComponent.adapter(ctx),
     user: {
       additionalFields: {
