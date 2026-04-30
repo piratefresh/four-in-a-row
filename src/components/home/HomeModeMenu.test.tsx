@@ -20,6 +20,7 @@ describe("HomeModeMenu", () => {
 
     expect(markup).toContain("Offline Mode");
     expect(markup).toContain("Play vs. bots, no signup");
+    expect(markup).toContain("Power-ups");
     expect(markup).toContain("aria-haspopup=\"menu\"");
     expect(markup).toContain("disabled");
   });

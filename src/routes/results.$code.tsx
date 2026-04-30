@@ -3,7 +3,9 @@ import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { useRoomPresence } from "@/components/rooms/hooks/useRoomPresence";
 import { ShowdownResultsScreen } from "@/components/rooms/results/ShowdownResultsScreen";
+import { TutorialSignupWall } from "@/components/rooms/results/TutorialSignupWall";
 import { authClient } from "@/lib/auth-client";
+import { getTutorialGuestId } from "@/lib/tutorial-guest";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/results/$code")({
@@ -35,8 +37,15 @@ function ResultsPage() {
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const [isStartingNewGame, setIsStartingNewGame] = useState(false);
+  const [showTutorialSignupWall, setShowTutorialSignupWall] = useState(false);
+  const [tutorialGuestAuthUserId] = useState(() => getTutorialGuestId());
 
-  const roomData = useQuery(api.rooms.getRoomMembers, { code });
+  const roomData = useQuery((api as any).rooms.getRoomMembers, {
+    code,
+    guestAuthUserId: session?.user
+      ? undefined
+      : (tutorialGuestAuthUserId ?? undefined),
+  });
   const game = useQuery(api.games.getGameByRoom, {
     roomId: roomData?.room._id ?? "",
   });
@@ -84,6 +93,8 @@ function ResultsPage() {
       otherPlayers.every((member) => member.authUserId?.startsWith("dev-bot:"))
     );
   }, [roomData?.members, myPlayer]);
+  const isGuestTutorialGame =
+    !session?.user && roomData?.room.tutorialId === "first-bot-game";
 
   const handlePlayAnotherOffline = async () => {
     const displayName =
@@ -118,6 +129,16 @@ function ResultsPage() {
   };
 
   const handleReturnToMainMenu = async () => {
+    if (isGuestTutorialGame && !showTutorialSignupWall) {
+      setShowTutorialSignupWall(true);
+      return;
+    }
+
+    if (!session?.user) {
+      void navigate({ to: "/" });
+      return;
+    }
+
     try {
       await leaveRoom({});
     } catch (error) {
@@ -169,6 +190,19 @@ function ResultsPage() {
   const getPlayerName = (id: string) => memberById.get(id)?.name ?? "Player";
   const getPlayerAvatar = (id: string) => memberById.get(id)?.image ?? null;
 
+  if (showTutorialSignupWall) {
+    return (
+      <TutorialSignupWall
+        onCreateAccount={() => {
+          void navigate({ to: "/register" });
+        }}
+        onContinueGuest={() => {
+          void handleReturnToMainMenu();
+        }}
+      />
+    );
+  }
+
   return (
     <ShowdownResultsScreen
       pot={game.pot}
@@ -179,6 +213,7 @@ function ResultsPage() {
       onReturnToOnlineRooms={handleReturnToOnlineRooms}
       onReturnToMainMenu={handleReturnToMainMenu}
       isOfflineGame={isOfflineGame}
+      isGuestTutorialGame={isGuestTutorialGame}
       onPlayAnotherOffline={handlePlayAnotherOffline}
       isStartingNewGame={isStartingNewGame}
     />

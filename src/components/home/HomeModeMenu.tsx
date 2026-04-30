@@ -6,6 +6,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tips } from "./Tips";
 import { ModeCard } from "./components/ModeCard";
 
 type OfflineDifficulty = "easy" | "medium" | "hard";
@@ -141,6 +142,8 @@ export function HomeModeMenu({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Tips className="mt-1" />
         </div>
 
         <div className="space-y-3">
