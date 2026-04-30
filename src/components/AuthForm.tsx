@@ -46,15 +46,20 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         </button>
       </div>
     ) : (
-      <div className="w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
-        <h1 className="text-2xl font-bold text-white">Check your email</h1>
-        <p className="mt-2 text-sm text-slate-300">
+      <div className="w-full max-w-md rounded-2xl bg-[#fbf7ec] p-8 text-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)]">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#0d3b2e] font-['JetBrains_Mono',monospace] text-[11px] font-semibold tracking-widest text-[#f6efe0]">
+          MAIL
+        </div>
+        <h1 className="mt-4 font-['Fraunces',serif] text-2xl font-extrabold text-[#111511]">
+          Check your email
+        </h1>
+        <p className="mt-2 text-sm text-[#2a2f2a]">
           We&apos;ve sent a verification email to{" "}
-          <span className="text-white">{email}</span>.
+          <span className="font-semibold text-[#111511]">{email}</span>.
         </p>
         <button
           type="button"
-          className="mt-6 w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636]"
+          className="mt-6 w-full rounded-lg bg-[#0d3b2e] px-4 py-3 font-semibold text-[#f6efe0] transition-colors hover:bg-[#14523f]"
           onClick={() => navigate({ to: "/login" })}
         >
           Go to login
@@ -79,12 +84,14 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         </button>
       </div>
     ) : (
-      <div className="w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
-        <h1 className="text-xl font-semibold text-white">You are signed in</h1>
-        <p className="mt-2 text-sm text-slate-300">{session.user.email}</p>
+      <div className="w-full max-w-md rounded-2xl bg-[#fbf7ec] p-8 text-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)]">
+        <h1 className="font-['Fraunces',serif] text-xl font-extrabold text-[#111511]">
+          You&apos;re signed in
+        </h1>
+        <p className="mt-2 text-sm text-[#2a2f2a]">{session.user.email}</p>
         <button
           type="button"
-          className="mt-6 w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636]"
+          className="mt-6 w-full rounded-lg bg-[#0d3b2e] px-4 py-3 font-semibold text-[#f6efe0] transition-colors hover:bg-[#14523f]"
           onClick={() => navigate({ to: "/" })}
         >
           Go to home
@@ -124,7 +131,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
   if (isRegister) {
     return (
-      <div className="w-full max-w-md rounded-2xl px-6 py-10 sm:px-8">
+      <div className="w-full max-w-md rounded-2xl px-6 sm:px-8">
         <div className="mb-6 text-center">
           <div className="text-4xl">💰</div>
           <h1 className="mt-2 font-display text-[22px] font-extrabold leading-tight text-[#111511]">
@@ -229,15 +236,27 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
-      <h1 className="text-2xl font-bold text-white">Sign in</h1>
-      <p className="mt-1 text-sm text-slate-300">
-        Sign in to join and create rooms
-      </p>
+    <div className="w-full max-w-md rounded-2xl px-6 sm:px-8">
+      <div className="mb-6 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#0d3b2e] font-display text-[18px] font-extrabold text-[#f6efe0]">
+          WP
+        </div>
+        <h1 className="mt-2 font-display text-[22px] font-extrabold leading-tight text-[#111511]">
+          Welcome
+          <br />
+          back
+        </h1>
+        <div className="mt-3 inline-block rounded-full bg-[#0d3b2e] px-3 py-1 font-['JetBrains_Mono',monospace] text-[11px] font-medium tracking-widest text-white">
+          Resume your table
+        </div>
+      </div>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-3">
         <div>
-          <label htmlFor="email" className="mb-1 block text-sm text-slate-200">
+          <label
+            htmlFor="email"
+            className="mb-1 block text-sm font-semibold text-[#2a2f2a]"
+          >
             Email
           </label>
           <input
@@ -246,14 +265,15 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full rounded-md border border-[#323232] bg-[#141414] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#1e6d3c]"
+            className="w-full rounded-lg border border-[rgba(0,0,0,0.15)] bg-white px-3 py-2.5 text-sm text-[#111511] outline-none transition-colors focus:border-[#0d3b2e]"
+            placeholder="you@example.com"
           />
         </div>
 
         <div>
           <label
             htmlFor="password"
-            className="mb-1 block text-sm text-slate-200"
+            className="mb-1 block text-sm font-semibold text-[#2a2f2a]"
           >
             Password
           </label>
@@ -264,12 +284,13 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
-            className="w-full rounded-md border border-[#323232] bg-[#141414] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#1e6d3c]"
+            className="w-full rounded-lg border border-[rgba(0,0,0,0.15)] bg-white px-3 py-2.5 text-sm text-[#111511] outline-none transition-colors focus:border-[#0d3b2e]"
+            placeholder="8+ characters"
           />
         </div>
 
         {error && (
-          <p className="rounded-md border border-rose-700 bg-rose-900/30 px-3 py-2 text-sm text-rose-300">
+          <p className="rounded-lg border border-[rgba(194,61,61,0.3)] bg-[rgba(194,61,61,0.08)] px-3 py-2 text-sm text-[#c23d3d]">
             {error}
           </p>
         )}
@@ -277,7 +298,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <div className="text-right">
           <Link
             to="/forgot-password"
-            className="text-sm text-[#7ed8a2] hover:text-[#9ee6ba]"
+            className="text-sm font-semibold text-[#0d3b2e] hover:underline"
           >
             Forgot password?
           </Link>
@@ -286,17 +307,17 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636] disabled:opacity-60"
+          className="w-full rounded-lg bg-[#0d3b2e] px-4 py-3 font-semibold text-[#f6efe0] transition-colors hover:bg-[#14523f] disabled:opacity-60"
         >
-          {loading ? "Please wait..." : "Sign in"}
+          {loading ? "Please wait..." : "Sign in with Email"}
         </button>
       </form>
 
-      <p className="mt-4 text-sm text-slate-300">
+      <p className="mt-5 text-center text-[11px] text-[#8a8778]">
         Don&apos;t have an account?{" "}
         <Link
           to="/register"
-          className="font-medium text-[#7ed8a2] hover:text-[#9ee6ba]"
+          className="font-semibold text-[#0d3b2e] hover:underline"
         >
           Register
         </Link>

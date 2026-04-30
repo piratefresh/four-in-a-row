@@ -100,7 +100,7 @@ export default function Header() {
     <header
       className={`flex h-16 items-center justify-between px-4 text-white shadow-lg ${
         isRoomView || isResultsView || isOnlineRoomsView
-          ? "border-b border-white/5 bg-[#0b0b0c]"
+          ? "border-b border-white/5 bg-felt-deep"
           : ""
       }`}
     >
