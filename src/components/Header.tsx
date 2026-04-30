@@ -49,6 +49,7 @@ export default function Header() {
   const isRoomView = roomCode !== null;
   const isResultsView = resultsMatch !== null;
   const isOnlineRoomsView = pathname === "/rooms";
+  const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
 
   const eyebrow = isResultsView
     ? "PHASE 7 . RESULTS"
@@ -192,6 +193,10 @@ export default function Header() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : isTutorialRoom ? (
+          <span className="rounded-md border border-white/10 px-3 py-1.5 text-sm font-medium text-white/70">
+            Guest
+          </span>
         ) : (
           <Link
             to="/login"

@@ -3,6 +3,7 @@ import { tutorialBotBettingDecision, tutorialBotShowdownWord } from "./tutorialB
 import {
   TUTORIAL_PLAYER_HAND,
   TUTORIAL_BOT_HANDS,
+  TUTORIAL_COMMUNITY_ORDERED,
 } from "./tutorialDeck";
 import { evaluateDeterministicShowdownHand } from "./showdownSolver";
 import type { GameDeckTile, GameTile } from "./gameState";
@@ -54,13 +55,7 @@ describe("tutorialBotShowdownWord", () => {
       revealed: true,
     }));
 
-  const communityDeckTiles: GameDeckTile[] = [
-    { kind: "single" as const, letter: "S", baseValue: 1 },
-    { kind: "single" as const, letter: "O", baseValue: 1 },
-    { kind: "single" as const, letter: "N", baseValue: 1 },
-    { kind: "single" as const, letter: "G", baseValue: 1 },
-    { kind: "single" as const, letter: "L", baseValue: 1 },
-  ];
+  const communityDeckTiles: GameDeckTile[] = TUTORIAL_COMMUNITY_ORDERED;
   const communityTiles = allRevealed(communityDeckTiles);
 
   it("bot 1 (J, D) plays DOGS", () => {
@@ -119,7 +114,7 @@ describe("tutorialBotShowdownWord", () => {
         communityTiles,
       });
       if (botResult) {
-        expect(botResult.estimatedScore).toBeLessThan(8);
+        expect(botResult.estimatedScore).toBeLessThan(12);
       }
     }
   });

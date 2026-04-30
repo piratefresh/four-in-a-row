@@ -9,6 +9,11 @@ import {
   isRoomRejoinDismissed,
 } from "@/lib/room-rejoin-dismissal";
 import { api } from "../../../../convex/_generated/api";
+import {
+  describeTutorialGuestIdForDebug,
+  getTutorialGuestId,
+  logTutorialDebug,
+} from "@/lib/tutorial-guest";
 import { getBotCharacterForAuthUserId } from "../../../../convex/aiStrategy";
 import {
   RAISE_LADDER,
@@ -33,11 +38,19 @@ function isTransientActionMessage(message: string | null) {
   );
 }
 
-export function useRoomDetailsController(code: string) {
+export function useRoomDetailsController(
+  code: string,
+  options: { allowGuestTutorial?: boolean } = {},
+) {
   const navigate = useNavigate();
   const { data: session, isPending: isAuthPending } = authClient.useSession();
+  const allowGuestTutorial = options.allowGuestTutorial === true;
+  const tutorialGuestAuthUserId = useMemo(() => getTutorialGuestId(), []);
 
-  const roomData = useQuery(api.rooms.getRoomMembers, { code });
+  const roomData = useQuery((api as any).rooms.getRoomMembers, {
+    code,
+    guestAuthUserId: session?.user ? undefined : tutorialGuestAuthUserId ?? undefined,
+  });
   const game = useQuery(api.games.getGameByRoom, {
     roomId: roomData?.room._id ?? "",
   });
@@ -57,7 +70,7 @@ export function useRoomDetailsController(code: string) {
   const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
   const rejoinRoomByCode = useMutation(api.rooms.rejoinRoomByCode);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
-  const toggleReady = useMutation(api.rooms.toggleReady);
+  const toggleReady = useMutation((api as any).rooms.toggleReady);
   const debugRejoinRoom = useMutation(api.rooms.debugRejoinRoom);
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
   const check = useMutation((api as any).games.check);
@@ -439,11 +452,58 @@ const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
   ]);
 
   useEffect(() => {
+    logTutorialDebug("room-controller:query-state", {
+      code,
+      allowGuestTutorial,
+      hasSessionUser: Boolean(session?.user),
+      isAuthPending,
+      guest: describeTutorialGuestIdForDebug(tutorialGuestAuthUserId),
+      roomDataState:
+        roomData === undefined ? "loading" : roomData === null ? "null" : "ready",
+      roomTutorialId: roomData?.room.tutorialId ?? null,
+      viewerPlayerId: roomData?.viewerPlayerId ?? null,
+      myPlayerId: myPlayer?._id ?? null,
+    });
+  }, [
+    allowGuestTutorial,
+    code,
+    isAuthPending,
+    myPlayer?._id,
+    roomData,
+    session?.user,
+    tutorialGuestAuthUserId,
+  ]);
+
+  useEffect(() => {
     if (isAuthPending) return;
-    if (!session?.user) {
+    if (session?.user) {
+      logTutorialDebug("room-controller:redirect-check:skip-session", { code });
+      return;
+    }
+    if (allowGuestTutorial && roomData === undefined) {
+      logTutorialDebug("room-controller:redirect-check:skip-loading-tutorial", {
+        code,
+      });
+      return;
+    }
+    if (roomData?.room.tutorialId === "first-bot-game") {
+      logTutorialDebug("room-controller:redirect-check:skip-tutorial-room", {
+        code,
+        allowGuestTutorial,
+      });
+      return;
+    }
+
+    if (roomData !== undefined) {
+      logTutorialDebug("room-controller:redirect-check:navigate-login", {
+        code,
+        allowGuestTutorial,
+        roomDataState: roomData === null ? "null" : "ready",
+        roomTutorialId: roomData?.room.tutorialId ?? null,
+      });
       void navigate({ to: "/login" });
     }
-  }, [isAuthPending, navigate, session?.user]);
+  }, [allowGuestTutorial, isAuthPending, navigate, roomData, session?.user]);
 
   useEffect(() => {
     if (!isTransientActionMessage(gameMessage)) return;
@@ -665,7 +725,13 @@ const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
     setIsTogglingReady(true);
     setGameMessage(null);
     try {
-      await toggleReady({ code });
+      await toggleReady({
+        code,
+        guestAuthUserId:
+          isTutorialRoom && !session?.user
+            ? tutorialGuestAuthUserId ?? undefined
+            : undefined,
+      });
     } catch (error) {
       const message =
         error instanceof Error
@@ -675,7 +741,7 @@ const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
     } finally {
       setIsTogglingReady(false);
     }
-  }, [code, toggleReady]);
+  }, [code, isTutorialRoom, session?.user, toggleReady, tutorialGuestAuthUserId]);
 
   const handleDevRejoinRoom = useCallback(async () => {
     if (!import.meta.env.DEV) return;

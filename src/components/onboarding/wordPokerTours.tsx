@@ -77,15 +77,16 @@ export function getRoomCodeFromPathname(pathname: string) {
   return match?.[1]?.toUpperCase() ?? null;
 }
 
-const tileValueExampleTiles = [
-  { letter: "K", baseValue: 5 },
-  { letter: "A", baseValue: 1, multiplier: "2L" as const },
-  { letter: "Z", baseValue: 10, multiplier: "3L" as const },
+const strongExampleTiles = [
+  { letter: "S", baseValue: 1 },
+  { letter: "T", baseValue: 1 },
+  { letter: "R", baseValue: 1, multiplier: "2L" as const },
+  { letter: "O", baseValue: 1 },
+  { letter: "N", baseValue: 1 },
+  { letter: "G", baseValue: 2, multiplier: "3L" as const },
 ];
 
-const tileValueExampleScore = calculateShowdownPreviewScore(
-  tileValueExampleTiles,
-);
+const strongExampleScore = calculateShowdownPreviewScore(strongExampleTiles);
 
 export const wordPokerTours = [
   {
@@ -120,7 +121,6 @@ export const wordPokerTours = [
         pointerPadding: 0,
         pointerRadius: 0,
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "C",
@@ -139,7 +139,6 @@ export const wordPokerTours = [
         pointerPadding: 0,
         pointerRadius: 0,
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "D",
@@ -157,7 +156,6 @@ export const wordPokerTours = [
         pointerPadding: 0,
         pointerRadius: 0,
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "E",
@@ -174,7 +172,6 @@ export const wordPokerTours = [
         pointerPadding: 0,
         pointerRadius: 0,
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "F",
@@ -218,7 +215,6 @@ export const wordPokerTours = [
         pointerPadding: 0,
         pointerRadius: 0,
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "H",
@@ -230,7 +226,6 @@ export const wordPokerTours = [
         pointerRadius: 18,
         cardClassName: "max-w-[18rem]",
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "I",
@@ -249,7 +244,6 @@ export const wordPokerTours = [
         pointerPadding: 0,
         pointerRadius: 0,
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "J",
@@ -267,7 +261,6 @@ export const wordPokerTours = [
         pointerPadding: 70,
         pointerRadius: 16,
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "K",
@@ -275,43 +268,35 @@ export const wordPokerTours = [
         content: (
           <div className="space-y-3">
             <div>
+              Your tutorial word is <strong>{TUTORIAL_TARGET_WORD}</strong>.
               Each tile shows its base value.
               <br />
               `2L` doubles one letter, and `3L` triples one letter.
             </div>
             <div className="flex flex-wrap justify-center gap-2">
-              <WordTile
-                letter="K"
-                baseValue={5}
-                size="sm"
-                className="shrink-0"
-              />
-              <WordTile
-                letter="A"
-                baseValue={1}
-                multiplier="2L"
-                size="sm"
-                className="shrink-0"
-              />
-              <WordTile
-                letter="Z"
-                baseValue={10}
-                multiplier="3L"
-                size="sm"
-                className="shrink-0"
-              />
+              {strongExampleTiles.map((tile, index) => (
+                <WordTile
+                  key={`${tile.letter}-${index}`}
+                  letter={tile.letter}
+                  baseValue={tile.baseValue}
+                  multiplier={tile.multiplier}
+                  size="sm"
+                  className="shrink-0"
+                />
+              ))}
             </div>
             <div className="rounded-lg bg-slate-950/5 px-3 py-2 text-sm leading-relaxed text-slate-700">
-              Example:
+              {TUTORIAL_TARGET_WORD}:
               <br />
-              Base = {tileValueExampleScore.basePoints}
+              Base = {strongExampleScore.basePoints}
               <br />
-              Bonus = {tileValueExampleScore.multiplierBonus}
+              Bonus = {strongExampleScore.multiplierBonus}
               <br />
-              Total = {tileValueExampleScore.total}
+              Total = {strongExampleScore.total}
             </div>
             <div className="text-sm leading-relaxed text-slate-700">
-              Here, `A` scores `2` and `Z` scores `30`.
+              Here, `R` is a `2L` tile, so it scores `2` instead of `1`.
+              `G` is a `3L` tile, so it scores `6` instead of `2`.
             </div>
           </div>
         ),
@@ -320,7 +305,6 @@ export const wordPokerTours = [
         pointerPadding: 0,
         pointerRadius: 0,
         showControls: true,
-        showSkip: true,
       },
       {
         icon: "L",
@@ -337,7 +321,6 @@ export const wordPokerTours = [
         pointerPadding: 0,
         pointerRadius: 0,
         showControls: true,
-        showSkip: true,
       },
     ],
   },

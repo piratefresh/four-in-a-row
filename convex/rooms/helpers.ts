@@ -16,6 +16,7 @@ import type { RoomConfig } from "../gameConfig";
 export const STALE_SCOREBOARD_ROOM_MS = 30 * 60 * 1000;
 export const INACTIVE_PLAYER_TIMEOUT_MS = 4 * 60 * 1000;
 export const FIRST_BOT_GAME_TUTORIAL_ID = "first-bot-game" as const;
+export const GUEST_TUTORIAL_AUTH_PREFIX = "guest-tutorial:";
 
 // ==================== Types ====================
 
@@ -147,7 +148,10 @@ export function isPlayerInactive(
   player: Pick<Doc<"players">, "lastSeenAt" | "authUserId">,
   now: number,
 ) {
-  if (player.authUserId?.startsWith("dev-bot:")) {
+  if (
+    player.authUserId?.startsWith("dev-bot:") ||
+    player.authUserId?.startsWith(GUEST_TUTORIAL_AUTH_PREFIX)
+  ) {
     return false;
   }
 
@@ -255,11 +259,42 @@ export async function getAuthenticatedUserId(
   return rawUserId;
 }
 
+export function normalizeGuestTutorialAuthUserId(
+  guestAuthUserId: string | undefined,
+) {
+  const normalized = guestAuthUserId?.trim();
+  if (
+    !normalized ||
+    !normalized.startsWith(GUEST_TUTORIAL_AUTH_PREFIX) ||
+    normalized.length > 96 ||
+    !/^[A-Za-z0-9:_-]+$/.test(normalized)
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+export async function getAuthenticatedOrGuestTutorialUserId(
+  ctx: MutationCtx | QueryCtx,
+  guestAuthUserId: string | undefined,
+) {
+  return (
+    (await getAuthenticatedUserId(ctx)) ??
+    normalizeGuestTutorialAuthUserId(guestAuthUserId)
+  );
+}
+
 export async function getAuthUserByPlayerAuthUserId(
   ctx: MutationCtx | QueryCtx,
   authUserId: string | undefined,
 ) {
-  if (!authUserId || authUserId.startsWith("dev-bot:") || authUserId === E2E_USER_ID) {
+  if (
+    !authUserId ||
+    authUserId.startsWith("dev-bot:") ||
+    authUserId.startsWith(GUEST_TUTORIAL_AUTH_PREFIX) ||
+    authUserId === E2E_USER_ID
+  ) {
     return null;
   }
 

@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { Step, useNextStep } from "nextstepjs";
 import { api } from "../../../convex/_generated/api";
 import { cn } from "@/lib/utils";
+import { getTutorialGuestId } from "@/lib/tutorial-guest";
 import {
   FIRST_BOT_GAME_PAUSEABLE_STEPS,
   FIRST_BOT_GAME_SHUFFLE_STEP,
@@ -92,7 +93,10 @@ export const OnboardingCard = ({
     }
 
     try {
-      await resumeTutorialBetting({ code: roomCode });
+      await resumeTutorialBetting({
+        code: roomCode,
+        guestAuthUserId: getTutorialGuestId() ?? undefined,
+      });
     } catch (error) {
       console.error("Failed to resume tutorial betting:", error);
     }
@@ -128,7 +132,10 @@ export const OnboardingCard = ({
 
     setIsStartingShowdown(true);
     try {
-      await startTutorialShowdown({ code: roomCode });
+      await startTutorialShowdown({
+        code: roomCode,
+        guestAuthUserId: getTutorialGuestId() ?? undefined,
+      });
       const pausedStepKey = getTourPausedStepStorageKey(currentTour, roomCode);
       const completionKey = getTourCompletionStorageKey(currentTour, roomCode);
       window.localStorage.removeItem(pausedStepKey);

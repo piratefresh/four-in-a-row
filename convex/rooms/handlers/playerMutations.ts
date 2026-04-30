@@ -4,8 +4,10 @@ import { ConvexError } from "convex/values";
 import {
   normalizeRoomCode,
   getAuthenticatedUserId,
+  getAuthenticatedOrGuestTutorialUserId,
   getAnyActiveAuthedPlayer,
   getActiveAuthedPlayerInRoom,
+  isTutorialRoom,
 } from "../helpers";
 import { internalStartGameHandler } from "../../games/gamesSetup";
 import { requireVerifiedUser } from "../../verifyUser";
@@ -68,14 +70,24 @@ export const heartbeatByCode = mutation({
 });
 
 export const toggleReady = mutation({
-  args: { code: v.string() },
+  args: { code: v.string(), guestAuthUserId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const code = normalizeRoomCode(args.code);
-    const { authUserId } = await requireVerifiedUser(ctx);
 
     const room = await ctx.db.query("rooms").withIndex("code", (q) => q.eq("code", code)).unique();
     if (!room) {
       throw new ConvexError({ code: "ROOM_NOT_FOUND", message: "Room not found." });
+    }
+
+    const authUserId = isTutorialRoom(room)
+      ? await getAuthenticatedOrGuestTutorialUserId(ctx, args.guestAuthUserId)
+      : (await requireVerifiedUser(ctx)).authUserId;
+
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication or a tutorial guest session is required.",
+      });
     }
 
     const waitingGame = await ctx.db

@@ -32,7 +32,7 @@ export const TUTORIAL_COMMUNITY_ORDERED: GameDeckTile[] = [
   { kind: "single", letter: "S", baseValue: 1 },
   { kind: "single", letter: "O", baseValue: 1 },
   { kind: "single", letter: "N", baseValue: 1 },
-  { kind: "single", letter: "G", baseValue: 2 },
+  { kind: "single", letter: "G", baseValue: 2, multiplier: "3L" },
   { kind: "single", letter: "L", baseValue: 1 },
 ];
 

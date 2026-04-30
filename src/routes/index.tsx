@@ -3,6 +3,11 @@ import { startTransition, useEffect, useEffectEvent, useRef, useState } from "re
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
+import {
+  describeTutorialGuestIdForDebug,
+  getTutorialGuestId,
+  logTutorialDebug,
+} from "@/lib/tutorial-guest";
 import { HomeModeMenu } from "@/components/home/HomeModeMenu";
 import { OnboardingSetupScreen } from "@/components/home/OnboardingSetupScreen";
 import { SplashScreen } from "@/components/home/SplashScreen";
@@ -31,7 +36,9 @@ function App() {
   const convexAuthUser = useQuery(api.auth.getCurrentUser);
   const activeRoom = useQuery(api.rooms.getMyActiveRoom);
   const createRoom = useMutation(api.rooms.createRoom);
-  const createTutorialBotRoom = useMutation(api.rooms.createTutorialBotRoom);
+  const createTutorialBotRoom = useMutation(
+    (api as any).rooms.createTutorialBotRoom,
+  );
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
   const onboardingBotGameStartedRef = useRef(false);
@@ -70,6 +77,10 @@ function App() {
     }
 
     return session.user.name?.trim() || session.user.email || "Player";
+  };
+
+  const getTutorialDisplayName = () => {
+    return session?.user?.name?.trim() || session?.user?.email || "Guest";
   };
 
   const startOfflineGame = useEffectEvent(async (options?: {
@@ -164,22 +175,55 @@ function App() {
   };
 
   const handlePlayTutorial = async () => {
-    const displayName = getDisplayName();
-    if (!displayName) return;
+    const displayName = getTutorialDisplayName();
+    const guestAuthUserId = session?.user ? undefined : getTutorialGuestId();
+    logTutorialDebug("home:start-tutorial:clicked", {
+      hasSessionUser: Boolean(session?.user),
+      convexAuthUserState:
+        convexAuthUser === undefined
+          ? "loading"
+          : convexAuthUser
+            ? "ready"
+            : "missing",
+      guest: describeTutorialGuestIdForDebug(guestAuthUserId),
+      displayName,
+    });
+    if (!session?.user && !guestAuthUserId) {
+      setJoinMessage("Tutorial guest setup is unavailable in this browser.");
+      logTutorialDebug("home:start-tutorial:no-guest-id");
+      return;
+    }
 
     setIsStartingTutorial(true);
     setJoinMessage(null);
 
     try {
       setJoinMessage("Setting up a fresh tutorial table...");
-      const room = await createTutorialBotRoom({ name: displayName });
+      logTutorialDebug("home:start-tutorial:mutation:start", {
+        guest: describeTutorialGuestIdForDebug(guestAuthUserId),
+      });
+      const room = await createTutorialBotRoom({ name: displayName, guestAuthUserId });
+      logTutorialDebug("home:start-tutorial:mutation:success", {
+        code: room.code,
+        tutorialId: room.tutorialId,
+        playerId: room.playerId,
+      });
       await navigate({
         to: "/rooms/$code",
         params: { code: room.code },
+        search: { tutorial: "intro" },
+      });
+      logTutorialDebug("home:start-tutorial:navigate:done", {
+        code: room.code,
+        search: "tutorial=intro",
       });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to start tutorial.";
+      logTutorialDebug("home:start-tutorial:error", {
+        message,
+        error,
+      });
       setJoinMessage(message);
     } finally {
       setIsStartingTutorial(false);

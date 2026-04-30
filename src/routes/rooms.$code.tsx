@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
-  RoomDevTools,
   RoomGameProvider,
   RoomHandsBoardV2,
   RoomPageProvider,
@@ -21,6 +20,11 @@ import { useChatSidebar } from "@/components/rooms/chat/useChatSidebar";
 import { RoomTutorialPhaseSync } from "@/components/onboarding/RoomTutorialPhaseSync";
 import { RoomTutorialLauncher } from "@/components/onboarding/RoomTutorialLauncher";
 import { FIRST_BOT_GAME_TOUR } from "@/components/onboarding/wordPokerTours";
+import {
+  describeTutorialGuestIdForDebug,
+  getTutorialGuestId,
+  logTutorialDebug,
+} from "@/lib/tutorial-guest";
 
 type RoomSearch = {
   tutorial?: "intro" | "restart";
@@ -56,8 +60,11 @@ function RoomDetailsPage() {
   const navigate = useNavigate();
   const { code } = Route.useParams();
   const search = Route.useSearch();
+  const forcedTutorialReplay =
+    search.tutorial === "intro" || search.tutorial === "restart";
   const [isDesktopChatVisible, setIsDesktopChatVisible] = useState(false);
   const [isRestartingTutorial, setIsRestartingTutorial] = useState(false);
+  const [tutorialGuestAuthUserId] = useState(() => getTutorialGuestId());
   const restartTutorialRoom = useMutation(
     (api as any).rooms.restartTutorialRoom,
   );
@@ -79,7 +86,9 @@ function RoomDetailsPage() {
     isDevFillingBots,
     onDevRejoinRoom,
     onDevFillRoomWithBots,
-  } = useRoomDetailsController(code);
+  } = useRoomDetailsController(code, {
+    allowGuestTutorial: forcedTutorialReplay,
+  });
   const preferences = useQuery(
     (api as any).userPreferences.getMyPreferences,
     session?.user ? {} : "skip",
@@ -97,13 +106,14 @@ function RoomDetailsPage() {
     return () => {
       mediaQuery.removeEventListener("change", syncDesktopChatVisibility);
     };
-}, []);
+  }, []);
 
-  const forcedTutorialReplay =
-    search.tutorial === "intro" || search.tutorial === "restart";
   const tutorialId = roomData?.room.tutorialId ?? null;
   const isTutorialRoom = tutorialId === FIRST_BOT_GAME_TOUR;
-  const chat = useChatSidebar(isTutorialRoom ? undefined : roomData?.room._id, isDesktopChatVisible);
+  const chat = useChatSidebar(
+    isTutorialRoom ? undefined : roomData?.room._id,
+    isDesktopChatVisible,
+  );
   const activePlayerId = myPlayer?._id ? String(myPlayer._id) : undefined;
   const activePlayerHand = activePlayerId
     ? displayHands.find((hand) => hand.playerId === activePlayerId)
@@ -117,6 +127,39 @@ function RoomDetailsPage() {
     preferences?.showInGameHelper === true &&
     !activePlayerHasFolded;
 
+  useEffect(() => {
+    logTutorialDebug("room:state", {
+      code,
+      searchTutorial: search.tutorial ?? null,
+      forcedTutorialReplay,
+      hasSessionUser: Boolean(session?.user),
+      isAuthPending,
+      roomDataState:
+        roomData === undefined
+          ? "loading"
+          : roomData === null
+            ? "null"
+            : "ready",
+      roomTutorialId: roomData?.room.tutorialId ?? null,
+      roomStatus: roomData?.room.status ?? null,
+      myPlayerId: myPlayer?._id ?? null,
+      gameStatus: game?.status ?? null,
+      gameStage: game?.stage ?? null,
+      guest: describeTutorialGuestIdForDebug(tutorialGuestAuthUserId),
+    });
+  }, [
+    code,
+    forcedTutorialReplay,
+    game?.stage,
+    game?.status,
+    isAuthPending,
+    myPlayer?._id,
+    roomData,
+    search.tutorial,
+    session?.user,
+    tutorialGuestAuthUserId,
+  ]);
+
   if (isAuthPending) {
     return (
       <LoadingOverlay
@@ -128,7 +171,24 @@ function RoomDetailsPage() {
     );
   }
 
-  if (!session?.user) {
+  if (
+    !session?.user &&
+    !forcedTutorialReplay &&
+    roomData !== undefined &&
+    roomData?.room.tutorialId !== FIRST_BOT_GAME_TOUR
+  ) {
+    logTutorialDebug("room:render:login-overlay", {
+      code,
+      forcedTutorialReplay,
+      roomDataState:
+        roomData === undefined
+          ? "loading"
+          : roomData === null
+            ? "null"
+            : "ready",
+      roomTutorialId: roomData?.room.tutorialId ?? null,
+      searchTutorial: search.tutorial ?? null,
+    });
     return <LoadingOverlay message="Redirecting to login..." />;
   }
 
@@ -192,7 +252,12 @@ function RoomDetailsPage() {
         void (async () => {
           setIsRestartingTutorial(true);
           try {
-            await restartTutorialRoom({ code });
+            await restartTutorialRoom({
+              code,
+              guestAuthUserId: session?.user
+                ? undefined
+                : (tutorialGuestAuthUserId ?? undefined),
+            });
             await navigate({
               to: "/rooms/$code",
               params: { code },
@@ -228,7 +293,10 @@ function RoomDetailsPage() {
           game.turnStartedAt === undefined
         }
       />
-      <div className="relative [@media(min-width:1441px)]:pr-[400px]" data-testid="room-content">
+      <div
+        className="relative [@media(min-width:1441px)]:pr-[400px]"
+        data-testid="room-content"
+      >
         <RoomGameProvider value={roomGameContextValue}>
           <RoomHandsBoardV2
             gameId={game._id}
@@ -251,20 +319,6 @@ function RoomDetailsPage() {
             tutorialReplayControl={replayTutorialButton}
           />
         </RoomGameProvider>
-
-        {import.meta.env.DEV && !myPlayer && roomData ? (
-          <RoomDevTools
-            isDevRejoining={isDevRejoining}
-            isDevFillingBots={isDevFillingBots}
-            isRoomFull={roomData.members.length >= 3}
-            onRejoin={() => {
-              void onDevRejoinRoom();
-            }}
-            onFillBots={() => {
-              void onDevFillRoomWithBots();
-            }}
-          />
-        ) : null}
 
         {/* Chat — hidden in tutorial rooms */}
         {!isTutorialRoom && (

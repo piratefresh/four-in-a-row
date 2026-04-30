@@ -2,24 +2,100 @@ import type { MutationCtx } from "../_generated/server";
 import { ConvexError } from "convex/values";
 import {
   FIRST_BOT_GAME_TUTORIAL_ID,
-  getAuthenticatedUserId,
+  getAuthenticatedOrGuestTutorialUserId,
   getActiveAuthedPlayerInRoom,
   getRoomByCode,
+  normalizeName,
+  getAnyActiveAuthedPlayer,
 } from "./helpers";
-import { addDevBotsToRoom, createRoomWithHostOptions } from "./players";
+import { addDevBotsToRoom, leavePlayer } from "./players";
+import { createOpenRoom } from "./lifecycle";
 import { createGameForRoomHandler, resetTutorialGameForRoomHandler } from "../games/gamesSetup";
 import { scheduleBotTurnIfNeeded } from "../games/gamesProgression";
-import { requireVerifiedUser } from "../verifyUser";
 import { AI_DIFFICULTY } from "../aiBettingConstants";
+import { PLAYER_NAME_MAX_LENGTH, ROOM_MAX_PLAYERS } from "../constants";
 
 // ==================== Create Tutorial Bot Room ====================
 
-export async function createTutorialBotRoomHandler(ctx: MutationCtx, args: { name: string }) {
-  await requireVerifiedUser(ctx);
-  const room = await createRoomWithHostOptions(ctx, args.name, {
+function describeTutorialAuthForDebug(authUserId: string | undefined) {
+  if (!authUserId) {
+    return { present: false };
+  }
+
+  return {
+    present: true,
+    isGuest: authUserId.startsWith("guest-tutorial:"),
+    isBot: authUserId.startsWith("dev-bot:"),
+    length: authUserId.length,
+    suffix: authUserId.slice(-6),
+  };
+}
+
+export async function createTutorialBotRoomHandler(
+  ctx: MutationCtx,
+  args: { name: string; guestAuthUserId?: string },
+) {
+  console.log("[tutorial-debug] create:start", {
+    nameLength: args.name.length,
+    hasGuestArg: Boolean(args.guestAuthUserId),
+    guestArgLength: args.guestAuthUserId?.length ?? 0,
+    guestArgSuffix: args.guestAuthUserId?.slice(-6) ?? null,
+  });
+  const authUserId = await getAuthenticatedOrGuestTutorialUserId(
+    ctx,
+    args.guestAuthUserId,
+  );
+  console.log("[tutorial-debug] create:auth-resolved", {
+    auth: describeTutorialAuthForDebug(authUserId),
+  });
+  if (!authUserId) {
+    throw new ConvexError({
+      code: "UNAUTHORIZED",
+      message: "Authentication or a tutorial guest session is required.",
+    });
+  }
+
+  const name = normalizeName(args.name);
+  if (name.length === 0 || name.length > PLAYER_NAME_MAX_LENGTH) {
+    throw new ConvexError({
+      code: "INVALID_NAME",
+      message: `Name must be between 1 and ${PLAYER_NAME_MAX_LENGTH} characters.`,
+    });
+  }
+
+  const existingAuthedPlayer = await getAnyActiveAuthedPlayer(ctx, authUserId);
+  if (existingAuthedPlayer) {
+    console.log("[tutorial-debug] create:leaving-existing-player", {
+      existingRoomId: String(existingAuthedPlayer.roomId),
+      existingPlayerId: String(existingAuthedPlayer._id),
+    });
+    await leavePlayer(ctx, existingAuthedPlayer);
+  }
+
+  const { roomId, code, now } = await createOpenRoom(ctx, {
     tutorialId: FIRST_BOT_GAME_TUTORIAL_ID,
     difficulty: AI_DIFFICULTY.EASY,
   });
+  const playerId = await ctx.db.insert("players", {
+    roomId,
+    authUserId,
+    name,
+    seatIndex: 0,
+    isHost: true,
+    status: "active",
+    readyStatus: false,
+    lastSeenAt: now,
+  });
+  await ctx.db.patch(roomId, { hostPlayerId: playerId });
+
+  const room = {
+    roomId,
+    code,
+    playerId,
+    seatIndex: 0,
+    maxPlayers: ROOM_MAX_PLAYERS,
+    tutorialId: FIRST_BOT_GAME_TUTORIAL_ID,
+  };
   const roomDoc = await ctx.db.get(room.roomId);
   if (!roomDoc) {
     throw new ConvexError({
@@ -31,13 +107,26 @@ export async function createTutorialBotRoomHandler(ctx: MutationCtx, args: { nam
   await addDevBotsToRoom(ctx, roomDoc, 3);
   await createGameForRoomHandler(ctx, { roomId: String(room.roomId) });
 
+  console.log("[tutorial-debug] create:success", {
+    code,
+    roomId: String(roomId),
+    playerId: String(playerId),
+    tutorialId: FIRST_BOT_GAME_TUTORIAL_ID,
+  });
+
   return room;
 }
 
 // ==================== Restart Tutorial Room ====================
 
-export async function restartTutorialRoomHandler(ctx: MutationCtx, args: { code: string }) {
-  const authUserId = await getAuthenticatedUserId(ctx);
+export async function restartTutorialRoomHandler(
+  ctx: MutationCtx,
+  args: { code: string; guestAuthUserId?: string },
+) {
+  const authUserId = await getAuthenticatedOrGuestTutorialUserId(
+    ctx,
+    args.guestAuthUserId,
+  );
   if (!authUserId) {
     throw new ConvexError({
       code: "UNAUTHORIZED",
@@ -82,8 +171,14 @@ export async function restartTutorialRoomHandler(ctx: MutationCtx, args: { code:
 
 // ==================== Start Tutorial Showdown ====================
 
-export async function startTutorialShowdownHandler(ctx: MutationCtx, args: { code: string }) {
-  const authUserId = await getAuthenticatedUserId(ctx);
+export async function startTutorialShowdownHandler(
+  ctx: MutationCtx,
+  args: { code: string; guestAuthUserId?: string },
+) {
+  const authUserId = await getAuthenticatedOrGuestTutorialUserId(
+    ctx,
+    args.guestAuthUserId,
+  );
   if (!authUserId) {
     throw new ConvexError({
       code: "UNAUTHORIZED",
@@ -158,8 +253,14 @@ export async function startTutorialShowdownHandler(ctx: MutationCtx, args: { cod
 
 // ==================== Resume Tutorial Betting ====================
 
-export async function resumeTutorialBettingHandler(ctx: MutationCtx, args: { code: string }) {
-  const authUserId = await getAuthenticatedUserId(ctx);
+export async function resumeTutorialBettingHandler(
+  ctx: MutationCtx,
+  args: { code: string; guestAuthUserId?: string },
+) {
+  const authUserId = await getAuthenticatedOrGuestTutorialUserId(
+    ctx,
+    args.guestAuthUserId,
+  );
   if (!authUserId) {
     throw new ConvexError({
       code: "UNAUTHORIZED",

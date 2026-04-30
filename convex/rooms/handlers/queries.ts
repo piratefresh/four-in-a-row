@@ -7,6 +7,7 @@ import {
   isPlayerInactive,
   getActivePlayersInRoom,
   getAuthenticatedUserId,
+  normalizeGuestTutorialAuthUserId,
   getAuthUserByPlayerAuthUserId,
 } from "../helpers";
 import { ROOM_CODE_LENGTH } from "../helpers";
@@ -68,7 +69,7 @@ export const listRooms = query({
 });
 
 export const getRoomMembers = query({
-  args: { code: v.string() },
+  args: { code: v.string(), guestAuthUserId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const now = Date.now();
     const code = normalizeRoomCode(args.code);
@@ -92,7 +93,21 @@ export const getRoomMembers = query({
 
     let viewerPlayerId: string | null = null;
     let viewerSeatPreview: { seatIndex: number; name: string } | null = null;
-    const authUserId = await getAuthenticatedUserId(ctx);
+    const authUserId =
+      (await getAuthenticatedUserId(ctx)) ??
+      (isTutorialRoom(room)
+        ? normalizeGuestTutorialAuthUserId(args.guestAuthUserId)
+        : undefined);
+    if (isTutorialRoom(room)) {
+      console.log("[tutorial-debug] getRoomMembers:tutorial", {
+        code,
+        hasGuestArg: Boolean(args.guestAuthUserId),
+        guestArgLength: args.guestAuthUserId?.length ?? 0,
+        resolvedAuthPresent: Boolean(authUserId),
+        resolvedAuthIsGuest: authUserId?.startsWith("guest-tutorial:") ?? false,
+        activePlayerCount: activePlayers.length,
+      });
+    }
     if (authUserId) {
       const viewerPlayer = activePlayers.find((player) => player.authUserId === authUserId) ?? null;
       viewerPlayerId = viewerPlayer?._id ?? null;

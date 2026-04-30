@@ -8,6 +8,7 @@ import {
   TUTORIAL_TARGET_WORD,
   TUTORIAL_PLAYER_HAND,
   TUTORIAL_BOT_HANDS,
+  TUTORIAL_COMMUNITY_ORDERED,
   TUTORIAL_COMMUNITY_REVEAL_COUNTS,
 } from "./tutorialDeck";
 
@@ -43,6 +44,12 @@ describe("createTutorialDeal", () => {
     expect(rTile).toBeDefined();
     if (rTile && rTile.kind === "single") {
       expect(rTile.multiplier).toBe("2L");
+    }
+
+    const gTile = TUTORIAL_COMMUNITY_ORDERED.find((t) => t.kind === "single" && t.letter === "G");
+    expect(gTile).toBeDefined();
+    if (gTile && gTile.kind === "single") {
+      expect(gTile.multiplier).toBe("3L");
     }
   });
 
