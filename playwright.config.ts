@@ -24,7 +24,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: process.env.BASE_URL ?? "http://localhost:3000",
+    baseURL: process.env.BASE_URL ?? `http://localhost:${process.env.E2E_PORT ?? "3000"}`,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -41,8 +41,8 @@ export default defineConfig({
     timeout: 15_000,
   },
   webServer: {
-    command: "bun run dev",
-    url: "http://localhost:3000",
+    command: `bun run dev --port ${process.env.E2E_PORT ?? "3000"}`,
+    url: `http://localhost:${process.env.E2E_PORT ?? "3000"}`,
     // When testing against a preview deployment, we need a fresh server
     // with the correct VITE_CONVEX_URL/VITE_CONVEX_SITE_URL env vars.
     // Don't reuse an existing server that might be connected to the dev deployment.

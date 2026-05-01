@@ -11,11 +11,11 @@ test.describe("Rejoin resilience", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for betting controls to appear
-    await roomPage.waitForBettingControls();
+    await room.waitForBettingControls();
 
     // Get current game state
     const gameBefore = await convex.query(
@@ -25,20 +25,20 @@ test.describe("Rejoin resilience", () => {
     expect(gameBefore?.status).toBe("active");
 
     // Refresh page
-    await roomPage.page.reload();
+    await room.page.reload();
 
     // Wait for room to reload
-    await roomPage.waitForLoaded();
+    await room.waitForLoaded();
 
     // Game state should be preserved
-    await expect(roomPage.page.locator('[data-testid="room-content"]')).toBeVisible();
+    await expect(room.page.locator('[data-testid="room-content"]')).toBeVisible();
 
     // Betting controls or word builder should still be visible
     // depending on what stage we're at
-    const hasBettingControls = await roomPage.checkButton
+    const hasBettingControls = await room.checkButton
       .isVisible()
       .catch(() => false);
-    const hasWordBuilder = await roomPage.wordBuilder
+    const hasWordBuilder = await room.wordBuilder
       .isVisible()
       .catch(() => false);
 
@@ -55,8 +55,8 @@ test.describe("Rejoin resilience", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for showdown
     await expect(async () => {
@@ -67,20 +67,20 @@ test.describe("Rejoin resilience", () => {
       expect(game?.stage).toBe("showdown");
     }).toPass({ timeout: 90_000, intervals: [1_000] });
 
-    await roomPage.waitForWordBuilder();
+    await room.waitForWordBuilder();
 
     // Refresh page
-    await roomPage.page.reload();
+    await room.page.reload();
 
     // Wait for room to reload
-    await roomPage.waitForLoaded();
+    await room.waitForLoaded();
 
     // Word builder should reappear
-    await roomPage.waitForWordBuilder();
-    await expect(roomPage.wordBuilder).toBeVisible();
+    await room.waitForWordBuilder();
+    await expect(room.wordBuilder).toBeVisible();
 
     // Submit word button should be enabled
-    await expect(roomPage.submitWordButton).toBeEnabled();
+    await expect(room.submitWordButton).toBeEnabled();
   });
 
   test("rejoin after page refresh post-fold", async ({
@@ -93,27 +93,27 @@ test.describe("Rejoin resilience", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for betting controls
-    await roomPage.waitForBettingControls();
+    await room.waitForBettingControls();
 
     // Fold
-    await roomPage.clickFold();
+    await room.clickFold();
 
     // Verify betting controls disappear
-    await expect(roomPage.bettingControls).not.toBeVisible({ timeout: 10_000 });
+    await expect(room.bettingControls).not.toBeVisible({ timeout: 10_000 });
 
     // Refresh page
-    await roomPage.page.reload();
+    await room.page.reload();
 
     // Wait for room to reload
-    await roomPage.waitForLoaded();
+    await room.waitForLoaded();
 
     // Should show that player is folded
     // Betting controls should not be visible
-    await expect(roomPage.bettingControls.or(roomPage.wordBuilder)).not.toBeVisible({
+    await expect(room.bettingControls.or(room.wordBuilder)).not.toBeVisible({
       timeout: 10_000,
     });
   });
@@ -128,8 +128,8 @@ test.describe("Rejoin resilience", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for showdown
     await expect(async () => {
@@ -140,10 +140,10 @@ test.describe("Rejoin resilience", () => {
       expect(game?.stage).toBe("showdown");
     }).toPass({ timeout: 90_000, intervals: [1_000] });
 
-    await roomPage.waitForWordBuilder();
+    await room.waitForWordBuilder();
 
     // Submit word
-    await roomPage.submitWord();
+    await room.submitWord();
 
     // Wait for game to complete
     await expect(async () => {
@@ -155,14 +155,14 @@ test.describe("Rejoin resilience", () => {
     }).toPass({ timeout: 60_000, intervals: [1_000] });
 
     // Refresh page
-    await roomPage.page.reload();
+    await room.page.reload();
 
     // Should redirect to results page
-    await roomPage.page.waitForURL(/\/results\/[A-Z0-9]+/);
+    await room.page.waitForURL(/\/results\/[A-Z0-9]+/);
 
     // Results content should be visible
     await expect(
-      roomPage.page.locator('[data-testid="results-content"]'),
+      room.page.locator('[data-testid="results-content"]'),
     ).toBeVisible();
   });
 });

@@ -14,7 +14,8 @@ if (process.env.CONVEX_TEST_SITE_URL) {
   process.env.VITE_CONVEX_SITE_URL = process.env.CONVEX_TEST_SITE_URL;
 }
 
-const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
+const E2E_PORT = process.env.E2E_PORT ?? "3000";
+const BASE_URL = process.env.BASE_URL ?? `http://localhost:${E2E_PORT}`;
 
 const E2E_USER_EMAIL = "e2e-test@wordpoker.app";
 const E2E_USER_PASSWORD = "E2eTest1234!";
@@ -34,7 +35,10 @@ async function globalSetup() {
       password: E2E_USER_PASSWORD,
       name: E2E_USER_NAME,
     },
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: BASE_URL,
+    },
   });
 
   if (!signUpRes.ok()) {
@@ -47,7 +51,10 @@ async function globalSetup() {
       email: E2E_USER_EMAIL,
       password: E2E_USER_PASSWORD,
     },
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: BASE_URL,
+    },
   });
 
   if (!signInRes.ok()) {

@@ -19,8 +19,8 @@ if (process.env.CONVEX_TEST_URL) {
  */
 
 export const CONVEX_URL =
-  process.env.CONVEX_TEST_URL ??
-  process.env.VITE_CONVEX_URL ??
+  process.env.CONVEX_TEST_URL ||
+  process.env.VITE_CONVEX_URL ||
   "http://127.0.0.1:3210";
 
 export const CONVEX_SITE_URL =

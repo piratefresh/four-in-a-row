@@ -11,8 +11,8 @@ test.describe("Showdown word builder", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for showdown
     await expect(async () => {
@@ -24,8 +24,8 @@ test.describe("Showdown word builder", () => {
     }).toPass({ timeout: 90_000, intervals: [1_000] });
 
     // Word builder should be visible
-    await roomPage.waitForWordBuilder();
-    await expect(roomPage.wordBuilder).toBeVisible();
+    await room.waitForWordBuilder();
+    await expect(room.wordBuilder).toBeVisible();
   });
 
   test("tiles are displayed in word builder", async ({
@@ -38,8 +38,8 @@ test.describe("Showdown word builder", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for showdown
     await expect(async () => {
@@ -50,10 +50,10 @@ test.describe("Showdown word builder", () => {
       expect(game?.stage).toBe("showdown");
     }).toPass({ timeout: 90_000, intervals: [1_000] });
 
-    await roomPage.waitForWordBuilder();
+    await room.waitForWordBuilder();
 
     // Should have tiles available (private + community = 7 tiles)
-    const tiles = roomPage.page.locator('[data-testid="rack-tile"]');
+    const tiles = room.page.locator('[data-testid="rack-tile"]');
     await expect(tiles).toHaveCount({ min: 2, max: 7 });
   });
 
@@ -67,8 +67,8 @@ test.describe("Showdown word builder", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for showdown
     await expect(async () => {
@@ -79,8 +79,8 @@ test.describe("Showdown word builder", () => {
       expect(game?.stage).toBe("showdown");
     }).toPass({ timeout: 90_000, intervals: [1_000] });
 
-    await roomPage.waitForWordBuilder();
-    await expect(roomPage.submitWordButton).toBeEnabled();
+    await room.waitForWordBuilder();
+    await expect(room.submitWordButton).toBeEnabled();
   });
 
   test("shuffle tiles button changes tile order", async ({
@@ -93,8 +93,8 @@ test.describe("Showdown word builder", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for showdown
     await expect(async () => {
@@ -105,17 +105,17 @@ test.describe("Showdown word builder", () => {
       expect(game?.stage).toBe("showdown");
     }).toPass({ timeout: 90_000, intervals: [1_000] });
 
-    await roomPage.waitForWordBuilder();
+    await room.waitForWordBuilder();
 
     // Get initial tile order
-    const tiles = roomPage.page.locator('[data-testid="rack-tile"]');
+    const tiles = room.page.locator('[data-testid="rack-tile"]');
     const initialOrder = await tiles.allTextContents();
 
     // Shuffle tiles
-    await roomPage.shuffleTiles();
+    await room.shuffleTiles();
 
     // Wait a moment for shuffle animation
-    await roomPage.page.waitForTimeout(500);
+    await room.page.waitForTimeout(500);
 
     // Get new tile order
     const newOrder = await tiles.allTextContents();
@@ -135,8 +135,8 @@ test.describe("Showdown word builder", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for showdown
     await expect(async () => {
@@ -147,17 +147,17 @@ test.describe("Showdown word builder", () => {
       expect(game?.stage).toBe("showdown");
     }).toPass({ timeout: 90_000, intervals: [1_000] });
 
-    await roomPage.waitForWordBuilder();
+    await room.waitForWordBuilder();
 
     // Get initial timer value
-    const timer = roomPage.page.locator('[data-testid="showdown-timer"]');
+    const timer = room.page.locator('[data-testid="showdown-timer"]');
     await expect(timer).toBeVisible();
 
     const initialText = await timer.textContent();
     const initialSeconds = parseInt(initialText?.replace(/\D/g, "") ?? "0", 10);
 
     // Wait 5 seconds
-    await roomPage.page.waitForTimeout(5_000);
+    await room.page.waitForTimeout(5_000);
 
     // Get new timer value
     const newText = await timer.textContent();
@@ -177,8 +177,8 @@ test.describe("Showdown word builder", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for showdown
     await expect(async () => {
@@ -189,10 +189,10 @@ test.describe("Showdown word builder", () => {
       expect(game?.stage).toBe("showdown");
     }).toPass({ timeout: 90_000, intervals: [1_000] });
 
-    await roomPage.waitForWordBuilder();
+    await room.waitForWordBuilder();
 
     // Look for choice tiles (they have two letters displayed)
-    const choiceTiles = roomPage.page.locator('[data-testid="choice-tile"]');
+    const choiceTiles = room.page.locator('[data-testid="choice-tile"]');
     const choiceCount = await choiceTiles.count();
 
     if (choiceCount > 0) {
@@ -201,7 +201,7 @@ test.describe("Showdown word builder", () => {
 
       // A letter selection UI should appear
       // This depends on the exact implementation
-      const letterButtons = roomPage.page.getByRole("button", {
+      const letterButtons = room.page.getByRole("button", {
         name: /^[A-Z]$/,
       });
       await expect(letterButtons.first()).toBeVisible({ timeout: 5_000 });

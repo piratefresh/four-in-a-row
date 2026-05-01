@@ -10,15 +10,15 @@ test.describe("Betting interactions", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for betting controls to appear
-    await roomPage.waitForBettingControls();
+    await room.waitForBettingControls();
 
     // Check or Call button should be visible during betting
     await expect(
-      roomPage.checkButton.or(roomPage.callButton),
+      room.checkButton.or(room.callButton),
     ).toBeVisible();
   });
 
@@ -31,15 +31,15 @@ test.describe("Betting interactions", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for betting controls
-    await roomPage.waitForBettingControls();
+    await room.waitForBettingControls();
 
     // If a bot raises, the call button should show the raise amount
     // This test waits for the call button to appear with an amount
-    const callButton = roomPage.callButton;
+    const callButton = room.callButton;
     await expect(callButton).toBeVisible({ timeout: 60_000 });
 
     const callText = await callButton.textContent();
@@ -53,20 +53,20 @@ test.describe("Betting interactions", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for betting controls
-    await roomPage.waitForBettingControls();
+    await room.waitForBettingControls();
 
     // Raise button should be visible
-    await expect(roomPage.raiseButton).toBeVisible();
+    await expect(room.raiseButton).toBeVisible();
 
     // Click raise to show slider
-    await roomPage.raiseButton.click();
+    await room.raiseButton.click();
 
     // Slider should appear
-    await expect(roomPage.raiseSlider).toBeVisible();
+    await expect(room.raiseSlider).toBeVisible();
   });
 
   test("fold removes player from hand", async ({
@@ -79,20 +79,20 @@ test.describe("Betting interactions", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for betting controls
-    await roomPage.waitForBettingControls();
+    await room.waitForBettingControls();
 
     // Fold button should be visible
-    await expect(roomPage.foldButton).toBeVisible();
+    await expect(room.foldButton).toBeVisible();
 
     // Click fold
-    await roomPage.clickFold();
+    await room.clickFold();
 
     // Verify player is folded - betting controls should disappear
-    await expect(roomPage.bettingControls).not.toBeVisible({ timeout: 10_000 });
+    await expect(room.bettingControls).not.toBeVisible({ timeout: 10_000 });
 
     // Game should continue with bots only
     await expect(async () => {
@@ -114,18 +114,18 @@ test.describe("Betting interactions", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for betting controls
-    await roomPage.waitForBettingControls();
+    await room.waitForBettingControls();
 
     // Wait a moment for bot to potentially take a turn
-    await roomPage.page.waitForTimeout(2_000);
+    await room.page.waitForTimeout(2_000);
 
     // At some point, it should be a bot's turn and buttons should be disabled
     // This is a timing-dependent test, so we just verify the UI handles it
-    const checkButton = roomPage.checkButton;
+    const checkButton = room.checkButton;
     const isDisabled = await checkButton.isDisabled();
     // Either disabled (not our turn) or enabled (our turn) - both are valid
     expect(typeof isDisabled).toBe("boolean");
@@ -140,14 +140,14 @@ test.describe("Betting interactions", () => {
       ready: false,
     });
 
-    await roomPage.waitForLoaded();
-    await roomPage.clickReady();
+    await room.waitForLoaded();
+    await room.clickReady();
 
     // Wait for betting controls
-    await roomPage.waitForBettingControls();
+    await room.waitForBettingControls();
 
     await expect(
-      roomPage.page.getByRole("button", { name: /call clock/i }),
+      room.page.getByRole("button", { name: /call clock/i }),
     ).toHaveCount(0);
   });
 });
