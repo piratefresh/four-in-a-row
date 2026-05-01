@@ -5,6 +5,7 @@ export {
   normalizeRoomCode,
   isTutorialRoom,
   isPlayerInactive,
+  isRoomPastInactivityTimeout,
   getActivePlayersInRoom,
   getAuthenticatedUserId,
   getRoomByCode,
@@ -23,6 +24,7 @@ export {
   reapInactivePlayersForRoom,
   reapInactivePlayersAcrossOpenRooms,
   closeStaleScoreboardRooms,
+  closeIdleLobbyRooms,
   findContinuationRoom,
 } from "./rooms/lifecycle";
 

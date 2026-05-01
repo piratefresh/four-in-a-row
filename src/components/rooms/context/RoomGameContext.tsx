@@ -10,6 +10,7 @@ type RoomGameContextValue = {
   onReady?: () => void;
   isReady: boolean;
   isTogglingReady: boolean;
+  lobbyInactivityTimeRemainingMs: number | null;
   readyCount: number;
   totalPlayers: number;
   allPlayersReady: boolean;

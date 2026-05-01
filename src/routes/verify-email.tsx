@@ -1,5 +1,7 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { authClient } from "@/lib/auth-client";
+import { AlertTriangle, CheckCircle2, Home, LogIn, Mail } from "lucide-react";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -40,92 +42,158 @@ function VerifyEmailPage() {
 
   if (errorFromServer) {
     return (
-      <main className="relative flex min-h-[calc(100vh-72px)] items-center justify-center overflow-hidden bg-[#252525] px-8 py-12 text-white">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,#114D28_0%,#114D28_30%,#252525_72%)] opacity-45"
-        />
-        <div className="relative z-10 w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
-          <h1 className="text-2xl font-bold text-white">Verification failed</h1>
-          <p className="mt-2 text-sm text-rose-300">
+      <VerifyEmailShell>
+        <VerifyEmailCard
+          icon={<AlertTriangle className="size-6" strokeWidth={2.25} />}
+          title="Verification failed"
+          badge="Link expired"
+        >
+          <p className="mt-2 text-sm leading-6 text-game-red">
             The verification link is invalid or has expired. Please request a new one.
           </p>
-          <button
-            type="button"
-            onClick={handleResend}
-            disabled={sending || sent}
-            className="mt-6 w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636] disabled:opacity-60"
-          >
-            {sending ? "Sending..." : sent ? "Email sent" : "Resend verification email"}
-          </button>
-          <p className="mt-4 text-sm text-slate-300">
-            <Link to="/login" className="font-medium text-[#7ed8a2] hover:text-[#9ee6ba]">
-              Go to login
-            </Link>
-          </p>
-        </div>
-      </main>
+          <ResendButton onClick={handleResend} sending={sending} sent={sent} />
+          <AuthLink to="/login" icon={<LogIn className="size-3.5" />}>
+            Go to login
+          </AuthLink>
+        </VerifyEmailCard>
+      </VerifyEmailShell>
     );
   }
 
   if (isVerified) {
     return (
-      <main className="relative flex min-h-[calc(100vh-72px)] items-center justify-center overflow-hidden bg-[#252525] px-8 py-12 text-white">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,#114D28_0%,#114D28_30%,#252525_72%)] opacity-45"
-        />
-        <div className="relative z-10 w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
-          <h1 className="text-2xl font-bold text-white">Email verified!</h1>
-          <p className="mt-2 text-sm text-slate-300">
+      <VerifyEmailShell>
+        <VerifyEmailCard
+          icon={<CheckCircle2 className="size-6" strokeWidth={2.25} />}
+          title="Email verified!"
+          badge="Ready to play"
+        >
+          <p className="mt-2 text-sm leading-6 text-ink-soft">
             Your email has been verified. You now have full access to all features.
           </p>
           <button
             type="button"
             onClick={() => navigate({ to: "/" })}
-            className="mt-6 w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636]"
+            className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-felt px-4 py-3 font-semibold text-cream transition-colors hover:bg-felt-light"
           >
+            <Home className="size-4" aria-hidden />
             Go to home
           </button>
-        </div>
-      </main>
+        </VerifyEmailCard>
+      </VerifyEmailShell>
     );
   }
 
   return (
-    <main className="relative flex min-h-[calc(100vh-72px)] items-center justify-center overflow-hidden bg-[#252525] px-8 py-12 text-white">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,#114D28_0%,#114D28_30%,#252525_72%)] opacity-45"
-      />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-[#303030] bg-[#1D1D1D] p-6 shadow-[inset_0_0_24px_rgba(0,0,0,0.25)]">
-        <h1 className="text-2xl font-bold text-white">Verify your email</h1>
+    <VerifyEmailShell>
+      <VerifyEmailCard
+        icon={<Mail className="size-6" strokeWidth={2.25} />}
+        title="Verify your email"
+        badge="Check your inbox"
+      >
         {session?.user ? (
           <>
-            <p className="mt-2 text-sm text-slate-300">
-              We sent a verification email to <span className="text-white">{session.user.email}</span>.
+            <p className="mt-2 text-sm leading-6 text-ink-soft">
+              We sent a verification email to{" "}
+              <span className="font-semibold text-ink">{session.user.email}</span>.
               Check your inbox and click the link to verify.
             </p>
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={sending || sent}
-              className="mt-6 w-full rounded-md bg-[#114D28] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#176636] disabled:opacity-60"
-            >
-              {sending ? "Sending..." : sent ? "Email sent" : "Resend verification email"}
-            </button>
+            <ResendButton onClick={handleResend} sending={sending} sent={sent} />
           </>
         ) : (
-          <p className="mt-2 text-sm text-slate-300">
+          <p className="mt-2 text-sm leading-6 text-ink-soft">
             Please sign in to resend a verification email.
           </p>
         )}
-        <p className="mt-4 text-sm text-slate-300">
-          <Link to="/login" className="font-medium text-[#7ed8a2] hover:text-[#9ee6ba]">
-            Go to login
-          </Link>
-        </p>
+        <AuthLink to="/login" icon={<LogIn className="size-3.5" />}>
+          Go to login
+        </AuthLink>
+      </VerifyEmailCard>
+    </VerifyEmailShell>
+  );
+}
+
+function VerifyEmailShell({ children }: { children: ReactNode }) {
+  return (
+    <main className="relative flex min-h-[calc(100vh-72px)] items-center justify-center overflow-hidden bg-cream px-8 py-12 text-ink">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,#d4a54a_0%,transparent_35%)] opacity-[0.06]"
+      />
+      <div className="relative z-10 mx-auto flex w-full max-w-4xl items-center justify-center">
+        {children}
       </div>
     </main>
+  );
+}
+
+function VerifyEmailCard({
+  icon,
+  title,
+  badge,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  badge: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="w-full max-w-md rounded-2xl bg-paper p-8 text-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)]">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-felt text-cream">
+        {icon}
+      </div>
+      <h1 className="mt-4 font-display text-[22px] font-extrabold leading-tight text-ink">
+        {title}
+      </h1>
+      <div className="mt-3 inline-flex rounded-full bg-felt px-3 py-1 font-mono text-[11px] font-medium uppercase tracking-widest text-white">
+        {badge}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ResendButton({
+  onClick,
+  sending,
+  sent,
+}: {
+  onClick: () => void;
+  sending: boolean;
+  sent: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={sending || sent}
+      className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-felt px-4 py-3 font-semibold text-cream transition-colors hover:bg-felt-light disabled:opacity-60"
+    >
+      <Mail className="size-4" aria-hidden />
+      {sending ? "Sending..." : sent ? "Email sent" : "Resend verification email"}
+    </button>
+  );
+}
+
+function AuthLink({
+  to,
+  icon,
+  children,
+}: {
+  to: "/login";
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <p className="mt-4 text-sm text-game-muted">
+      <Link
+        to={to}
+        className="inline-flex items-center justify-center gap-1.5 font-semibold text-felt hover:underline"
+      >
+        {icon}
+        {children}
+      </Link>
+    </p>
   );
 }

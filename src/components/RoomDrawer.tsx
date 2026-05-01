@@ -1,14 +1,16 @@
 import { useQuery } from "convex/react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { ANTE_AMOUNT } from "../../convex/gameState";
 import { INITIAL_CHIPS } from "../../convex/games/gamesShared";
+import { MATCH_JOIN_TIMEOUT_MS } from "../../convex/constants";
 import { isRoomRejoinDismissed } from "@/lib/room-rejoin-dismissal";
 import {
   PokerTable,
   formatStackLabel,
 } from "@/components/rooms/table/PokerTable";
+import { CountdownTimer } from "@/components/ui/countdown-timer";
 import {
   Drawer,
   DrawerContent,
@@ -40,6 +42,10 @@ export function RoomDrawer({
     api.rooms.getRoomMembers,
     roomCode ? { code: roomCode } : "skip",
   );
+  const [now, setNow] = useState(() => Date.now());
+  const [joinPromptStartedAt, setJoinPromptStartedAt] = useState<number | null>(
+    null,
+  );
 
   const wasDrawerOpenRef = useRef(false);
   useEffect(() => {
@@ -64,11 +70,41 @@ export function RoomDrawer({
     wasDrawerOpenRef.current = true;
   }, [roomCode, roomData, onClose]);
 
+  useEffect(() => {
+    if (!roomCode) {
+      setJoinPromptStartedAt(null);
+      return;
+    }
+
+    const startedAt = Date.now();
+    setNow(startedAt);
+    setJoinPromptStartedAt(startedAt);
+    const interval = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [roomCode]);
+
   const maxPlayers = roomData?.room.maxPlayers ?? 4;
   const title = roomData?.room.title || `Room ${roomCode}`;
   const configSummary = formatRoomConfig(roomData?.room.config);
   const members = roomData?.members ?? [];
   const hasOpenSeat = members.length < maxPlayers;
+  const matchJoinTimeRemainingMs =
+    roomCode && joinPromptStartedAt !== null
+      ? Math.max(0, joinPromptStartedAt + MATCH_JOIN_TIMEOUT_MS - now)
+      : null;
+
+  useEffect(() => {
+    if (!roomCode || matchJoinTimeRemainingMs !== 0) return;
+
+    toast.warning("Join window expired", {
+      description: "Choose a room from the lobby when you're ready.",
+      duration: 4000,
+    });
+    onClose();
+  }, [matchJoinTimeRemainingMs, onClose, roomCode]);
   const shouldShowRejoinPreview = useMemo(() => {
     if (!roomCode || !roomData?.viewerSeatPreview) {
       return false;
@@ -99,7 +135,7 @@ export function RoomDrawer({
   const joinButtonLabel = isJoining
     ? "Taking seat..."
     : hasOpenSeat
-      ? `Take a seat • Ante $${ANTE_AMOUNT}`
+      ? `Join Now - Ante $${ANTE_AMOUNT}`
       : "Room full";
 
   return (
@@ -119,14 +155,23 @@ export function RoomDrawer({
             players={previewPlayers}
             maxPlayers={maxPlayers}
             onOpenSeatClick={() => onJoinSeat()}
-            isJoining={isJoining || !hasOpenSeat}
+            isJoining={isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0}
             className="!h-[296px] !max-w-[216px] xs:!h-[320px] xs:!max-w-[236px] sm:!h-[460px] sm:!max-w-[340px]"
           />
+
+          {matchJoinTimeRemainingMs !== null ? (
+            <div className="mt-4 flex justify-center">
+              <CountdownTimer
+                label="Join window"
+                timeRemainingMs={matchJoinTimeRemainingMs}
+              />
+            </div>
+          ) : null}
 
           <button
             type="button"
             onClick={onJoinSeat}
-            disabled={isJoining || !hasOpenSeat}
+            disabled={isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0}
             className="mx-auto mt-5 block w-full max-w-[272px] rounded-xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-4 py-3 text-center text-base font-semibold text-[#1f1402] shadow-[0_10px_24px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 sm:mt-6 sm:max-w-[320px] sm:rounded-2xl sm:px-5 sm:py-4 sm:text-lg"
           >
             {joinButtonLabel}

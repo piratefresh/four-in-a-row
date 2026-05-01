@@ -322,12 +322,6 @@ export async function internalResolveExpiredTurnClockHandler(
     return { ok: false, reason: "Turn changed before the clock resolved." };
   }
 
-  const amountToCall = game.currentBet - currentTurnHand.betThisRound;
-  if (amountToCall <= 0) {
-    await checkHandler(ctx, { gameId: args.gameId, playerId: args.playerId });
-    return { ok: true, action: "check" as const, playerId: args.playerId };
-  }
-
   await foldHandler(ctx, { gameId: args.gameId, playerId: args.playerId });
   return { ok: true, action: "fold" as const, playerId: args.playerId };
 }

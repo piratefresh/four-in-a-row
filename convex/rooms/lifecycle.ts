@@ -3,8 +3,10 @@ import type { MutationCtx } from "../_generated/server";
 import {
   STALE_SCOREBOARD_ROOM_MS,
   isPlayerInactive,
+  isRoomPastInactivityTimeout,
   getActivePlayersInRoom,
   generateUniqueRoomCode,
+  isTutorialRoom,
   type CreateOpenRoomOptions,
 } from "./helpers";
 import { ROOM_MAX_PLAYERS } from "../constants";
@@ -118,7 +120,6 @@ export async function reapInactivePlayersForRoom(
   await ctx.db.patch(room._id, {
     status: "open",
     hostPlayerId: nextHostPlayerId,
-    lastActiveAt: now,
   });
 
   return {
@@ -193,6 +194,73 @@ export async function closeStaleScoreboardRooms(ctx: MutationCtx) {
   }
 
   return closed;
+}
+
+async function getActiveGameForRoom(ctx: MutationCtx, roomId: Id<"rooms">) {
+  return await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(roomId)).eq("status", "active"),
+    )
+    .unique();
+}
+
+async function getCompletedGameForRoom(ctx: MutationCtx, roomId: Id<"rooms">) {
+  return await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(roomId)).eq("status", "completed"),
+    )
+    .order("desc")
+    .first();
+}
+
+async function closeRoomAndRemoveActivePlayers(
+  ctx: MutationCtx,
+  room: Doc<"rooms">,
+  now: number,
+) {
+  const activePlayers = await getActivePlayersInRoom(ctx, room._id);
+  for (const player of activePlayers) {
+    await ctx.db.patch(player._id, {
+      status: "left",
+      isHost: false,
+      lastSeenAt: now,
+    });
+  }
+
+  await ctx.db.patch(room._id, {
+    status: "closed",
+    hostPlayerId: undefined,
+    lastActiveAt: now,
+  });
+
+  return activePlayers.length;
+}
+
+export async function closeIdleLobbyRooms(ctx: MutationCtx) {
+  const now = Date.now();
+  const openRooms = await ctx.db
+    .query("rooms")
+    .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
+    .collect();
+
+  let closed = 0;
+  let playersRemoved = 0;
+  for (const room of openRooms) {
+    if (isTutorialRoom(room) || !isRoomPastInactivityTimeout(room, now)) {
+      continue;
+    }
+
+    if (await getActiveGameForRoom(ctx, room._id)) continue;
+    if (await getCompletedGameForRoom(ctx, room._id)) continue;
+
+    const removed = await closeRoomAndRemoveActivePlayers(ctx, room, now);
+    closed += 1;
+    playersRemoved += removed;
+  }
+
+  return { closed, playersRemoved };
 }
 
 // ==================== Continuation Room ====================

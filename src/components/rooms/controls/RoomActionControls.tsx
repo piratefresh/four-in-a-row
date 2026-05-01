@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useNextStep } from "nextstepjs";
+import { CountdownTimer } from "@/components/ui/countdown-timer";
 import { ActionButton } from "./ActionButton";
 import { ShuffleTilesButton } from "./ShuffleTilesButton";
 import {
@@ -15,6 +16,7 @@ type ReadyControlsProps = {
   allPlayersReady: boolean;
   isReady: boolean;
   isTogglingReady: boolean;
+  lobbyInactivityTimeRemainingMs?: number | null;
   onReady?: () => void;
 };
 
@@ -119,6 +121,12 @@ export function RoomActionControls({
           className="flex w-[92vw] flex-row items-center justify-center gap-2 sm:w-auto sm:gap-3"
         >
           {helperTip}
+          {ready.lobbyInactivityTimeRemainingMs !== undefined ? (
+            <CountdownTimer
+              label="Room idle"
+              timeRemainingMs={ready.lobbyInactivityTimeRemainingMs}
+            />
+          ) : null}
           <div className="flex min-w-0 flex-1 justify-center sm:flex-none">
             <ActionButton
               id="#tutorial-room-ready-button"

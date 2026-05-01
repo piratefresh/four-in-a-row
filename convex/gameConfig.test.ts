@@ -78,7 +78,7 @@ describe("resolveConfig", () => {
     });
 
     expect(resolved.showdownTimerMs).toBe(45_000);
-    expect(resolved.turnClockGraceMs).toBe(10_000);
+    expect(resolved.turnClockGraceMs).toBe(30_000);
   });
 
   it("supports all game modes", () => {

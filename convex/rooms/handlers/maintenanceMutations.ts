@@ -3,6 +3,7 @@ import { isTutorialRoom, isPlayerInactive, getActivePlayersInRoom } from "../hel
 import {
   reapInactivePlayersAcrossOpenRooms,
   closeStaleScoreboardRooms,
+  closeIdleLobbyRooms,
 } from "../lifecycle";
 import { STALE_ROOM_THRESHOLD_MS } from "../../constants";
 
@@ -10,6 +11,7 @@ export const runCronCleanup = mutation({
   args: {},
   handler: async (ctx) => {
     const inactiveCleanup = await reapInactivePlayersAcrossOpenRooms(ctx);
+    const idleLobbyCleanup = await closeIdleLobbyRooms(ctx);
     await closeStaleScoreboardRooms(ctx);
 
     const now = Date.now();
@@ -29,8 +31,13 @@ export const runCronCleanup = mutation({
     }
 
     return {
-      inactivePlayersRemoved: inactiveCleanup.stalePlayersRemoved,
-      roomsClosed: inactiveCleanup.roomsClosed + closed,
+      inactivePlayersRemoved:
+        inactiveCleanup.stalePlayersRemoved +
+        idleLobbyCleanup.playersRemoved,
+      roomsClosed:
+        inactiveCleanup.roomsClosed +
+        idleLobbyCleanup.closed +
+        closed,
     };
   },
 });

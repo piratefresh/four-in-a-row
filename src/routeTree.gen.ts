@@ -21,6 +21,7 @@ import { Route as RoomsIndexRouteImport } from './routes/rooms.index'
 import { Route as RoomsCodeRouteImport } from './routes/rooms.$code'
 import { Route as ResultsCodeRouteImport } from './routes/results.$code'
 import { Route as DevTileShowcaseRouteImport } from './routes/dev.tile-showcase'
+import { Route as DevTableShowcaseRouteImport } from './routes/dev.table-showcase'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as DemoBetterAuthRouteImport } from './routes/demo/better-auth'
 import { Route as AdminTracesRouteImport } from './routes/admin/traces'
@@ -92,6 +93,11 @@ const ResultsCodeRoute = ResultsCodeRouteImport.update({
 const DevTileShowcaseRoute = DevTileShowcaseRouteImport.update({
   id: '/dev/tile-showcase',
   path: '/dev/tile-showcase',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevTableShowcaseRoute = DevTableShowcaseRouteImport.update({
+  id: '/dev/table-showcase',
+  path: '/dev/table-showcase',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoConvexRoute = DemoConvexRouteImport.update({
@@ -168,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/dev/table-showcase': typeof DevTableShowcaseRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/dev/table-showcase': typeof DevTableShowcaseRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
@@ -220,6 +228,7 @@ export interface FileRoutesById {
   '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
   '/demo/convex': typeof DemoConvexRoute
+  '/dev/table-showcase': typeof DevTableShowcaseRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
@@ -248,6 +257,7 @@ export interface FileRouteTypes {
     | '/admin/traces'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/dev/table-showcase'
     | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
@@ -273,6 +283,7 @@ export interface FileRouteTypes {
     | '/admin/traces'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/dev/table-showcase'
     | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
@@ -299,6 +310,7 @@ export interface FileRouteTypes {
     | '/admin/traces'
     | '/demo/better-auth'
     | '/demo/convex'
+    | '/dev/table-showcase'
     | '/dev/tile-showcase'
     | '/results/$code'
     | '/rooms/$code'
@@ -326,6 +338,7 @@ export interface RootRouteChildren {
   AdminTracesRoute: typeof AdminTracesRoute
   DemoBetterAuthRoute: typeof DemoBetterAuthRoute
   DemoConvexRoute: typeof DemoConvexRoute
+  DevTableShowcaseRoute: typeof DevTableShowcaseRoute
   DevTileShowcaseRoute: typeof DevTileShowcaseRoute
   ResultsCodeRoute: typeof ResultsCodeRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -422,6 +435,13 @@ declare module '@tanstack/react-router' {
       path: '/dev/tile-showcase'
       fullPath: '/dev/tile-showcase'
       preLoaderRoute: typeof DevTileShowcaseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/table-showcase': {
+      id: '/dev/table-showcase'
+      path: '/dev/table-showcase'
+      fullPath: '/dev/table-showcase'
+      preLoaderRoute: typeof DevTableShowcaseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/convex': {
@@ -536,6 +556,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminTracesRoute: AdminTracesRoute,
   DemoBetterAuthRoute: DemoBetterAuthRoute,
   DemoConvexRoute: DemoConvexRoute,
+  DevTableShowcaseRoute: DevTableShowcaseRoute,
   DevTileShowcaseRoute: DevTileShowcaseRoute,
   ResultsCodeRoute: ResultsCodeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

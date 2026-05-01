@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { canReuseLinkedNextRoom, getOfflineBotSourcePlayers } from "./rooms";
+import {
+  canReuseLinkedNextRoom,
+  getOfflineBotSourcePlayers,
+  isRoomPastInactivityTimeout,
+} from "./rooms";
 
 describe("offline next-hand bot carry-forward", () => {
   it("keeps bot seats from room history even if those bot players are no longer active", () => {
@@ -93,5 +97,27 @@ describe("linked next-room reuse", () => {
         existingGameCount: 1,
       }),
     ).toBe(false);
+  });
+});
+
+describe("room inactivity timeout", () => {
+  it("expires a lobby room after the configured idle duration", () => {
+    const now = 1_000_000;
+
+    expect(
+      isRoomPastInactivityTimeout(
+        { lastActiveAt: now - 299_999 },
+        now,
+        300_000,
+      ),
+    ).toBe(false);
+
+    expect(
+      isRoomPastInactivityTimeout(
+        { lastActiveAt: now - 300_000 },
+        now,
+        300_000,
+      ),
+    ).toBe(true);
   });
 });

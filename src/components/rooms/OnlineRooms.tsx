@@ -68,9 +68,6 @@ export function OnlineRooms({
         </div>
 
         <section className="">
-          <h2 className="font-display uppercase text-gold font-bold text-2xl">
-            Online Rooms
-          </h2>
           <Button
             type="button"
             onClick={onCreateRoom}

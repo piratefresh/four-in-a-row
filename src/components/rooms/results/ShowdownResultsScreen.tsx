@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getLetterValue } from "@/lib/letterValues";
+import { cn } from "@/lib/utils";
 import { WinSplashOverlay } from "./WinSplashOverlay";
 
 type SubmissionTile = {
@@ -79,7 +80,9 @@ export function ShowdownResultsScreen({
   }, [playerId, submissions]);
   const scoringSubmission =
     currentPlayerSubmission ??
-    submissions.find((submission) => submission.playerId === showdownResults.winnerId) ??
+    submissions.find(
+      (submission) => submission.playerId === showdownResults.winnerId,
+    ) ??
     submissions[0] ??
     null;
   const currentPlayerWon =
@@ -124,7 +127,7 @@ export function ShowdownResultsScreen({
   return (
     <div
       data-testid="results-content"
-      className="min-h-[calc(100vh-4rem)] bg-[radial-gradient(circle_at_top,#19160d_0%,#090909_28%,#050505_100%)] text-white"
+      className="min-h-[calc(100vh-4rem)] bg-felt text-white"
     >
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[430px] flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]">
         <header className="pt-6 text-center">
@@ -198,8 +201,8 @@ export function ShowdownResultsScreen({
           {isGuestTutorialGame
             ? "Return home when you are ready."
             : isOfflineGame
-            ? "Start another bot game or return home."
-            : "Return to the room list or head back home."}
+              ? "Start another bot game or return home."
+              : "Return to the room list or head back home."}
         </p>
 
         <div id="tutorial-showdown-results" className="mt-8 flex-1 space-y-3">
@@ -252,11 +255,12 @@ function ShowdownSubmissionCard({
   return (
     <article
       data-testid="player-result"
-      className={`rounded-[16px] border px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] ${
+      className={cn(
+        "rounded-[16px] border px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
         isWinner
-          ? "border-[#8b6f1b] bg-[linear-gradient(180deg,rgba(41,34,15,0.96),rgba(27,24,14,0.96))] shadow-[0_0_0_1px_rgba(212,175,55,0.15),0_16px_40px_rgba(0,0,0,0.32)]"
-          : "border-white/8 bg-[linear-gradient(180deg,rgba(20,20,20,0.96),rgba(14,14,14,0.96))]"
-      }`}
+          ? "border-gold-bright bg-[linear-gradient(180deg,#f6d86f_0%,#d4a54a_56%,#b98227_100%)] text-[#2a1a02] shadow-[0_0_0_1px_rgba(255,235,163,0.32),0_16px_40px_rgba(0,0,0,0.36),0_0_24px_rgba(212,165,74,0.22)]"
+          : "border-white/8 bg-felt-light text-white",
+      )}
     >
       <div className="flex items-start gap-3">
         <Avatar className="h-11 w-11 shrink-0 border border-white/10 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
@@ -276,26 +280,46 @@ function ShowdownSubmissionCard({
             <div className="min-w-0">
               <div
                 data-testid="player-name"
-                className="truncate text-[19px] font-semibold text-white"
+                className={cn(
+                  "truncate text-[19px] font-semibold",
+                  isWinner ? "text-[#2a1a02]" : "text-white",
+                )}
               >
                 {playerName}
               </div>
               <div
                 data-testid="player-word"
-                className={`mt-0.5 text-[12px] font-medium uppercase tracking-[0.12em] ${
-                  submission.status === "submitted"
-                    ? "text-white/55"
-                    : "text-white/38"
-                }`}
+                className={cn(
+                  "mt-0.5 text-[12px] font-medium uppercase tracking-[0.12em]",
+                  isWinner
+                    ? submission.status === "submitted"
+                      ? "text-[#3d2705]"
+                      : "text-[#3d2705]"
+                    : submission.status === "submitted"
+                      ? "text-white"
+                      : "text-white",
+                )}
               >
                 {displayWord}
                 {isCurrentPlayer ? (
-                  <span className="ml-2 text-[#d8b84a]">YOU</span>
+                  <span
+                    className={cn(
+                      "ml-2",
+                      isWinner ? "text-[#3d2705]" : "text-[#d8b84a]",
+                    )}
+                  >
+                    YOU
+                  </span>
                 ) : null}
               </div>
               {submission.status === "submitted" &&
               submission.scoreBreakdown ? (
-                <div className="mt-1 text-[11px] tracking-[0.08em] text-white/42">
+                <div
+                  className={cn(
+                    "mt-1 text-[11px] tracking-[0.08em]",
+                    isWinner ? "text-[#3d2705]" : "text-white",
+                  )}
+                >
                   Base {submission.scoreBreakdown.basePoints}
                   {" | "}
                   Mult {submission.scoreBreakdown.multiplierBonus}
@@ -308,13 +332,19 @@ function ShowdownSubmissionCard({
             <div className="shrink-0 text-right">
               <div
                 data-testid="player-score"
-                className={`text-[32px] leading-none font-semibold ${
-                  isWinner ? "text-[#f1c84c]" : "text-white"
-                }`}
+                className={cn(
+                  "text-[32px] leading-none font-semibold",
+                  isWinner ? "text-[#2a1a02]" : "text-white",
+                )}
               >
                 {submission.score}
               </div>
-              <div className="mt-1 text-[12px] uppercase tracking-[0.16em] text-white/42">
+              <div
+                className={cn(
+                  "mt-1 text-[12px] uppercase tracking-[0.16em]",
+                  isWinner ? "text-black" : "text-white/42",
+                )}
+              >
                 pts
               </div>
             </div>
@@ -327,11 +357,19 @@ function ShowdownSubmissionCard({
                   <ShowdownLetterTile
                     key={`${submission.playerId}-${index}-${tile.letter}-${tile.baseValue}`}
                     tile={tile}
+                    isWinner={isWinner}
                   />
                 ))}
               </div>
             ) : (
-              <div className="inline-flex rounded-full border border-white/10 bg-white/3 px-3 py-1.5 text-[12px] uppercase tracking-[0.12em] text-white/38">
+              <div
+                className={cn(
+                  "inline-flex rounded-full border px-3 py-1.5 text-[12px] uppercase tracking-[0.12em]",
+                  isWinner
+                    ? "border-[#3d2705]/18 bg-white/18 text-[#3d2705]/60"
+                    : "border-cream/45 bg-cream text-[#1f1605]",
+                )}
+              >
                 {submission.status === "forfeited"
                   ? "Folded before showdown"
                   : "No tiles played"}
@@ -407,9 +445,7 @@ function ScoringScreen({
               transition={{ duration: 0.2, delay: 0.15 + index * 0.15 }}
             >
               <span>{row.label}</span>
-              <span className="font-mono font-bold text-gold">
-                {row.value}
-              </span>
+              <span className="font-mono font-bold text-gold">{row.value}</span>
             </motion.div>
           ))}
         </div>
@@ -441,17 +477,24 @@ function ScoringScreen({
   );
 }
 
-function ShowdownLetterTile({ tile }: { tile: SubmissionTile }) {
+function ShowdownLetterTile({
+  tile,
+  isWinner,
+}: {
+  tile: SubmissionTile;
+  isWinner: boolean;
+}) {
   const isCommunityTile = tile.source === "community";
 
   return (
     <div className="flex flex-col items-center gap-1">
       <div
-        className={`relative flex h-10 w-8 items-center justify-center rounded-[7px] border text-[22px] font-bold text-[#26190a] shadow-[0_6px_14px_rgba(0,0,0,0.25)] ${
+        className={cn(
+          "relative flex h-10 w-8 items-center justify-center rounded-[7px] border text-[22px] font-bold text-[#26190a] shadow-[0_6px_14px_rgba(0,0,0,0.25)]",
           isCommunityTile
             ? "border-[#e0bc4a] bg-[linear-gradient(180deg,#fff2c1_0%,#efd88f_100%)] shadow-[0_0_0_1px_rgba(238,206,99,0.28),0_0_10px_rgba(238,206,99,0.45)]"
-            : "border-[#d1b06a]/70 bg-[linear-gradient(180deg,#f7e8c3_0%,#e8d3a2_100%)]"
-        }`}
+            : "border-[#d1b06a]/70 bg-[linear-gradient(180deg,#f7e8c3_0%,#e8d3a2_100%)]",
+        )}
       >
         {tile.letter.toUpperCase()}
         {tile.multiplier ? (
@@ -471,7 +514,12 @@ function ShowdownLetterTile({ tile }: { tile: SubmissionTile }) {
           </span>
         ) : null}
       </div>
-      <span className="text-[10px] font-medium leading-none text-[#d7c58d]">
+      <span
+        className={cn(
+          "text-[10px] font-medium leading-none",
+          isWinner ? "text-[#3d2705]/68" : "text-[#d7c58d]",
+        )}
+      >
         {tile.baseValue}
       </span>
     </div>

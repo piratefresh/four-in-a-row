@@ -63,7 +63,6 @@ export const heartbeatByCode = mutation({
 
     const now = Date.now();
     await ctx.db.patch(player._id, { lastSeenAt: now });
-    await ctx.db.patch(room._id, { lastActiveAt: now });
 
     return { ok: true, roomId: room._id, playerId: player._id, lastSeenAt: now };
   },
@@ -118,7 +117,9 @@ export const toggleReady = mutation({
     }
 
     const newReadyStatus = !player.readyStatus;
+    const now = Date.now();
     await ctx.db.patch(player._id, { readyStatus: newReadyStatus });
+    await ctx.db.patch(room._id, { lastActiveAt: now });
 
     const allPlayers = await ctx.db
       .query("players")

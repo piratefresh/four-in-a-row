@@ -94,7 +94,7 @@ export const MAX_RAISES_PER_ROUND = 3;
 
 // Showdown timer (1 minute)
 export const SHOWDOWN_TIMER_MS = 60000;
-export const TURN_CLOCK_GRACE_PERIOD_MS = 60000;
+export const TURN_CLOCK_GRACE_PERIOD_MS = 30000;
 export const TURN_CLOCK_CALLED_DURATION_MS = 30000;
 
 // Speed bonus thresholds (aligned with 1-minute showdown timer)

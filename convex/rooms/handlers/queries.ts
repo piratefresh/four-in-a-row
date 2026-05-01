@@ -154,6 +154,7 @@ export const getRoomMembers = query({
         status: room.status,
         maxPlayers: room.maxPlayers,
         config: room.config,
+        createdAt: room.createdAt,
         lastActiveAt: room.lastActiveAt,
         tutorialId: room.tutorialId ?? null,
       },

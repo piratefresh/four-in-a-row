@@ -19,6 +19,7 @@ import {
   RAISE_LADDER,
   SHOWDOWN_TIMER_MS,
 } from "../../../../convex/gameState";
+import { ROOM_INACTIVITY_TIMEOUT_MS } from "../../../../convex/constants";
 import type { RoomGameContextValue } from "../context/RoomGameContext";
 import type { RoomPageContextValue } from "../context/RoomPageContext";
 import { useRoomPresence } from "./useRoomPresence";
@@ -149,7 +150,7 @@ export function useRoomDetailsController(
   }, [code, myPlayer]);
 
   useEffect(() => {
-    if (game?.status !== "active") return;
+    if (game?.status !== "active" && game?.status !== "waiting") return;
 
     setLiveNow(Date.now());
     const interval = window.setInterval(() => {
@@ -334,7 +335,26 @@ export function useRoomDetailsController(
       ),
     [game?.turnClockTargetPlayerId, hasPendingTurnClock, playerId],
   );
-const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
+  const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
+  const lobbyInactivityTimeRemainingMs = useMemo(() => {
+    if (
+      !roomData?.room ||
+      game?.status !== "waiting" ||
+      isTutorialRoom
+    ) {
+      return null;
+    }
+
+    return Math.max(
+      0,
+      roomData.room.lastActiveAt + ROOM_INACTIVITY_TIMEOUT_MS - liveNow,
+    );
+  }, [
+    game?.status,
+    isTutorialRoom,
+    liveNow,
+    roomData?.room,
+  ]);
   const isTutorialBettingPaused =
     isTutorialRoom &&
     game?.status === "active" &&
@@ -589,6 +609,29 @@ const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
   }, [game?.status, handleViewResults, showdownResults]);
 
   useEffect(() => {
+    if (lobbyInactivityTimeRemainingMs !== 0 || game?.status !== "waiting") {
+      return;
+    }
+
+    dismissRoomRejoin(code);
+    toast.warning("Room closed due to inactivity", {
+      description: "You will be redirected to the lobby.",
+      duration: 5000,
+    });
+
+    void (async () => {
+      await leaveCurrentRoom(true);
+      await navigate({ to: "/" });
+    })();
+  }, [
+    code,
+    game?.status,
+    leaveCurrentRoom,
+    lobbyInactivityTimeRemainingMs,
+    navigate,
+  ]);
+
+  useEffect(() => {
     if (
       game?.stage !== "showdown" ||
       game?.status !== "active" ||
@@ -800,6 +843,7 @@ const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
       onReady: game?.status === "waiting" ? handleToggleReady : undefined,
       isReady: myPlayer?.readyStatus ?? false,
       isTogglingReady,
+      lobbyInactivityTimeRemainingMs,
       readyCount:
         roomData?.members.filter((member) => member.readyStatus).length ?? 0,
       totalPlayers: roomData?.members.length ?? 0,
@@ -861,8 +905,9 @@ const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
       isMyTurn,
       isTurnClockTarget,
       isTogglingReady,
-isTutorialBettingPaused,
+      isTutorialBettingPaused,
       isTutorialRoom,
+      lobbyInactivityTimeRemainingMs,
       maxRaisesPerRound,
       myPlayer?.readyStatus,
       raisesThisRound,

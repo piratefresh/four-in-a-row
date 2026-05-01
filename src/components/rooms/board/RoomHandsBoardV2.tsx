@@ -178,6 +178,7 @@ export function RoomHandsBoardV2({
     onReady,
     isReady,
     isTogglingReady,
+    lobbyInactivityTimeRemainingMs,
     readyCount,
     totalPlayers,
     allPlayersReady,
@@ -208,12 +209,7 @@ export function RoomHandsBoardV2({
     }),
   );
   const isMediumViewport = useMediaQuery("(min-width: 768px)");
-  const isLargeDesktop = useMediaQuery("(min-width: 1441px)");
-  const boardTileSize: WordTileSize = isLargeDesktop
-    ? "lg"
-    : isMediumViewport
-      ? "md"
-      : "sm";
+  const boardTileSize: WordTileSize = isMediumViewport ? "md" : "sm";
 
   const orderedHands = useMemo(() => {
     if (!bottomPlayerId || hands.length === 0) return hands;
@@ -587,6 +583,7 @@ export function RoomHandsBoardV2({
                   allPlayersReady,
                   isReady,
                   isTogglingReady,
+                  lobbyInactivityTimeRemainingMs,
                   onReady,
                 }}
                 helperTip={actionsHelperTip}

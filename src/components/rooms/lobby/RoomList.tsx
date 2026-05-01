@@ -118,15 +118,8 @@ export function RoomList({
     );
   }
 
-  if (rooms.length === 0) {
-    return (
-      <div className="py-8 text-center text-sm text-cream/50">
-        No active games yet.
-      </div>
-    );
-  }
-
   const headerGroups = table.getHeaderGroups();
+  const rows = table.getRowModel().rows;
 
   return (
     <div className="space-y-4">
@@ -179,14 +172,20 @@ export function RoomList({
             </div>
           </div>
 
-          {table.getRowModel().rows.map((row) => (
-            <div key={row.id}>
-              {flexRender(
-                row.getVisibleCells()[0].column.columnDef.cell,
-                row.getVisibleCells()[0].getContext(),
-              )}
+          {rows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-cream/10 bg-cream/[0.03] py-8 text-center text-sm text-cream/50">
+              No active games yet.
             </div>
-          ))}
+          ) : (
+            rows.map((row) => (
+              <div key={row.id}>
+                {flexRender(
+                  row.getVisibleCells()[0].column.columnDef.cell,
+                  row.getVisibleCells()[0].getContext(),
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
 

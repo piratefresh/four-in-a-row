@@ -4,6 +4,7 @@ import {
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   ROOM_CODE_MAX_ATTEMPTS,
+  ROOM_INACTIVITY_TIMEOUT_MS,
 } from "../constants";
 export { ROOM_CODE_LENGTH };
 import { ConvexError } from "convex/values";
@@ -156,6 +157,14 @@ export function isPlayerInactive(
   }
 
   return now - player.lastSeenAt > INACTIVE_PLAYER_TIMEOUT_MS;
+}
+
+export function isRoomPastInactivityTimeout(
+  room: Pick<Doc<"rooms">, "lastActiveAt">,
+  now: number,
+  timeoutMs = ROOM_INACTIVITY_TIMEOUT_MS,
+) {
+  return now - room.lastActiveAt >= timeoutMs;
 }
 
 // ==================== Player Queries ====================

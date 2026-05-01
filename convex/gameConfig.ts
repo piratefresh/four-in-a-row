@@ -169,7 +169,7 @@ const SPEED_OVERRIDES = {
   bigBlind: 10,
   startingChips: 500,
   raiseLadder: [10, 20, 30, 40, 50, 60, 70, 80, 100],
-  turnClockGraceMs: 10_000,
+  turnClockGraceMs: 30_000,
   turnClockCalledDurationMs: 15_000,
   showdownTimerMs: 30_000,
 };
