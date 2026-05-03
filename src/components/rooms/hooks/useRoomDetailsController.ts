@@ -17,6 +17,7 @@ import {
   getAvailableRaiseOptions,
   getRaisesThisRound,
   getMaxRaisesPerRound,
+  type BettingInput,
 } from "./bettingDerived";
 import {
   RAISE_LADDER,
@@ -25,7 +26,6 @@ import {
 import { useRoomPresence } from "./useRoomPresence";
 
 const ANTE_AMOUNT = 20;
-const MAX_RAISES_PER_ROUND = 3;
 
 export function useRoomDetailsController(
   code: string,
@@ -41,7 +41,6 @@ export function useRoomDetailsController(
     game,
     playerHands,
     showdownResults,
-    wordSubmissions,
     myPlayer,
     playerId,
     nameMatchedPlayerId,
@@ -70,16 +69,10 @@ export function useRoomDetailsController(
     [display.turnOrderedHands],
   );
 
-  const bettingInput = useMemo(
+  const bettingInput: BettingInput = useMemo(
     () => ({
-      game,
-      myHand: myHand as {
-        playerId: string;
-        chips: number;
-        betThisRound: number;
-        totalBet: number;
-        hasFolded: boolean;
-      } | null | undefined,
+      game: game as BettingInput["game"],
+      myHand: myHand as BettingInput["myHand"],
       playerId,
       turnOrderedPlayerIds,
       raiseLadder: RAISE_LADDER,
@@ -163,7 +156,7 @@ export function useRoomDetailsController(
   useRoomPresence(code, Boolean(session?.user && roomData?.room && myPlayer));
 
   // --- Reactions (auto-rejoin, redirects, auto-create game, expiry forfeits) ---
-  const reactions = useRoomReactions({
+  useRoomReactions({
     code,
     isAuthPending,
     hasSessionUser: Boolean(session?.user),

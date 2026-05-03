@@ -80,3 +80,9 @@ export const DIFFICULTY_BETTING_MODIFIERS: Record<AIDifficulty, BettingModifiers
   [AI_DIFFICULTY.MEDIUM]: { fold: 0, call: 0, raise: 0 },
   [AI_DIFFICULTY.HARD]: { fold: -5, call: 0, raise: 5 },
 };
+
+export const DIFFICULTY_FUMBLE_RATES: Record<AIDifficulty, number> = {
+  [AI_DIFFICULTY.EASY]: 0.25,
+  [AI_DIFFICULTY.MEDIUM]: 0.08,
+  [AI_DIFFICULTY.HARD]: 0.03,
+};

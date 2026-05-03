@@ -13,11 +13,7 @@ export interface BettingInput {
     currentPlayerIndex: number;
     raisesThisRound: number;
     pot: number;
-    config?: {
-      raiseLadder?: number[];
-      maxRaisesPerRound?: number;
-      bettingStructure?: "potLimit" | string;
-    };
+    config?: Record<string, unknown>;
   } | null | undefined;
   myHand: {
     playerId: string;
@@ -25,6 +21,7 @@ export interface BettingInput {
     betThisRound: number;
     totalBet: number;
     hasFolded: boolean;
+    [key: string]: unknown;
   } | null | undefined;
   playerId: string | null;
   turnOrderedPlayerIds: string[];
@@ -55,13 +52,13 @@ export function canCall(input: BettingInput): boolean {
   return game.currentBet > 0 && amountNeeded > 0 && myHand.chips >= amountNeeded;
 }
 
-export function callAmount(game: BettingInput["game"], myHand: BettingInput["myHand"]): number {
+export function callAmount(game: any, myHand: any): number {
   if (!game || !myHand) return 0;
   return game.currentBet - myHand.betThisRound;
 }
 
 export function getAvailableRaiseOptions(input: BettingInput): number[] {
-  const { game, myHand, playerId, raiseLadder } = input;
+  const { game, myHand, raiseLadder } = input;
   if (
     !game ||
     !myHand ||
@@ -72,14 +69,14 @@ export function getAvailableRaiseOptions(input: BettingInput): number[] {
   }
 
   const maxRaisesPerRound =
-    game.config?.maxRaisesPerRound ?? MAX_RAISES_PER_ROUND;
+    (game.config?.maxRaisesPerRound as number | undefined) ?? MAX_RAISES_PER_ROUND;
 
   if (game.raisesThisRound >= maxRaisesPerRound) {
     return [];
   }
 
   const amountToCall = game.currentBet - myHand.betThisRound;
-  const bettingStructure = game.config?.bettingStructure;
+  const bettingStructure = game.config?.bettingStructure as string | undefined;
   const potLimitMaxRaiseTo =
     bettingStructure === "potLimit"
       ? game.pot + Math.max(0, amountToCall)
@@ -94,10 +91,10 @@ export function getAvailableRaiseOptions(input: BettingInput): number[] {
   });
 }
 
-export function getRaisesThisRound(game: BettingInput["game"]): number {
+export function getRaisesThisRound(game: any): number {
   return game?.raisesThisRound ?? 0;
 }
 
-export function getMaxRaisesPerRound(game: BettingInput["game"]): number {
-  return game?.config?.maxRaisesPerRound ?? MAX_RAISES_PER_ROUND;
+export function getMaxRaisesPerRound(game: any): number {
+  return (game?.config?.maxRaisesPerRound as number | undefined) ?? MAX_RAISES_PER_ROUND;
 }

@@ -112,9 +112,9 @@ describe("deterministic showdown solver", () => {
     const evaluation = evaluateDeterministicShowdownHand(fixtureOne);
     const rankedWords = evaluation.candidates.map((candidate) => candidate.word);
     const scenarios: Array<{ difficulty: AIDifficulty; maxIndex: number }> = [
-      { difficulty: AI_DIFFICULTY.EASY, maxIndex: 12 },
-      { difficulty: AI_DIFFICULTY.MEDIUM, maxIndex: 5 },
-      { difficulty: AI_DIFFICULTY.HARD, maxIndex: 2 },
+      { difficulty: AI_DIFFICULTY.EASY, maxIndex: 20 },
+      { difficulty: AI_DIFFICULTY.MEDIUM, maxIndex: 8 },
+      { difficulty: AI_DIFFICULTY.HARD, maxIndex: 3 },
     ];
 
     for (const scenario of scenarios) {

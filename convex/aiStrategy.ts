@@ -21,6 +21,8 @@ export {
   AI_DIFFICULTY,
   AI_PERSONALITIES,
   BETTING_PERSONALITY_PROFILES,
+  DIFFICULTY_BETTING_MODIFIERS,
+  DIFFICULTY_FUMBLE_RATES,
   type AIDifficulty,
   type AIPersonality,
   type BettingModifiers,
@@ -40,7 +42,7 @@ export function getConfiguredAIProvider(): AIProvider {
 
 // Model selection for OpenRouter
 export const OPENROUTER_MODELS = {
-  [AI_DIFFICULTY.EASY]: "mistralai/devstral-small:nitro",
+  [AI_DIFFICULTY.EASY]: "mistralai/mistral-7b-instruct:nitro",
   [AI_DIFFICULTY.MEDIUM]: "mistralai/devstral-small:nitro",
   [AI_DIFFICULTY.HARD]: "mistralai/devstral-small:nitro",
 } as const;
@@ -49,9 +51,9 @@ export const OPENROUTER_MODELS = {
 export const AI_MODELS = OPENROUTER_MODELS;
 
 export const SHOWDOWN_SELECTION_WINDOWS = {
-  [AI_DIFFICULTY.EASY]: 12,
-  [AI_DIFFICULTY.MEDIUM]: 5,
-  [AI_DIFFICULTY.HARD]: 2,
+  [AI_DIFFICULTY.EASY]: 20,
+  [AI_DIFFICULTY.MEDIUM]: 8,
+  [AI_DIFFICULTY.HARD]: 3,
 } as const;
 
 // Betting strategy profiles
