@@ -42,6 +42,8 @@ import type * as inspectGame from "../inspectGame.js";
 import type * as messages from "../messages.js";
 import type * as openRouterClient from "../openRouterClient.js";
 import type * as playerStats from "../playerStats.js";
+import type * as riverRun from "../riverRun.js";
+import type * as riverRunState from "../riverRunState.js";
 import type * as rooms from "../rooms.js";
 import type * as rooms_handlers_debugMutations from "../rooms/handlers/debugMutations.js";
 import type * as rooms_handlers_index from "../rooms/handlers/index.js";
@@ -105,6 +107,8 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   openRouterClient: typeof openRouterClient;
   playerStats: typeof playerStats;
+  riverRun: typeof riverRun;
+  riverRunState: typeof riverRunState;
   rooms: typeof rooms;
   "rooms/handlers/debugMutations": typeof rooms_handlers_debugMutations;
   "rooms/handlers/index": typeof rooms_handlers_index;

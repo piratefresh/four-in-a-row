@@ -8,6 +8,11 @@ import {
   gameTileValidator,
 } from "./gameState";
 import { roomConfigValidator, resolvedGameConfigValidator } from "./gameConfig";
+import {
+  riverRunPhaseValidator,
+  riverRunStatusValidator,
+  riverRunTileValidator,
+} from "./riverRunState";
 
 export const EMBEDDING_DIMENSIONS = 1024;
 export const RAG_SIMILARITY_THRESHOLD = 0.9;
@@ -18,6 +23,7 @@ export const appTables = {
     code: v.string(),
     title: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("closed")),
+    mode: v.optional(v.union(v.literal("riverRunSolo"))),
     maxPlayers: v.number(),
     tutorialId: v.optional(v.union(v.literal("first-bot-game"))),
     isBotGame: v.optional(v.boolean()),
@@ -152,6 +158,25 @@ export const appTables = {
     .index("by_game", ["gameId"])
     .index("by_game_player", ["gameId", "playerId"])
     .index("by_player", ["playerId"]),
+  riverRunRuns: defineTable({
+    roomId: v.id("rooms"),
+    playerId: v.id("players"),
+    authUserId: v.string(),
+    targetCurve: v.array(v.number()),
+    targetIndex: v.number(),
+    currentTarget: v.number(),
+    phase: riverRunPhaseValidator,
+    tiles: v.array(riverRunTileValidator),
+    credits: v.number(),
+    handScore: v.number(),
+    totalScore: v.number(),
+    status: riverRunStatusValidator,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_roomId", ["roomId"])
+    .index("by_playerId", ["playerId"])
+    .index("by_authUserId_and_status", ["authUserId", "status"]),
   playerStats: defineTable({
     authUserId: v.optional(v.string()),
     characterId: v.optional(v.string()),

@@ -1,20 +1,57 @@
-# Word Poker: River Run Rules
+# Word Poker: River Run Solo Rules
 
 ## Overview
 
-River Run is a 1v1 online Word Poker mode.
+River Run v1 is a solo Word Poker run.
 
-Players reveal letter tiles over three phases, make one word each phase, earn points, gain credits, flip tiles, and buy power-ups between hands.
+The player plays a sequence of hands against a rising target score. Each hand has Deal, Turn, and River phases. The player submits one word per phase, the three phase scores are added into a hand total, and the hand total is compared to the current target.
 
-The first player to win 3 hands wins the match.
+This rebuild is solo-only. 1v1 versus matches, opponent scoring, shared shops, hand-win races, and first-to-3 match logic are out of scope for the v1 River Run rebuild.
 
 ---
 
-## Match Goal
+## Run Goal
 
-Win 3 hands before your opponent.
+Clear every target in the target curve before missing one.
 
-A match can last up to 5 hands.
+Initial target curve:
+
+```text
+[45, 55, 70, 85, 105, 130, 160, 195]
+```
+
+The first hand uses target `45`. Each passed hand advances to the next target.
+
+---
+
+## Run States
+
+| State | Meaning |
+|---|---|
+| Active | The player is currently playing Deal, Turn, or River. |
+| Shop | The player cleared a target and may buy or skip an upgrade before the next hand. |
+| Failed | The player finished River with a hand total below the current target. |
+| Completed | The player cleared the final target in the curve. |
+
+---
+
+## Pass, Fail, and Completion
+
+A hand passes when the River phase resolves and:
+
+```text
+Hand Total >= Current Target
+```
+
+A hand fails when the River phase resolves and:
+
+```text
+Hand Total < Current Target
+```
+
+Passing a non-final target moves the run into the Shop state. After the player buys or skips, the next hand starts with the next target in the curve.
+
+Passing the final target completes the run. Failed and completed runs are terminal until the player starts a new run.
 
 ---
 
@@ -28,59 +65,55 @@ Tiles are revealed across 3 phases:
 2. Turn
 3. River
 
+The player submits one word per phase.
+
 ---
 
 ## Phase 1: Deal
 
-Reveal 3 tiles.
+Reveal 4 tiles.
 
-Each player makes one word using the revealed tiles.
-
-Suggested timer: 15 seconds.
+The player makes one word using the revealed tiles.
 
 Example:
 
 ```text
-A T S ? ? ? ?
+A T S R ? ? ?
 ```
 
 Possible words:
 
+- STAR
+- RATS
 - SAT
-- AT
-- AS
 
 ---
 
 ## Phase 2: Turn
 
-Reveal 2 more tiles.
+Reveal 2 more tiles, for 6 total revealed tiles.
 
-Each player makes one word using any revealed tiles.
-
-Suggested timer: 20 seconds.
+The player makes one word using any revealed tiles.
 
 Example:
 
 ```text
-A T S E R ? ?
+A T S R E N ?
 ```
 
 Possible words:
 
-- STARE
-- TEARS
 - RATES
+- TEARS
+- ASTERN
 
 ---
 
 ## Phase 3: River
 
-Reveal the final 2 tiles.
+Reveal the final tile, for all 7 tiles.
 
-Each player makes one word using any revealed tiles.
-
-Suggested timer: 25 seconds.
+The player makes one word using any revealed tiles.
 
 Example:
 
@@ -94,21 +127,25 @@ Possible words:
 - RETAINS
 - ANTSIER
 
+After the River word is submitted, the hand total is resolved against the current target.
+
 ---
 
 ## Letter Reuse Rule
 
-Letters are reusable each phase.
+Letters are reusable across phases.
 
 A letter used during Deal can still be used during Turn and River.
 
 Example:
 
-- Deal word: SAT
-- Turn word: STARE
+- Deal word: STAR
+- Turn word: ASTERN
 - River word: NASTIER
 
 This is allowed.
+
+Within a single submitted word, the word can only use letters that are available in the currently revealed tiles.
 
 ---
 
@@ -116,20 +153,18 @@ This is allowed.
 
 Each phase word gives points.
 
-At the end of the hand, each player's 3 phase scores are added together.
-
-The player with the higher total wins the hand.
+At the end of the hand, the 3 phase scores are added together.
 
 Example:
 
-| Phase | Player A | Player B |
-|---|---:|---:|
-| Deal | 8 | 6 |
-| Turn | 22 | 24 |
-| River | 48 | 41 |
-| Total | 78 | 71 |
+| Phase | Word | Score |
+|---|---|---:|
+| Deal | STAR | 8 |
+| Turn | ASTERN | 22 |
+| River | NASTIER | 48 |
+| Total |  | 78 |
 
-Player A wins the hand.
+If the current target is `70`, this hand passes.
 
 ---
 
@@ -156,32 +191,32 @@ Word Score = Letter Points + Length Bonus + Power-Up Bonuses
 
 ## Credits
 
-Credits are earned after each hand.
+Credits are earned after successful hands.
 
 Credits can be used to:
 
 1. Flip a revealed tile during a phase.
-2. Buy power-ups after a hand.
+2. Buy power-ups after a passed hand.
 3. Refresh the shop.
 
 ---
 
-## Credit Rewards
+## Initial Credit Rules
 
 | Action | Credits |
 |---|---:|
-| Submit valid words in all 3 phases | +2 |
-| Win a phase | +1 each |
-| Win the hand | +3 |
-| Lose the hand | +1 |
+| Start a run | 0 |
+| Clear a target | +3 |
 | Use all 7 tiles on River | +2 |
 | Invalid or missing word | +0 for that phase |
+
+Failed and completed runs do not enter the shop.
 
 ---
 
 ## Flip Tile
 
-During a phase, a player may spend credits to Flip one revealed tile.
+During a phase, the player may spend credits to Flip one revealed tile.
 
 A Flip rerolls that tile into a new letter.
 
@@ -204,25 +239,22 @@ A T S E R N I
 - Flip costs 2 credits.
 - Only revealed tiles can be Flipped.
 - Max 1 Flip per phase.
-- Flipped tiles stay changed for that player for the rest of the hand.
-- Each player has their own board after Flips.
+- Flipped tiles stay changed for the rest of the hand.
 - A tile cannot Flip into the same letter.
-- Flipping happens during the phase timer.
 
 ---
 
 ## Shop Phase
 
-After each hand, both players enter the shop.
+After passing a non-final target, the player enters the shop.
 
 Shop rules:
 
-- The shop shows 3 power-up options.
-- Both players see the same shop options.
-- Each player may buy 1 power-up.
-- Players may skip and save credits.
-- Players may refresh the shop for 2 credits.
-- Suggested shop timer: 20 seconds.
+- The shop shows upgrade options.
+- The player may buy 1 power-up.
+- The player may skip and save credits.
+- The player may refresh the shop for 2 credits.
+- Buying or skipping starts the next hand.
 
 ---
 
@@ -249,50 +281,54 @@ Not allowed:
 
 ## Invalid Words
 
-If a player submits an invalid word:
+If the player submits an invalid word:
 
 - That phase scores 0 points.
-- Power-ups do not trigger.
+- Power-ups do not trigger for that phase.
 - The word does not count for credit rewards.
 
-Players may resubmit while the timer is still running.
+Players may resubmit while the phase is still active.
 
 ---
 
-## Fairness Rules
+## V1 Scope
 
-Both players get:
+In scope:
 
-- The same starting tiles.
-- The same reveal order.
-- The same phase timers.
-- The same shop options.
-- The same scoring rules.
-- The same dictionary validation.
+- Solo run creation.
+- Rising target curve.
+- Deal, Turn, and River submissions.
+- Hand total versus target resolution.
+- Credits from successful hands.
+- One tile Flip per phase.
+- Between-hand shop after passed non-final targets.
+- Failed and completed terminal states.
 
-Players differ by:
+Out of scope:
 
-- Words submitted.
-- Tile Flips used.
-- Credits spent.
-- Power-ups purchased.
+- 1v1 River Run matches.
+- Opponent submissions or opponent scoring.
+- First-to-3 hand-win match logic.
+- Shared versus shops.
+- Real-time phase timers.
+- Multiplayer fairness rules.
 
 ---
 
 ## Recommended MVP Rules
 
-- 1v1 online mode.
-- First to 3 hands wins.
+- River Run is solo-only for v1.
+- Target curve is `[45, 55, 70, 85, 105, 130, 160, 195]`.
 - Each hand has Deal, Turn, and River phases.
-- Deal reveals 3 tiles.
-- Turn reveals 2 more tiles.
-- River reveals final 2 tiles.
-- Players submit one word per phase.
-- Letters can be reused each phase.
-- Total score across all 3 phases wins the hand.
-- Credits are earned after each hand.
+- Deal reveals 4 tiles.
+- Turn reveals 2 more tiles, for 6 total.
+- River reveals the final tile, for 7 total.
+- The player submits one word per phase.
+- Letters can be reused across phases.
+- Total score across all 3 phases is the hand total.
+- A hand passes when hand total meets or beats the current target.
+- A hand fails when hand total is below the current target after River.
+- Passing the final target completes the run.
+- Passing a non-final target enters the shop before the next hand.
 - Flip costs 2 credits.
 - Max 1 Flip per phase.
-- Shop appears after each hand.
-- Shop has 3 shared power-up options.
-- Players may buy 1 power-up or skip.

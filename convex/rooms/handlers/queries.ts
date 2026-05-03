@@ -22,7 +22,9 @@ export const listRooms = query({
       .query("rooms")
       .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
       .order("desc")
-      .take(100)).filter((room) => !isTutorialRoom(room) && !room.isBotGame);
+      .take(100)).filter(
+        (room) => !isTutorialRoom(room) && !room.isBotGame && !room.mode,
+      );
 
     const result = [];
     for (const room of rooms) {
@@ -188,7 +190,7 @@ export const getMyActiveRoom = query({
     }
 
     const room = await ctx.db.get(activePlayer.roomId);
-    if (!room || room.status !== "open" || isTutorialRoom(room)) {
+    if (!room || room.status !== "open" || isTutorialRoom(room) || room.mode) {
       return null;
     }
 
