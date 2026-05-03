@@ -42,7 +42,7 @@ export function getConfiguredAIProvider(): AIProvider {
 
 // Model selection for OpenRouter
 export const OPENROUTER_MODELS = {
-  [AI_DIFFICULTY.EASY]: "mistralai/mistral-7b-instruct:nitro",
+  [AI_DIFFICULTY.EASY]: "mistralai/devstral-small:nitro",
   [AI_DIFFICULTY.MEDIUM]: "mistralai/devstral-small:nitro",
   [AI_DIFFICULTY.HARD]: "mistralai/devstral-small:nitro",
 } as const;
