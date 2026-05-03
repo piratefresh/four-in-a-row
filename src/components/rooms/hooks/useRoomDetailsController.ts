@@ -1,273 +1,62 @@
-import { useMutation, useQuery } from "convex/react";
-import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { authClient } from "@/lib/auth-client";
+import { useEffect, useMemo, useState } from "react";
+import type { RoomGameContextValue } from "../context/RoomGameContext";
+import type { RoomPageContextValue } from "../context/RoomPageContext";
+import { useRoomQueries } from "./useRoomQueries";
+import { useRoomDisplay } from "./useRoomDisplay";
+import { useRoomTimers } from "./useRoomTimers";
+import { useRoomReady } from "./useRoomReady";
+import { useRoomLeave } from "./useRoomLeave";
+import { useRoomReactions } from "./useRoomReactions";
+import { useRoomDevTools } from "./useRoomDevTools";
+import { useBettingActions } from "./useBettingActions";
 import {
-  clearDismissedRoomRejoin,
-  dismissRoomRejoin,
-  isRoomRejoinDismissed,
-} from "@/lib/room-rejoin-dismissal";
-import { api } from "../../../../convex/_generated/api";
-import {
-  describeTutorialGuestIdForDebug,
-  getTutorialGuestId,
-  logTutorialDebug,
-} from "@/lib/tutorial-guest";
-import { getBotCharacterForAuthUserId } from "../../../../convex/aiStrategy";
+  isMyTurn,
+  canCheck,
+  canCall,
+  callAmount,
+  getAvailableRaiseOptions,
+  getRaisesThisRound,
+  getMaxRaisesPerRound,
+} from "./bettingDerived";
 import {
   RAISE_LADDER,
   SHOWDOWN_TIMER_MS,
 } from "../../../../convex/gameState";
-import { ROOM_INACTIVITY_TIMEOUT_MS } from "../../../../convex/constants";
-import type { RoomGameContextValue } from "../context/RoomGameContext";
-import type { RoomPageContextValue } from "../context/RoomPageContext";
 import { useRoomPresence } from "./useRoomPresence";
 
-const DEALER_PLAYER_ID = "ai_dealer";
 const ANTE_AMOUNT = 20;
 const MAX_RAISES_PER_ROUND = 3;
-const INITIAL_CHIPS = 1000;
-
-function isTransientActionMessage(message: string | null) {
-  return (
-    !!message &&
-    (message === "Checked." ||
-      message === "Folded." ||
-      message.startsWith("Matched ") ||
-      message.startsWith("Raised to "))
-  );
-}
 
 export function useRoomDetailsController(
   code: string,
   options: { allowGuestTutorial?: boolean } = {},
 ) {
-  const navigate = useNavigate();
-  const { data: session, isPending: isAuthPending } = authClient.useSession();
-  const allowGuestTutorial = options.allowGuestTutorial === true;
-  const tutorialGuestAuthUserId = useMemo(() => getTutorialGuestId(), []);
+  // --- Data layer ---
+  const queries = useRoomQueries(code, options);
+  const {
+    session,
+    isAuthPending,
+    tutorialGuestAuthUserId,
+    roomData,
+    game,
+    playerHands,
+    showdownResults,
+    wordSubmissions,
+    myPlayer,
+    playerId,
+    nameMatchedPlayerId,
+  } = queries;
 
-  const roomData = useQuery((api as any).rooms.getRoomMembers, {
-    code,
-    guestAuthUserId: session?.user ? undefined : tutorialGuestAuthUserId ?? undefined,
-  });
-  const game = useQuery(api.games.getGameByRoom, {
-    roomId: roomData?.room._id ?? "",
-  });
-  const playerHands = useQuery(
-    api.games.getPlayerHands,
-    game ? { gameId: game._id } : "skip",
-  );
-  const showdownResults = useQuery(
-    api.games.getShowdownResults,
-    game ? { gameId: game._id } : "skip",
-  );
-  const wordSubmissions = useQuery(
-    api.games.getWordSubmissions,
-    game ? { gameId: game._id } : "skip",
-  );
-
-  const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
-  const rejoinRoomByCode = useMutation(api.rooms.rejoinRoomByCode);
-  const createGameForRoom = useMutation(api.games.createGameForRoom);
-  const toggleReady = useMutation((api as any).rooms.toggleReady);
-  const debugRejoinRoom = useMutation(api.rooms.debugRejoinRoom);
-  const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
-  const check = useMutation((api as any).games.check);
-  const call = useMutation((api as any).games.call);
-  const raise = useMutation((api as any).games.raise);
-  const fold = useMutation((api as any).games.fold);
-  const forfeitShowdown = useMutation(api.games.forfeitShowdown);
-
-  const myPlayer = useMemo(() => {
-    if (!roomData?.members) return null;
-
-    if (session?.user) {
-      const authMatched =
-        roomData.members.find(
-          (member) => member.authUserId === session.user.id,
-        ) ?? null;
-      if (authMatched) return authMatched;
-    }
-
-    if (roomData.viewerPlayerId) {
-      return (
-        roomData.members.find(
-          (member) => member._id === roomData.viewerPlayerId,
-        ) ?? null
-      );
-    }
-
-    return null;
-  }, [roomData, session?.user]);
-
-  const sessionNameLower = session?.user?.name?.trim().toLowerCase() ?? null;
-  const nameMatchedPlayerId = useMemo(() => {
-    if (!sessionNameLower || !roomData?.members) return null;
-    const byName =
-      roomData.members.find(
-        (member) => member.name.trim().toLowerCase() === sessionNameLower,
-      ) ?? null;
-    return byName?._id ? String(byName._id) : null;
-  }, [roomData?.members, sessionNameLower]);
-
-  const playerId = myPlayer?._id ? String(myPlayer._id) : null;
-  const myPlayerRef = useRef<typeof myPlayer>(null);
-  const roomCodeRef = useRef(code);
-  const hasLeftRoomRef = useRef(false);
-  const autoRejoinAttemptedCodeRef = useRef<string | null>(null);
-
-  const [isLeavingRoom, setIsLeavingRoom] = useState(false);
-  const [leaveMessage, setLeaveMessage] = useState<string | null>(null);
-  const [gameMessage, setGameMessage] = useState<string | null>(null);
-  const [isCreatingGame, setIsCreatingGame] = useState(false);
-  const [isBetting, setIsBetting] = useState(false);
-  const [isTogglingReady, setIsTogglingReady] = useState(false);
-  const [isDevRejoining, setIsDevRejoining] = useState(false);
-  const [isDevFillingBots, setIsDevFillingBots] = useState(false);
-  const [liveNow, setLiveNow] = useState(() => Date.now());
-  const [showdownTimeRemaining, setShowdownTimeRemaining] = useState<
-    number | null
-  >(null);
-  const [selectedRaiseAmount, setSelectedRaiseAmount] = useState<number | null>(
-    null,
+  // --- Display (hand ordering, player lookups) ---
+  const display = useRoomDisplay(
+    roomData,
+    playerHands,
+    game,
+    playerId,
+    nameMatchedPlayerId,
   );
 
-  useEffect(() => {
-    myPlayerRef.current = myPlayer;
-  }, [myPlayer]);
-
-  useEffect(() => {
-    roomCodeRef.current = code;
-  }, [code]);
-
-  useEffect(() => {
-    if (myPlayer) {
-      autoRejoinAttemptedCodeRef.current = null;
-      clearDismissedRoomRejoin(code);
-    }
-  }, [code, myPlayer]);
-
-  useEffect(() => {
-    if (game?.status !== "active" && game?.status !== "waiting") return;
-
-    setLiveNow(Date.now());
-    const interval = window.setInterval(() => {
-      setLiveNow(Date.now());
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [game?.status]);
-
-  const leaveCurrentRoom = useCallback(
-    async (silent: boolean) => {
-      if (hasLeftRoomRef.current) return true;
-      if (!myPlayerRef.current) return false;
-
-      hasLeftRoomRef.current = true;
-      try {
-        await leaveRoom({ code: roomCodeRef.current });
-        return true;
-      } catch (error) {
-        hasLeftRoomRef.current = false;
-        if (!silent) {
-          const message =
-            error instanceof Error ? error.message : "Failed to leave room.";
-          setLeaveMessage(message);
-        }
-        return false;
-      }
-    },
-    [leaveRoom],
-  );
-
-  const memberById = useMemo(
-    () =>
-      new Map(
-        (roomData?.members ?? []).map((member) => [String(member._id), member]),
-      ),
-    [roomData?.members],
-  );
-
-  const getPlayerName = useCallback(
-    (targetPlayerId: string, handIndex?: number) => {
-      const member = memberById.get(targetPlayerId);
-      const botCharacter = getBotCharacterForAuthUserId(member?.authUserId);
-      return (
-        botCharacter?.name ??
-        member?.name ??
-        (handIndex !== undefined ? `Player ${handIndex + 1}` : "Player")
-      );
-    },
-    [memberById],
-  );
-
-  const getPlayerAvatar = useCallback(
-    (targetPlayerId: string) => memberById.get(targetPlayerId)?.image ?? null,
-    [memberById],
-  );
-
-  const getPlayerPersonality = useCallback(
-    (targetPlayerId: string): string | null => {
-      const member = memberById.get(targetPlayerId);
-      const botCharacter = getBotCharacterForAuthUserId(member?.authUserId);
-      return botCharacter?.title ?? null;
-    },
-    [memberById],
-  );
-
-  const nonDealerHands = useMemo(
-    () =>
-      [...(playerHands ?? [])]
-        .filter((hand) => hand.playerId !== DEALER_PLAYER_ID)
-        .sort((a, b) => {
-          const seatA =
-            memberById.get(a.playerId)?.seatIndex ?? Number.MAX_SAFE_INTEGER;
-          const seatB =
-            memberById.get(b.playerId)?.seatIndex ?? Number.MAX_SAFE_INTEGER;
-          return seatA - seatB;
-        }),
-    [memberById, playerHands],
-  );
-
-  const bottomPlayerId =
-    playerId ?? nameMatchedPlayerId ?? nonDealerHands[0]?.playerId ?? undefined;
-
-  const rotatedHands = useMemo(() => {
-    if (!bottomPlayerId || nonDealerHands.length === 0) return nonDealerHands;
-    const bottomIndex = nonDealerHands.findIndex(
-      (hand) => hand.playerId === bottomPlayerId,
-    );
-    if (bottomIndex <= 0) return nonDealerHands;
-    return [
-      ...nonDealerHands.slice(bottomIndex),
-      ...nonDealerHands.slice(0, bottomIndex),
-    ];
-  }, [bottomPlayerId, nonDealerHands]);
-
-  const turnOrderedHands = useMemo(
-    () =>
-      [...(playerHands ?? [])].sort((a, b) => {
-        if (a.createdAt !== b.createdAt) {
-          return a.createdAt - b.createdAt;
-        }
-        return a.playerId.localeCompare(b.playerId);
-      }),
-    [playerHands],
-  );
-
-  const currentTurnPlayerId = useMemo(
-    () =>
-      game
-        ? (turnOrderedHands[game.currentPlayerIndex]?.playerId ?? null)
-        : null,
-    [game, turnOrderedHands],
-  );
-  const currentTurnPlayerName = useMemo(
-    () => (currentTurnPlayerId ? getPlayerName(currentTurnPlayerId) : null),
-    [currentTurnPlayerId, getPlayerName],
-  );
+  // --- Betting derivation ---
   const myHand = useMemo(
     () =>
       playerId
@@ -276,85 +65,55 @@ export function useRoomDetailsController(
     [playerHands, playerId],
   );
 
-  const isMyTurn =
-    currentTurnPlayerId === playerId &&
-    game?.status === "active" &&
-    !myHand?.hasFolded;
+  const turnOrderedPlayerIds = useMemo(
+    () => display.turnOrderedHands.map((h) => h.playerId),
+    [display.turnOrderedHands],
+  );
 
-  const canCheck = useMemo(() => {
-    if (
-      !game ||
-      !myHand ||
-      myHand.hasFolded ||
-      currentTurnPlayerId !== playerId ||
-      game.status !== "active"
-    ) {
-      return false;
-    }
-    return game.currentBet === 0 || myHand.betThisRound === game.currentBet;
-  }, [currentTurnPlayerId, game, myHand, playerId]);
+  const bettingInput = useMemo(
+    () => ({
+      game,
+      myHand: myHand as {
+        playerId: string;
+        chips: number;
+        betThisRound: number;
+        totalBet: number;
+        hasFolded: boolean;
+      } | null | undefined,
+      playerId,
+      turnOrderedPlayerIds,
+      raiseLadder: RAISE_LADDER,
+    }),
+    [game, myHand, playerId, turnOrderedPlayerIds],
+  );
 
-  const canCall = useMemo(() => {
-    if (
-      !game ||
-      !myHand ||
-      myHand.hasFolded ||
-      currentTurnPlayerId !== playerId ||
-      game.status !== "active"
-    ) {
-      return false;
+  const myTurn = isMyTurn(bettingInput);
+  const checkable = canCheck(bettingInput);
+  const callable = canCall(bettingInput);
+  const callAmt = callAmount(game, myHand);
+  const raiseOptions = getAvailableRaiseOptions(bettingInput);
+  const raisable = raiseOptions.length > 0;
+  const raisesThisRound = getRaisesThisRound(game);
+  const maxRaisesPerRound = getMaxRaisesPerRound(game);
+
+  // Raise amount state
+  const [selectedRaiseAmount, setSelectedRaiseAmount] = useState<number | null>(
+    null,
+  );
+  useEffect(() => {
+    if (raiseOptions.length === 0) {
+      setSelectedRaiseAmount(null);
+      return;
     }
-    const amountNeeded = game.currentBet - myHand.betThisRound;
-    return (
-      game.currentBet > 0 && amountNeeded > 0 && myHand.chips >= amountNeeded
+    setSelectedRaiseAmount((current) =>
+      current !== null && raiseOptions.includes(current)
+        ? current
+        : raiseOptions[0],
     );
-  }, [currentTurnPlayerId, game, myHand, playerId]);
+  }, [raiseOptions]);
 
-  const callAmount = useMemo(() => {
-    if (!game || !myHand) return 0;
-    return game.currentBet - myHand.betThisRound;
-  }, [game, myHand]);
-  const hasPendingTurnClock = game?.turnClockExpiresAt !== undefined;
-  const turnClockTimeRemaining = useMemo(() => {
-    if (game?.turnClockExpiresAt === undefined) return null;
-    return Math.max(0, game.turnClockExpiresAt - liveNow);
-  }, [game?.turnClockExpiresAt, liveNow]);
-  const turnClockTargetName = useMemo(
-    () =>
-      game?.turnClockTargetPlayerId
-        ? getPlayerName(game.turnClockTargetPlayerId)
-        : null,
-    [game?.turnClockTargetPlayerId, getPlayerName],
-  );
-  const isTurnClockTarget = useMemo(
-    () =>
-      Boolean(
-        playerId &&
-          hasPendingTurnClock &&
-          game?.turnClockTargetPlayerId === playerId,
-      ),
-    [game?.turnClockTargetPlayerId, hasPendingTurnClock, playerId],
-  );
+  // --- Tutorial flags ---
   const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
-  const lobbyInactivityTimeRemainingMs = useMemo(() => {
-    if (
-      !roomData?.room ||
-      game?.status !== "waiting" ||
-      isTutorialRoom
-    ) {
-      return null;
-    }
-
-    return Math.max(
-      0,
-      roomData.room.lastActiveAt + ROOM_INACTIVITY_TIMEOUT_MS - liveNow,
-    );
-  }, [
-    game?.status,
-    isTutorialRoom,
-    liveNow,
-    roomData?.room,
-  ]);
   const isTutorialBettingPaused =
     isTutorialRoom &&
     game?.status === "active" &&
@@ -362,562 +121,179 @@ export function useRoomDetailsController(
     game.stage !== "final" &&
     game.turnStartedAt === undefined;
 
-  const raisesThisRound = game?.raisesThisRound ?? 0;
-  const raiseLadder = game?.config?.raiseLadder ?? RAISE_LADDER;
-  const maxRaisesPerRound =
-    game?.config?.maxRaisesPerRound ?? MAX_RAISES_PER_ROUND;
-  const showdownTimerMs = game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
-  const bettingStructure = game?.config?.bettingStructure;
-  const turnTimeRemaining = useMemo(() => {
-    return turnClockTimeRemaining;
-  }, [turnClockTimeRemaining]);
-  const availableRaiseOptions = useMemo(() => {
-    if (
-      !game ||
-      !myHand ||
-      !isMyTurn ||
-      game.status !== "active" ||
-      raisesThisRound >= maxRaisesPerRound
-    ) {
-      return [];
-    }
+  // --- Current turn ---
+  const currentTurnPlayerId = useMemo(
+    () =>
+      game
+        ? (display.turnOrderedHands[game.currentPlayerIndex]?.playerId ?? null)
+        : null,
+    [game, display.turnOrderedHands],
+  );
 
-    const amountToCall = game.currentBet - myHand.betThisRound;
-    const potLimitMaxRaiseTo =
-      bettingStructure === "potLimit"
-        ? game.pot + Math.max(0, amountToCall)
-        : Number.POSITIVE_INFINITY;
-
-    return raiseLadder.filter((amount) => {
-      return (
-        amount > game.currentBet &&
-        amount <= potLimitMaxRaiseTo &&
-        amount - myHand.betThisRound <= myHand.chips
-      );
-    });
-  }, [
-    bettingStructure,
+  // --- Timers ---
+  const timers = useRoomTimers(
     game,
-    isMyTurn,
-    maxRaisesPerRound,
-    myHand,
-    raiseLadder,
-    raisesThisRound,
-  ]);
-  const canRaise = availableRaiseOptions.length > 0;
-
-  useEffect(() => {
-    if (availableRaiseOptions.length === 0) {
-      setSelectedRaiseAmount(null);
-      return;
-    }
-
-    setSelectedRaiseAmount((current) =>
-      current !== null && availableRaiseOptions.includes(current)
-        ? current
-        : availableRaiseOptions[0],
-    );
-  }, [availableRaiseOptions]);
-
-  const displayHands = useMemo(() => {
-    if (game?.status === "waiting" && roomData?.members) {
-      return roomData.members.map((member) => ({
-        _id: String(member._id),
-        playerId: String(member._id),
-        tiles: [],
-        chips: INITIAL_CHIPS,
-        betThisRound: 0,
-        totalBet: 0,
-      }));
-    }
-    return rotatedHands;
-  }, [game?.status, roomData?.members, rotatedHands]);
-
-  useRoomPresence(code, Boolean(session?.user && roomData?.room && myPlayer));
-
-  useEffect(() => {
-    if (
-      isAuthPending ||
-      !session?.user ||
-      myPlayer ||
-      !roomData?.viewerSeatPreview ||
-      isRoomRejoinDismissed(code) ||
-      autoRejoinAttemptedCodeRef.current === code
-    ) {
-      return;
-    }
-
-    autoRejoinAttemptedCodeRef.current = code;
-    const displayName =
-      session.user.name?.trim() || session.user.email || "Player";
-
-    void (async () => {
-      try {
-        await rejoinRoomByCode({ code, name: displayName });
-        hasLeftRoomRef.current = false;
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to rejoin room.";
-        setGameMessage(message);
-      }
-    })();
-  }, [
-    code,
-    isAuthPending,
-    isRoomRejoinDismissed,
-    myPlayer,
-    rejoinRoomByCode,
-    roomData?.viewerSeatPreview,
-    session?.user,
-  ]);
-
-  useEffect(() => {
-    logTutorialDebug("room-controller:query-state", {
-      code,
-      allowGuestTutorial,
-      hasSessionUser: Boolean(session?.user),
-      isAuthPending,
-      guest: describeTutorialGuestIdForDebug(tutorialGuestAuthUserId),
-      roomDataState:
-        roomData === undefined ? "loading" : roomData === null ? "null" : "ready",
-      roomTutorialId: roomData?.room.tutorialId ?? null,
-      viewerPlayerId: roomData?.viewerPlayerId ?? null,
-      myPlayerId: myPlayer?._id ?? null,
-    });
-  }, [
-    allowGuestTutorial,
-    code,
-    isAuthPending,
-    myPlayer?._id,
     roomData,
-    session?.user,
-    tutorialGuestAuthUserId,
-  ]);
-
-  useEffect(() => {
-    if (isAuthPending) return;
-    if (session?.user) {
-      logTutorialDebug("room-controller:redirect-check:skip-session", { code });
-      return;
-    }
-    if (allowGuestTutorial && roomData === undefined) {
-      logTutorialDebug("room-controller:redirect-check:skip-loading-tutorial", {
-        code,
-      });
-      return;
-    }
-    if (roomData?.room.tutorialId === "first-bot-game") {
-      logTutorialDebug("room-controller:redirect-check:skip-tutorial-room", {
-        code,
-        allowGuestTutorial,
-      });
-      return;
-    }
-
-    if (roomData !== undefined) {
-      logTutorialDebug("room-controller:redirect-check:navigate-login", {
-        code,
-        allowGuestTutorial,
-        roomDataState: roomData === null ? "null" : "ready",
-        roomTutorialId: roomData?.room.tutorialId ?? null,
-      });
-      void navigate({ to: "/login" });
-    }
-  }, [allowGuestTutorial, isAuthPending, navigate, roomData, session?.user]);
-
-  useEffect(() => {
-    if (!isTransientActionMessage(gameMessage)) return;
-    setGameMessage(null);
-  }, [game?.currentBet, game?.currentPlayerIndex, game?.stage, gameMessage]);
-
-  useEffect(() => {
-    if (!roomData?.room._id || game !== null || isCreatingGame) return;
-
-    const autoCreateGame = async () => {
-      setIsCreatingGame(true);
-      try {
-        await createGameForRoom({ roomId: roomData.room._id });
-      } catch (error) {
-        console.error("Failed to auto-create game:", error);
-      } finally {
-        setIsCreatingGame(false);
-      }
-    };
-
-    void autoCreateGame();
-  }, [createGameForRoom, game, isCreatingGame, roomData?.room._id]);
-
-  const wasRoomOpenRef = useRef(false);
-  useEffect(() => {
-    if (roomData === undefined) return;
-
-    const isCurrentlyOpen = roomData !== null && roomData.room.status === "open";
-
-    if (wasRoomOpenRef.current && !isCurrentlyOpen) {
-      toast.warning("Room closed due to inactivity", {
-        description: "You will be redirected to the lobby.",
-        duration: 5000,
-      });
-      setTimeout(() => {
-        void navigate({ to: "/" });
-      }, 1500);
-    }
-
-    wasRoomOpenRef.current = isCurrentlyOpen;
-  }, [roomData, navigate, code]);
-
-  const handleLeaveRoom = useCallback(async () => {
-    if (!myPlayerRef.current) {
-      setLeaveMessage("You are not a member of this room.");
-      return;
-    }
-
-    setIsLeavingRoom(true);
-    setLeaveMessage(null);
-
-    try {
-      const didLeave = await leaveCurrentRoom(false);
-      if (didLeave) {
-        dismissRoomRejoin(code);
-        await navigate({ to: "/" });
-      }
-    } finally {
-      setIsLeavingRoom(false);
-    }
-  }, [code, leaveCurrentRoom, navigate]);
-
-  const handleBack = useCallback(async () => {
-    if (isLeavingRoom) return;
-    setIsLeavingRoom(true);
-    setLeaveMessage(null);
-    dismissRoomRejoin(code);
-    try {
-      await leaveCurrentRoom(true);
-      await navigate({ to: "/" });
-    } finally {
-      setIsLeavingRoom(false);
-    }
-  }, [code, isLeavingRoom, leaveCurrentRoom, navigate]);
-
-  const handleViewResults = useCallback(async () => {
-    await navigate({ to: "/results/$code", params: { code } });
-  }, [code, navigate]);
-
-  useEffect(() => {
-    if (game?.status !== "completed" || !showdownResults) return;
-    void handleViewResults();
-  }, [game?.status, handleViewResults, showdownResults]);
-
-  useEffect(() => {
-    if (lobbyInactivityTimeRemainingMs !== 0 || game?.status !== "waiting") {
-      return;
-    }
-
-    dismissRoomRejoin(code);
-    toast.warning("Room closed due to inactivity", {
-      description: "You will be redirected to the lobby.",
-      duration: 5000,
-    });
-
-    void (async () => {
-      await leaveCurrentRoom(true);
-      await navigate({ to: "/" });
-    })();
-  }, [
-    code,
-    game?.status,
-    leaveCurrentRoom,
-    lobbyInactivityTimeRemainingMs,
-    navigate,
-  ]);
-
-  useEffect(() => {
-    if (
-      game?.stage !== "showdown" ||
-      game?.status !== "active" ||
-      game.showdownStartedAt === undefined
-    ) {
-      setShowdownTimeRemaining(null);
-      return;
-    }
-
-    const showdownStart = game.showdownStartedAt;
-
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - showdownStart;
-      const remaining = Math.max(0, showdownTimerMs - elapsed);
-
-      setShowdownTimeRemaining(remaining);
-
-      if (remaining === 0) {
-        clearInterval(interval);
-        if (isTutorialRoom) return;
-        const hasSubmitted = wordSubmissions?.submissions?.some(
-          (submission) => submission.playerId === playerId,
-        );
-        if (
-          !hasSubmitted &&
-          playerId &&
-          game._id &&
-          myHand &&
-          !myHand.hasFolded
-        ) {
-          void forfeitShowdown({ gameId: game._id, playerId });
-        }
-      }
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [
-    game?.stage,
-    game?.status,
-    game?.showdownStartedAt,
-    game?._id,
-    showdownTimerMs,
-    myHand,
     playerId,
-    wordSubmissions,
-    forfeitShowdown,
+    display.getPlayerName,
     isTutorialRoom,
-  ]);
+  );
 
-  const handleCheck = useCallback(async () => {
-    if (!game?._id || !playerId) return;
-    setIsBetting(true);
-    setGameMessage(null);
-    try {
-      await check({ gameId: game._id, playerId });
-      setGameMessage("Checked.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to check.";
-      setGameMessage(message);
-    } finally {
-      setIsBetting(false);
-    }
-  }, [check, game?._id, playerId]);
-
-  const handleCall = useCallback(async () => {
-    if (!game?._id || !playerId) return;
-    setIsBetting(true);
-    setGameMessage(null);
-    try {
-      const result = await call({ gameId: game._id, playerId });
-      setGameMessage(`Matched ${result.amountCalled} chips.`);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to call.";
-      setGameMessage(message);
-    } finally {
-      setIsBetting(false);
-    }
-  }, [call, game?._id, playerId]);
-
-  const handleRaise = useCallback(async () => {
-    if (!game?._id || !playerId || selectedRaiseAmount === null) {
-      return;
-    }
-    if (raisesThisRound >= maxRaisesPerRound) {
-      setGameMessage(
-        `Raise limit reached (${maxRaisesPerRound}/${maxRaisesPerRound}).`,
-      );
-      return;
-    }
-    setIsBetting(true);
-    setGameMessage(null);
-    try {
-      await raise({
-        gameId: game._id,
-        playerId,
-        raiseToAmount: selectedRaiseAmount,
-      });
-      setGameMessage(`Raised to ${selectedRaiseAmount} chips.`);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to raise.";
-      setGameMessage(message);
-    } finally {
-      setIsBetting(false);
-    }
-  }, [
+  // --- Betting actions ---
+  const bettingActions = useBettingActions(
     game?._id,
-    maxRaisesPerRound,
     playerId,
-    raise,
+    maxRaisesPerRound,
     raisesThisRound,
     selectedRaiseAmount,
-  ]);
+  );
 
-  const handleFold = useCallback(async () => {
-    if (!game?._id || !playerId) return;
-    setIsBetting(true);
-    setGameMessage(null);
-    try {
-      await fold({ gameId: game._id, playerId });
-      setGameMessage("Folded.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to fold.";
-      setGameMessage(message);
-    } finally {
-      setIsBetting(false);
-    }
-  }, [fold, game?._id, playerId]);
+  // --- Ready ---
+  const ready = useRoomReady(
+    code,
+    isTutorialRoom,
+    Boolean(session?.user),
+    tutorialGuestAuthUserId,
+  );
 
-  const handleToggleReady = useCallback(async () => {
-    setIsTogglingReady(true);
-    setGameMessage(null);
-    try {
-      await toggleReady({
-        code,
-        guestAuthUserId:
-          isTutorialRoom && !session?.user
-            ? tutorialGuestAuthUserId ?? undefined
-            : undefined,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to toggle ready status.";
-      setGameMessage(message);
-    } finally {
-      setIsTogglingReady(false);
-    }
-  }, [code, isTutorialRoom, session?.user, toggleReady, tutorialGuestAuthUserId]);
+  // --- Leave ---
+  const leave = useRoomLeave(code);
 
-  const handleDevRejoinRoom = useCallback(async () => {
-    if (!import.meta.env.DEV) return;
+  // --- Presence ---
+  useRoomPresence(code, Boolean(session?.user && roomData?.room && myPlayer));
 
-    const displayName =
-      session?.user?.name?.trim() || session?.user?.email || "Dev Player";
+  // --- Reactions (auto-rejoin, redirects, auto-create game, expiry forfeits) ---
+  const reactions = useRoomReactions({
+    code,
+    isAuthPending,
+    hasSessionUser: Boolean(session?.user),
+    allowGuestTutorial: options.allowGuestTutorial === true,
+    roomData: roomData as {
+      room: { _id: string; status: string; tutorialId?: string | null };
+    } | null | undefined,
+    game: game as {
+      _id: string;
+      status: string;
+      currentBet?: number;
+      currentPlayerIndex?: number;
+      stage?: string;
+    } | null | undefined,
+    myPlayer,
+    playerId,
+    didShowdownExpire: timers.didShowdownExpire,
+    didLobbyExpire: timers.didLobbyExpire,
+    isTutorialRoom,
+    gameMessage: bettingActions.gameMessage,
+    setGameMessage: bettingActions.setGameMessage,
+    resetLeftFlag: leave.resetLeftFlag,
+    leaveCurrentRoom: leave.leaveCurrentRoom,
+  });
 
-    setIsDevRejoining(true);
-    setGameMessage(null);
-    try {
-      await debugRejoinRoom({ code, name: displayName });
-      hasLeftRoomRef.current = false;
-      setGameMessage("Rejoined room for development.");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to rejoin room.";
-      setGameMessage(message);
-    } finally {
-      setIsDevRejoining(false);
-    }
-  }, [code, debugRejoinRoom, session?.user?.email, session?.user?.name]);
+  // --- Dev tools ---
+  const devTools = useRoomDevTools(
+    code,
+    session?.user?.name,
+    session?.user?.email,
+  );
 
-  const handleDevFillRoomWithBots = useCallback(async () => {
-    if (!import.meta.env.DEV) return;
-
-    setIsDevFillingBots(true);
-    setGameMessage(null);
-    try {
-      const result = await debugFillRoomWithBots({ code, count: 2 });
-      setGameMessage(
-        result.added > 0
-          ? `Added ${result.added} test player${result.added === 1 ? "" : "s"}.`
-          : "No open seats available for test players.",
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to add test players.";
-      setGameMessage(message);
-    } finally {
-      setIsDevFillingBots(false);
-    }
-  }, [code, debugFillRoomWithBots]);
+  // --- Context value construction ---
+  const showdownTimerMs =
+    game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
 
   const roomGameContextValue: RoomGameContextValue = useMemo(
     () => ({
       anteAmount: ANTE_AMOUNT,
       raisesThisRound,
       maxRaisesPerRound,
-      actionMessage: gameMessage,
+      actionMessage: bettingActions.gameMessage,
       showBettingControls:
         game?.status === "active" &&
         game.stage !== "final" &&
         game.stage !== "showdown" &&
         !isTutorialBettingPaused,
       showReadyButton: game?.status === "waiting",
-      onReady: game?.status === "waiting" ? handleToggleReady : undefined,
+      onReady: game?.status === "waiting" ? ready.handleToggleReady : undefined,
       isReady: myPlayer?.readyStatus ?? false,
-      isTogglingReady,
-      lobbyInactivityTimeRemainingMs,
+      isTogglingReady: ready.isTogglingReady,
+      lobbyInactivityTimeRemainingMs: timers.lobbyInactivityTimeRemainingMs,
       readyCount:
         roomData?.members.filter((member) => member.readyStatus).length ?? 0,
       totalPlayers: roomData?.members.length ?? 0,
       allPlayersReady:
         (roomData?.members?.length ?? 0) >= 2 &&
         (roomData?.members?.every((member) => member.readyStatus) ?? false),
-      isBetting,
-      isMyTurn,
-      canCheck,
-      canCall,
-      canRaise,
-      canFold: isMyTurn,
-      currentTurnPlayerName,
-      onCheck: canCheck ? handleCheck : undefined,
-      onCall: canCall ? handleCall : undefined,
-      onRaise: isMyTurn ? handleRaise : undefined,
-      onFold: isMyTurn ? handleFold : undefined,
-      onRaiseAmountChange: canRaise ? setSelectedRaiseAmount : undefined,
-      onLeaveRoom: handleBack,
-      callLabel: callAmount > 0 ? `Call ${callAmount}` : "Call",
-      callAmount,
+      isBetting: bettingActions.isBetting,
+      isMyTurn: myTurn,
+      canCheck: checkable,
+      canCall: callable,
+      canRaise: raisable,
+      canFold: myTurn,
+      currentTurnPlayerName:
+        currentTurnPlayerId
+          ? display.getPlayerName(currentTurnPlayerId)
+          : null,
+      onCheck: checkable ? bettingActions.handleCheck : undefined,
+      onCall: callable ? bettingActions.handleCall : undefined,
+      onRaise: myTurn ? bettingActions.handleRaise : undefined,
+      onFold: myTurn ? bettingActions.handleFold : undefined,
+      onRaiseAmountChange: raisable ? setSelectedRaiseAmount : undefined,
+      onLeaveRoom: leave.handleBack,
+      callLabel: callAmt > 0 ? `Call ${callAmt}` : "Call",
+      callAmount: callAmt,
       raiseLabel:
         selectedRaiseAmount !== null
           ? `Raise to ${selectedRaiseAmount}`
           : "Raise Maxed",
       raiseAmount: selectedRaiseAmount,
-      raiseOptions: availableRaiseOptions,
-      turnClockTimeRemaining,
-      turnClockTargetName,
-      isTurnClockTarget,
-      showdownTimeRemaining,
-      turnTimeRemaining,
+      raiseOptions,
+      turnClockTimeRemaining: timers.turnClockTimeRemaining,
+      turnClockTargetName: timers.turnClockTargetName,
+      isTurnClockTarget: timers.isTurnClockTarget,
+      showdownTimeRemaining: timers.showdownTimeRemaining,
+      turnTimeRemaining: timers.turnClockTimeRemaining,
       isShowdownSubmissionOpen:
-        game?.stage !== "showdown" ||
-        game.status !== "active" ||
-        game.showdownStartedAt !== undefined,
+        !(
+          game?.stage === "showdown" &&
+          game.status === "active" &&
+          game.showdownStartedAt !== undefined
+        ),
       isTutorialBettingPaused,
       isTutorialRoom,
     }),
     [
-      availableRaiseOptions,
-      callAmount,
-      canCall,
-      canCheck,
-      canRaise,
-      currentTurnPlayerName,
+      bettingActions.gameMessage,
+      bettingActions.handleCheck,
+      bettingActions.handleCall,
+      bettingActions.handleRaise,
+      bettingActions.handleFold,
+      bettingActions.isBetting,
+      callAmt,
+      callable,
+      checkable,
+      currentTurnPlayerId,
+      display,
       game?.stage,
       game?.status,
       game?.showdownStartedAt,
-      game?.turnStartedAt,
-      gameMessage,
-      handleBack,
-      handleCall,
-      handleCheck,
-      handleFold,
-      handleRaise,
-      handleToggleReady,
-      isBetting,
-      isMyTurn,
-      isTurnClockTarget,
-      isTogglingReady,
       isTutorialBettingPaused,
       isTutorialRoom,
-      lobbyInactivityTimeRemainingMs,
+      leave.handleBack,
       maxRaisesPerRound,
       myPlayer?.readyStatus,
+      myTurn,
+      raisable,
+      raiseOptions,
       raisesThisRound,
+      ready.handleToggleReady,
+      ready.isTogglingReady,
       roomData?.members,
-      roomData?.room.tutorialId,
       selectedRaiseAmount,
-      showdownTimeRemaining,
-      turnClockTargetName,
-      turnClockTimeRemaining,
-      turnTimeRemaining,
+      showdownTimerMs,
+      timers.lobbyInactivityTimeRemainingMs,
+      timers.turnClockTimeRemaining,
+      timers.turnClockTargetName,
+      timers.isTurnClockTarget,
+      timers.showdownTimeRemaining,
     ],
   );
 
@@ -931,95 +307,97 @@ export function useRoomDetailsController(
         showdownResults: showdownResults ?? undefined,
         playerId,
         myPlayerReady: myPlayer?.readyStatus ?? false,
-        isLeavingRoom,
-        leaveMessage,
-        gameMessage,
-        isTogglingReady,
-        isBetting,
-        isMyTurn,
-        canCheck,
-        canCall,
-        canRaise,
-        callAmount,
-        turnClockTimeRemaining,
+        isLeavingRoom: leave.isLeavingRoom,
+        leaveMessage: leave.leaveMessage,
+        gameMessage: bettingActions.gameMessage,
+        isTogglingReady: ready.isTogglingReady,
+        isBetting: bettingActions.isBetting,
+        isMyTurn: myTurn,
+        canCheck: checkable,
+        canCall: callable,
+        canRaise: raisable,
+        callAmount: callAmt,
+        turnClockTimeRemaining: timers.turnClockTimeRemaining,
         effectiveNextRaiseLevel: selectedRaiseAmount ?? undefined,
         hasDevTools: import.meta.env.DEV,
-        isDevRejoining,
-        isDevFillingBots,
+        isDevRejoining: devTools.isDevRejoining,
+        isDevFillingBots: devTools.isDevFillingBots,
       },
       actions: {
-        leaveRoom: handleLeaveRoom,
-        back: handleBack,
-        toggleReady: handleToggleReady,
-        check: handleCheck,
-        call: handleCall,
-        raise: handleRaise,
-        fold: handleFold,
-        devRejoinRoom: import.meta.env.DEV ? handleDevRejoinRoom : undefined,
+        leaveRoom: leave.handleLeaveRoom,
+        back: leave.handleBack,
+        toggleReady: ready.handleToggleReady,
+        check: bettingActions.handleCheck,
+        call: bettingActions.handleCall,
+        raise: bettingActions.handleRaise,
+        fold: bettingActions.handleFold,
+        devRejoinRoom: import.meta.env.DEV
+          ? devTools.handleDevRejoinRoom
+          : undefined,
         devFillRoomWithBots: import.meta.env.DEV
-          ? handleDevFillRoomWithBots
+          ? devTools.handleDevFillRoomWithBots
           : undefined,
       },
       meta: {
-        getPlayerName,
-        getPlayerAvatar,
-        getPlayerPersonality,
+        getPlayerName: display.getPlayerName,
+        getPlayerAvatar: display.getPlayerAvatar,
+        getPlayerPersonality: display.getPlayerPersonality,
       },
     }),
     [
-      callAmount,
-      canCall,
-      canCheck,
-      canRaise,
+      bettingActions.gameMessage,
+      bettingActions.handleCall,
+      bettingActions.handleCheck,
+      bettingActions.handleFold,
+      bettingActions.handleRaise,
+      bettingActions.isBetting,
+      callAmt,
+      callable,
+      checkable,
       code,
+      devTools.handleDevRejoinRoom,
+      devTools.handleDevFillRoomWithBots,
+      devTools.isDevRejoining,
+      devTools.isDevFillingBots,
+      display.getPlayerAvatar,
+      display.getPlayerName,
+      display.getPlayerPersonality,
       game,
-      gameMessage,
-      getPlayerAvatar,
-      getPlayerName,
-      getPlayerPersonality,
-      handleBack,
-      handleCall,
-      handleCheck,
-      handleDevFillRoomWithBots,
-      handleDevRejoinRoom,
-      handleFold,
-      handleLeaveRoom,
-      handleRaise,
-      handleToggleReady,
-      isBetting,
-      isDevFillingBots,
-      isDevRejoining,
-      isLeavingRoom,
-      isMyTurn,
-      isTogglingReady,
-      leaveMessage,
+      leave.handleBack,
+      leave.handleLeaveRoom,
+      leave.isLeavingRoom,
+      leave.leaveMessage,
       myPlayer?.readyStatus,
+      myTurn,
       playerHands,
       playerId,
+      raisable,
+      ready.handleToggleReady,
+      ready.isTogglingReady,
       roomData,
       selectedRaiseAmount,
       showdownResults,
-      turnClockTimeRemaining,
+      timers.turnClockTimeRemaining,
     ],
   );
 
   return {
-    session,
+    session: session ?? undefined,
     isAuthPending,
     roomData,
     game,
     myPlayer,
     currentTurnPlayerId,
-    displayHands,
-    bottomPlayerId,
-    getPlayerName,
-    getPlayerAvatar,
-    getPlayerPersonality,
+    displayHands: display.displayHands,
+    bottomPlayerId: display.bottomPlayerId,
+    getPlayerName: display.getPlayerName,
+    getPlayerAvatar: display.getPlayerAvatar,
+    getPlayerPersonality: display.getPlayerPersonality,
     roomGameContextValue,
     roomPageContextValue,
-    isDevRejoining,
-    isDevFillingBots,
-    onDevRejoinRoom: handleDevRejoinRoom,
-    onDevFillRoomWithBots: handleDevFillRoomWithBots,
+    isDevRejoining: devTools.isDevRejoining,
+    isDevFillingBots: devTools.isDevFillingBots,
+    onDevRejoinRoom: devTools.handleDevRejoinRoom,
+    onDevFillRoomWithBots: devTools.handleDevFillRoomWithBots,
   };
 }

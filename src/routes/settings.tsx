@@ -38,11 +38,11 @@ function SettingsPage() {
   const [isSavingHelperPreference, setIsSavingHelperPreference] =
     useState(false);
   const preferences = useQuery(
-    (api as any).userPreferences.getMyPreferences,
+    api.userPreferences.getMyPreferences,
     session?.user ? {} : "skip",
   );
   const setShowInGameHelperPreference = useMutation(
-    (api as any).userPreferences.setShowInGameHelper,
+    api.userPreferences.setShowInGameHelper,
   );
 
   useEffect(() => {

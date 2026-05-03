@@ -49,10 +49,10 @@ export const OnboardingCard = ({
   const tutorialStep = step as TutorialCardStep;
   const { closeNextStep, currentTour } = useNextStep();
   const resumeTutorialBetting = useMutation(
-    (api as any).rooms.resumeTutorialBetting,
+    api.rooms.resumeTutorialBetting,
   );
   const startTutorialShowdown = useMutation(
-    (api as any).rooms.startTutorialShowdown,
+    api.rooms.startTutorialShowdown,
   );
   const [isStartingShowdown, setIsStartingShowdown] = useState(false);
   const isHelperStep =

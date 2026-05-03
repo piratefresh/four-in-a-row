@@ -37,7 +37,7 @@ function App() {
   const activeRoom = useQuery(api.rooms.getMyActiveRoom);
   const createRoom = useMutation(api.rooms.createRoom);
   const createTutorialBotRoom = useMutation(
-    (api as any).rooms.createTutorialBotRoom,
+    api.rooms.createTutorialBotRoom,
   );
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);

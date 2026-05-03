@@ -40,7 +40,7 @@ function ResultsPage() {
   const [showTutorialSignupWall, setShowTutorialSignupWall] = useState(false);
   const [tutorialGuestAuthUserId] = useState(() => getTutorialGuestId());
 
-  const roomData = useQuery((api as any).rooms.getRoomMembers, {
+  const roomData = useQuery(api.rooms.getRoomMembers, {
     code,
     guestAuthUserId: session?.user
       ? undefined

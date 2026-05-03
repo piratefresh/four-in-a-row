@@ -66,7 +66,7 @@ function RoomDetailsPage() {
   const [isRestartingTutorial, setIsRestartingTutorial] = useState(false);
   const [tutorialGuestAuthUserId] = useState(() => getTutorialGuestId());
   const restartTutorialRoom = useMutation(
-    (api as any).rooms.restartTutorialRoom,
+    api.rooms.restartTutorialRoom,
   );
   const {
     session,
@@ -90,7 +90,7 @@ function RoomDetailsPage() {
     allowGuestTutorial: forcedTutorialReplay,
   });
   const preferences = useQuery(
-    (api as any).userPreferences.getMyPreferences,
+    api.userPreferences.getMyPreferences,
     session?.user ? {} : "skip",
   );
 
