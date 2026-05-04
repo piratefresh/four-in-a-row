@@ -2,11 +2,8 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { DEV_BOT_AUTH_PREFIX, INITIAL_CHIPS } from "./games/gamesShared";
-import { getBotCharacterForAuthUserId } from "./aiStrategy";
 
 const AI_DEALER_PLAYER_ID = "ai_dealer";
-
-const GAME_STAGES = ["preflop", "flop", "turn", "final"] as const;
 
 // ── Identity helpers ──────────────────────────────────────────────
 
@@ -19,17 +16,6 @@ function extractCharacterId(authUserId: string): string | undefined {
   const encoded = authUserId.slice(DEV_BOT_AUTH_PREFIX.length);
   const [characterId] = encoded.split(":");
   return characterId;
-}
-
-function extractPlayerName(
-  authUserId: string,
-  fallbackName: string,
-): string {
-  if (isBotAuthUserId(authUserId)) {
-    const character = getBotCharacterForAuthUserId(authUserId);
-    return character ? character.name : fallbackName;
-  }
-  return fallbackName;
 }
 
 type PlayerIdentity = {
@@ -436,15 +422,49 @@ export const getAllStats = query({
 });
 
 
-
 // ── Internal types ─────────────────────────────────────────────────
-/* eslint-disable @typescript-eslint/no-unused-vars */
 
-type StatsRow = ReturnType<typeof getAllStats> extends Promise<infer T>
-  ? T extends (infer U)[]
-    ? U
-    : never
-  : never;
+interface StatsRow {
+  identity: {
+    type: "human" | "bot";
+    authUserId?: string;
+    characterId?: string;
+    name: string;
+  };
+  gamesPlayed: number;
+  gamesWon: number;
+  winRate: number;
+  netChips: number;
+  totalChipsWon: number;
+  totalChipsLost: number;
+  bestChipFinish: number;
+  showdownsReached: number;
+  showdownsWon: number;
+  totalWords: number;
+  avgWordScore: number;
+  bestWord: string | null;
+  bestWordScore: number;
+  longestWord: string | null;
+  recentWords: Array<{ word: string; score: number; createdAt: number }>;
+  totalChecks: number;
+  totalCalls: number;
+  totalRaises: number;
+  totalFolds: number;
+  foldPercent: number;
+  vpip: number;
+  aggressionFactor: number;
+  foldsByStage: { preflop: number; flop: number; turn: number; final: number };
+  totalBluffs?: number;
+  totalFallbacks?: number;
+  bluffRate?: number;
+  fallbackRate?: number;
+  avgLatencyMs?: number;
+  avgHandStrength?: number;
+  totalAiDecisions?: number;
+  totalAiSuccesses?: number;
+  totalAiFailures?: number;
+  lastGameAt: number;
+}
 
 interface StatsAccumulator {
   identity: StatsRow["identity"];
@@ -459,7 +479,7 @@ interface StatsAccumulator {
   totalCalls: number;
   totalRaises: number;
   totalFolds: number;
-  foldsByStage: Record<string, number>;
+  foldsByStage: { preflop: number; flop: number; turn: number; final: number };
   survivingPreflop: number;
   allWords: Array<{
     word: string;
