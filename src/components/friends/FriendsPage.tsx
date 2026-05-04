@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "convex/react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { api } from "../../convex/_generated/api";
+import { api } from "../../../convex/_generated/api";
 
 function getInitials(name: string | undefined) {
   const safe = name?.trim();
@@ -28,7 +28,7 @@ export function FriendsPage() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
   const pendingRequests = useQuery(api["friendships/requests"].listPendingRequests);
-  const friends = useQuery(api.friendships.listFriends);
+  const friends = useQuery(api["friendships/index"].listFriends);
   const searchResults = useQuery(
     api["friendships/requests"].searchUsers,
     debouncedQuery.length > 0 ? { query: debouncedQuery } : "skip",
@@ -38,7 +38,7 @@ export function FriendsPage() {
   const acceptRequest = useMutation(api["friendships/requests"].acceptFriendRequest);
   const declineRequest = useMutation(api["friendships/requests"].declineFriendRequest);
   const cancelRequest = useMutation(api["friendships/requests"].cancelFriendRequest);
-  const removeFriend = useMutation(api.friendships.removeFriend);
+  const removeFriend = useMutation(api["friendships/index"].removeFriend);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);

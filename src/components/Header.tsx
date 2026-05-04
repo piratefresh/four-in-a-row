@@ -160,15 +160,22 @@ export default function Header() {
                 type="button"
                 className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-white/5"
               >
-                <Avatar className="h-8 w-8 border border-white/15">
-                  <AvatarImage
-                    src={session.user.image ?? undefined}
-                    alt={`${displayName} avatar`}
-                  />
-                  <AvatarFallback className="bg-neutral-200 text-xs font-semibold text-neutral-700">
-                    {getInitials(session.user.name)}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar className="h-8 w-8 border border-white/15">
+                    <AvatarImage
+                      src={session.user.image ?? undefined}
+                      alt={`${displayName} avatar`}
+                    />
+                    <AvatarFallback className="bg-neutral-200 text-xs font-semibold text-neutral-700">
+                      {getInitials(session.user.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {pendingNotifications && (pendingNotifications.friendRequests + pendingNotifications.gameInvites) > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-felt-deep">
+                      {pendingNotifications.friendRequests + pendingNotifications.gameInvites}
+                    </span>
+                  ) : null}
+                </div>
                 <div className="hidden items-center gap-1 sm:flex">
                   <p className="max-w-40 truncate text-sm sm:max-w-xs">
                     {displayName}

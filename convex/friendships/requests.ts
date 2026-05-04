@@ -5,6 +5,7 @@ import { ConvexError } from "convex/values";
 import { requireVerifiedUser } from "../verifyUser";
 import { isAlreadyFriends } from "./index";
 import { authComponent } from "../auth";
+import { components } from "../_generated/api";
 
 export function isSelfRequest(userId: string, targetUserId: string): boolean {
   return userId === targetUserId;
@@ -61,21 +62,19 @@ export const searchUsers = query({
     const isEmail = searchQuery.includes("@");
     let matchedUsers: any[] = [];
 
-    if (isEmail) {
-      matchedUsers = await ctx.db
-        .query("user")
-        .withIndex("email_name", (q: any) =>
-          q.gte("email", searchQuery).lt("email", searchQuery + "\uffff"))
-        .collect();
-    } else {
-      matchedUsers = await ctx.db
-        .query("user")
-        .withIndex("name", (q: any) =>
-          q.gte("name", searchQuery).lt("name", searchQuery + "\uffff"))
-        .collect();
-    }
+    const searchField = isEmail ? "email" : "name";
 
-    matchedUsers = matchedUsers.filter((u: any) => u.emailVerified).slice(0, 10);
+    // Query Better Auth's own user table via the component's adapter rather than
+    // ctx.db.query("user") which hits the app-level table (often empty).
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      where: [
+        { field: searchField, operator: "starts_with", value: searchQuery },
+      ],
+      paginationOpts: { numItems: 50, cursor: null },
+    });
+
+    matchedUsers = (result?.page ?? []).filter((u: any) => u.emailVerified).slice(0, 10);
 
     const results = [];
     for (const user of matchedUsers) {
