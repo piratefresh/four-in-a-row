@@ -25,6 +25,7 @@ export const appTables = {
     title: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("closed")),
     mode: v.optional(v.union(v.literal("riverRunSolo"))),
+    gameType: v.optional(v.string()),
     maxPlayers: v.number(),
     tutorialId: v.optional(v.union(v.literal("first-bot-game"))),
     isBotGame: v.optional(v.boolean()),
