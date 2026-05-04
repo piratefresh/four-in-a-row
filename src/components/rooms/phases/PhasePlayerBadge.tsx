@@ -250,6 +250,9 @@ export function PhasePlayerBadge({
               {statusLabel}
             </div>
           )}
+          <div className="mt-0.5 text-[10px] font-medium leading-none text-[#f3f1ea]/80 sm:text-[12px]">
+            ${chips}
+          </div>
         </div>
       ) : null}
     </div>

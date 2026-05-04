@@ -1,3 +1,4 @@
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
@@ -10,7 +11,7 @@ export function isSelfRequest(userId: string, targetUserId: string): boolean {
 }
 
 async function getUserProfile(
-  ctx: { db: any },
+  ctx: QueryCtx | MutationCtx,
   userId: string,
 ): Promise<{ name: string; image: string | null } | null> {
   try {
@@ -26,7 +27,7 @@ async function getUserProfile(
 }
 
 export async function hasPendingRequest(
-  ctx: { db: any },
+  ctx: QueryCtx | MutationCtx,
   fromUserId: string,
   toUserId: string,
 ): Promise<boolean> {
@@ -39,7 +40,7 @@ export async function hasPendingRequest(
 }
 
 export async function countPendingIncoming(
-  ctx: { db: any },
+  ctx: QueryCtx | MutationCtx,
   userId: string,
 ): Promise<number> {
   const incoming = await ctx.db
