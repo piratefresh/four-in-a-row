@@ -1,6 +1,6 @@
 import { ConvexHttpClient } from "convex/browser";
 import { loadEnv } from "vite";
-import { api, internal } from "../../convex/_generated/api";
+import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const env = loadEnv("test", process.cwd(), "");
@@ -169,4 +169,76 @@ export async function leaveCurrentRoom(
   } catch {
     // Already left or not in a room — ignore
   }
+}
+
+/**
+ * Create a tutorial bot room.
+ * Uses the e2e auth bypass to create a room with FIRST_BOT_GAME_TUTORIAL_ID.
+ */
+export async function createTutorialRoom(
+  client: ConvexHttpClient,
+  playerName?: string,
+): Promise<TestRoomResult> {
+  const room = await client.mutation(api.rooms.createTutorialBotRoom, {
+    name: playerName ?? `TutorialPlayer-${Date.now()}`,
+  });
+
+  return {
+    roomId: room.roomId,
+    code: room.code,
+    playerId: room.playerId,
+    seatIndex: room.seatIndex,
+    maxPlayers: room.maxPlayers,
+    authUserId: "",
+  };
+}
+
+/**
+ * Resume tutorial betting after the game has paused at a stage boundary.
+ * Must be called when turnStartedAt is undefined in a tutorial game.
+ */
+export async function resumeTutorialBetting(
+  client: ConvexHttpClient,
+  code: string,
+): Promise<void> {
+  await client.mutation(api.rooms.resumeTutorialBetting, { code });
+}
+
+/**
+ * Start the tutorial showdown after the game has paused before showdown.
+ * Must be called when showdownStartedAt is undefined in a tutorial game.
+ */
+export async function startTutorialShowdown(
+  client: ConvexHttpClient,
+  code: string,
+): Promise<void> {
+  await client.mutation(api.rooms.startTutorialShowdown, { code });
+}
+
+/**
+ * Submit the word "STRONG" for the human player during tutorial showdown.
+ * Uses the known tutorial deal: player hand [T, R] (R has 2L),
+ * community [S, O, N, G, L] (G has 3L).
+ */
+export async function submitTutorialWord(
+  client: ConvexHttpClient,
+  gameId: string,
+  playerId: string,
+): Promise<void> {
+  const tiles = [
+    { letter: "S", baseValue: 1, source: "community" as const, cardIndex: 0 },
+    { letter: "T", baseValue: 1, source: "hand" as const, cardIndex: 0 },
+    { letter: "R", baseValue: 1, multiplier: "2L" as const, source: "hand" as const, cardIndex: 1 },
+    { letter: "O", baseValue: 1, source: "community" as const, cardIndex: 1 },
+    { letter: "N", baseValue: 1, source: "community" as const, cardIndex: 2 },
+    { letter: "G", baseValue: 2, multiplier: "3L" as const, source: "community" as const, cardIndex: 3 },
+  ];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (client as any).mutation("games:submitWordInternal", {
+    gameId,
+    playerId,
+    word: "STRONG",
+    tiles,
+  });
 }

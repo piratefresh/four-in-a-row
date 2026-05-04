@@ -1,14 +1,9 @@
 import { useEffect, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { useNextStep } from "nextstepjs";
 import { CountdownTimer } from "@/components/ui/countdown-timer";
 import { ActionButton } from "./ActionButton";
 import { ShuffleTilesButton } from "./ShuffleTilesButton";
-import {
-  FIRST_BOT_GAME_TOUR,
-  getRoomCodeFromPathname,
-  getTourPausedStepStorageKey,
-} from "@/components/onboarding/wordPokerTours";
+import { useTutorialAdapterContext } from "../tutorial/TutorialAdapter";
 
 type ReadyControlsProps = {
   readyCount: number;
@@ -58,60 +53,18 @@ export function RoomActionControls({
   utility,
   helperTip,
 }: RoomActionControlsProps) {
-  const {
-    closeNextStep,
-    currentStep,
-    currentTour,
-    setCurrentStep,
-    startNextStep,
-  } = useNextStep();
+  const tutorial = useTutorialAdapterContext();
   const showRaiseChip = !!betting && (betting.raiseAmount ?? 0) > 0;
-  const advanceTutorialFromActionStep = () => {
-    if (currentTour === FIRST_BOT_GAME_TOUR && currentStep === 1) {
-      setCurrentStep(2, 50);
-    }
-  };
 
   useEffect(() => {
-    if (!betting?.isMyTurn || typeof window === "undefined") {
-      return;
-    }
-
-    const roomCode = getRoomCodeFromPathname(window.location.pathname);
-    const pausedStepKey = getTourPausedStepStorageKey(
-      FIRST_BOT_GAME_TOUR,
-      roomCode,
-    );
-
-    if (window.localStorage.getItem(pausedStepKey) !== "0") {
-      return;
-    }
-
-    window.localStorage.removeItem(pausedStepKey);
-    startNextStep(FIRST_BOT_GAME_TOUR);
-    setCurrentStep(1, 50);
-  }, [betting?.isMyTurn, setCurrentStep, startNextStep]);
+    if (!betting?.isMyTurn) return;
+    tutorial.onMyTurn();
+  }, [betting?.isMyTurn, tutorial]);
 
   if (ready) {
     const handleReadyClick = () => {
       ready.onReady?.();
-
-      if (
-        !ready.isReady &&
-        currentTour === FIRST_BOT_GAME_TOUR &&
-        currentStep === 0
-      ) {
-        if (typeof window !== "undefined") {
-          const roomCode = getRoomCodeFromPathname(window.location.pathname);
-          const pausedStepKey = getTourPausedStepStorageKey(
-            FIRST_BOT_GAME_TOUR,
-            roomCode,
-          );
-          window.localStorage.setItem(pausedStepKey, "0");
-        }
-
-        closeNextStep();
-      }
+      tutorial.onReadyClick();
     };
 
     return (
@@ -212,7 +165,7 @@ export function RoomActionControls({
             >
               <div className="hidden w-full flex-wrap items-center justify-center gap-1.5 xs:gap-2 sm:flex">
                 {helperTip}
-{utility?.onShuffleTiles ? (
+                {utility?.onShuffleTiles ? (
                   <ShuffleTilesButton
                     id="tutorial-shuffle-button"
                     onClick={() => utility.onShuffleTiles?.()}
@@ -223,7 +176,7 @@ export function RoomActionControls({
                   variant="fold"
                   onClick={() => {
                     betting.onFold?.();
-                    advanceTutorialFromActionStep();
+                    tutorial.onBettingAction();
                   }}
                   disabled={betting.isBetting || !betting.canFold}
                 >
@@ -234,11 +187,11 @@ export function RoomActionControls({
                   onClick={() => {
                     if (betting.canCheck) {
                       betting.onCheck?.();
-                      advanceTutorialFromActionStep();
+                      tutorial.onBettingAction();
                       return;
                     }
                     betting.onCall?.();
-                    advanceTutorialFromActionStep();
+                    tutorial.onBettingAction();
                   }}
                   disabled={
                     betting.isBetting || (!betting.canCheck && !betting.canCall)
@@ -259,7 +212,7 @@ export function RoomActionControls({
                   variant="raise"
                   onClick={() => {
                     betting.onRaise?.();
-                    advanceTutorialFromActionStep();
+                    tutorial.onBettingAction();
                   }}
                   disabled={betting.isBetting || !betting.canRaise}
                 >
@@ -291,7 +244,7 @@ export function RoomActionControls({
                     variant="fold"
                     onClick={() => {
                       betting.onFold?.();
-                      advanceTutorialFromActionStep();
+                      tutorial.onBettingAction();
                     }}
                     disabled={betting.isBetting || !betting.canFold}
                   >
@@ -302,11 +255,11 @@ export function RoomActionControls({
                     onClick={() => {
                       if (betting.canCheck) {
                         betting.onCheck?.();
-                        advanceTutorialFromActionStep();
+                        tutorial.onBettingAction();
                         return;
                       }
                       betting.onCall?.();
-                      advanceTutorialFromActionStep();
+                      tutorial.onBettingAction();
                     }}
                     disabled={
                       betting.isBetting ||
@@ -328,7 +281,7 @@ export function RoomActionControls({
                     variant="raise"
                     onClick={() => {
                       betting.onRaise?.();
-                      advanceTutorialFromActionStep();
+                      tutorial.onBettingAction();
                     }}
                     disabled={betting.isBetting || !betting.canRaise}
                   >

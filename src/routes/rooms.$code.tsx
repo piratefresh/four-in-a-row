@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import {
   RoomGameProvider,
   RoomHandsBoardV2,
@@ -17,14 +17,14 @@ import {
   ChatToggleButton,
 } from "@/components/rooms/chat/ChatSidebar";
 import { useChatSidebar } from "@/components/rooms/chat/useChatSidebar";
-import { RoomTutorialPhaseSync } from "@/components/onboarding/RoomTutorialPhaseSync";
-import { RoomTutorialLauncher } from "@/components/onboarding/RoomTutorialLauncher";
-import { FIRST_BOT_GAME_TOUR } from "@/components/onboarding/wordPokerTours";
+import { TutorialAdapterProvider } from "@/components/rooms/tutorial/TutorialAdapter";
+import { useTutorialAdapter } from "@/components/rooms/tutorial/useTutorialAdapter";
 import {
   describeTutorialGuestIdForDebug,
   getTutorialGuestId,
   logTutorialDebug,
 } from "@/lib/tutorial-guest";
+import { FIRST_BOT_GAME_TOUR } from "@/components/onboarding/wordPokerTours";
 
 type RoomSearch = {
   tutorial?: "intro" | "restart";
@@ -63,11 +63,7 @@ function RoomDetailsPage() {
   const forcedTutorialReplay =
     search.tutorial === "intro" || search.tutorial === "restart";
   const [isDesktopChatVisible, setIsDesktopChatVisible] = useState(false);
-  const [isRestartingTutorial, setIsRestartingTutorial] = useState(false);
-  const [tutorialGuestAuthUserId] = useState(() => getTutorialGuestId());
-  const restartTutorialRoom = useMutation(
-    api.rooms.restartTutorialRoom,
-  );
+
   const {
     session,
     isAuthPending,
@@ -108,10 +104,16 @@ function RoomDetailsPage() {
     };
   }, []);
 
-  const tutorialId = roomData?.room.tutorialId ?? null;
-  const isTutorialRoom = tutorialId === FIRST_BOT_GAME_TOUR;
+  const tutorialAdapter = useTutorialAdapter(
+    code,
+    roomData?.room.tutorialId,
+    game?.stage,
+    game?.turnStartedAt,
+    forcedTutorialReplay,
+  );
+
   const chat = useChatSidebar(
-    isTutorialRoom ? undefined : roomData?.room._id,
+    tutorialAdapter.isTutorialRoom ? undefined : roomData?.room._id,
     isDesktopChatVisible,
   );
   const activePlayerId = myPlayer?._id ? String(myPlayer._id) : undefined;
@@ -123,11 +125,12 @@ function RoomDetailsPage() {
     "hasFolded" in activePlayerHand &&
     activePlayerHand.hasFolded;
   const helperTipsEnabled =
-    !isTutorialRoom &&
+    !tutorialAdapter.isTutorialRoom &&
     preferences?.showInGameHelper === true &&
     !activePlayerHasFolded;
 
   useEffect(() => {
+    if (!tutorialAdapter.isTutorialRoom && !forcedTutorialReplay) return;
     logTutorialDebug("room:state", {
       code,
       searchTutorial: search.tutorial ?? null,
@@ -145,7 +148,9 @@ function RoomDetailsPage() {
       myPlayerId: myPlayer?._id ?? null,
       gameStatus: game?.status ?? null,
       gameStage: game?.stage ?? null,
-      guest: describeTutorialGuestIdForDebug(tutorialGuestAuthUserId),
+      guest: describeTutorialGuestIdForDebug(
+        getTutorialGuestId(),
+      ),
     });
   }, [
     code,
@@ -157,7 +162,6 @@ function RoomDetailsPage() {
     roomData,
     search.tutorial,
     session?.user,
-    tutorialGuestAuthUserId,
   ]);
 
   if (isAuthPending) {
@@ -244,103 +248,59 @@ function RoomDetailsPage() {
     );
   }
 
-  const replayTutorialButton = isTutorialRoom ? (
-    <button
-      type="button"
-      onClick={() => {
-        if (isRestartingTutorial) return;
-        void (async () => {
-          setIsRestartingTutorial(true);
-          try {
-            await restartTutorialRoom({
-              code,
-              guestAuthUserId: session?.user
-                ? undefined
-                : (tutorialGuestAuthUserId ?? undefined),
-            });
-            await navigate({
-              to: "/rooms/$code",
-              params: { code },
-              search: { tutorial: "restart" },
-            });
-          } finally {
-            setIsRestartingTutorial(false);
-          }
-        })();
-      }}
-      disabled={isRestartingTutorial}
-      className="rounded-full border border-[#d7b45e]/30 bg-[#120f07]/90 px-4 py-2 text-sm font-medium text-[#f4d99d] shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition-colors hover:border-[#d7b45e]/55 hover:text-[#fff0cb]"
-    >
-      {isRestartingTutorial ? "Resetting tutorial..." : "Replay tutorial"}
-    </button>
-  ) : null;
-
   return (
     <RoomPageProvider value={roomPageContextValue}>
-      <RoomTutorialLauncher
-        tutorialName={tutorialId}
-        roomCode={code}
-        forceStart={forcedTutorialReplay}
-      />
-      <RoomTutorialPhaseSync
-        gameStage={game.stage}
-        roomCode={code}
-        tutorialName={tutorialId}
-        isTutorialBettingPaused={
-          isTutorialRoom &&
-          game.stage !== "showdown" &&
-          game.stage !== "final" &&
-          game.turnStartedAt === undefined
-        }
-      />
-      <div
-        className="relative [@media(min-width:1441px)]:pr-[400px]"
-        data-testid="room-content"
-      >
-        <RoomGameProvider value={roomGameContextValue}>
-          <RoomHandsBoardV2
-            gameId={game._id}
-            activePlayerId={activePlayerId}
-            helperTipsEnabled={helperTipsEnabled}
-            roomCode={code}
-            currentTurnPlayerId={currentTurnPlayerId}
-            gameStage={game.stage}
-            communityTiles={game.communityTiles}
-            hands={displayHands}
-            bottomPlayerId={bottomPlayerId}
-            pot={game.pot}
-            dealerButtonIndex={game.dealerButtonIndex}
-            smallBlindIndex={game.smallBlindIndex}
-            bigBlindIndex={game.bigBlindIndex}
-            getPlayerName={getPlayerName}
-            getPlayerAvatar={getPlayerAvatar}
-            getPlayerPersonality={getPlayerPersonality}
-            chatDraft={chat.draftMessage}
-            tutorialReplayControl={replayTutorialButton}
-          />
-        </RoomGameProvider>
-
-        {/* Chat — hidden in tutorial rooms */}
-        {!isTutorialRoom && (
-          <>
-            <div className="fixed bottom-6 right-6 z-30">
-              <ChatToggleButton
-                onClick={chat.toggleChat}
-                unreadCount={chat.unreadCount}
-              />
-            </div>
-
-            <ChatSidebar
-              isOpen={chat.isOpen}
-              onClose={chat.closeChat}
-              messages={chat.messages}
-              draftMessage={chat.draftMessage}
-              onDraftMessageChange={chat.setDraftMessage}
-              onSendMessage={chat.sendMessage}
+      <TutorialAdapterProvider value={tutorialAdapter}>
+        {tutorialAdapter.launcher}
+        {tutorialAdapter.phaseSync}
+        <div
+          className="relative [@media(min-width:1441px)]:pr-[400px]"
+          data-testid="room-content"
+        >
+          <RoomGameProvider value={roomGameContextValue}>
+            <RoomHandsBoardV2
+              gameId={game._id}
+              activePlayerId={activePlayerId}
+              helperTipsEnabled={helperTipsEnabled}
+              roomCode={code}
+              currentTurnPlayerId={currentTurnPlayerId}
+              gameStage={game.stage}
+              communityTiles={game.communityTiles}
+              hands={displayHands}
+              bottomPlayerId={bottomPlayerId}
+              pot={game.pot}
+              dealerButtonIndex={game.dealerButtonIndex}
+              smallBlindIndex={game.smallBlindIndex}
+              bigBlindIndex={game.bigBlindIndex}
+              getPlayerName={getPlayerName}
+              getPlayerAvatar={getPlayerAvatar}
+              getPlayerPersonality={getPlayerPersonality}
+              chatDraft={chat.draftMessage}
+              tutorialReplayControl={tutorialAdapter.replayButton}
             />
-          </>
-        )}
-      </div>
+          </RoomGameProvider>
+
+          {!tutorialAdapter.isTutorialRoom && (
+            <>
+              <div className="fixed bottom-6 right-6 z-30">
+                <ChatToggleButton
+                  onClick={chat.toggleChat}
+                  unreadCount={chat.unreadCount}
+                />
+              </div>
+
+              <ChatSidebar
+                isOpen={chat.isOpen}
+                onClose={chat.closeChat}
+                messages={chat.messages}
+                draftMessage={chat.draftMessage}
+                onDraftMessageChange={chat.setDraftMessage}
+                onSendMessage={chat.sendMessage}
+              />
+            </>
+          )}
+        </div>
+      </TutorialAdapterProvider>
     </RoomPageProvider>
   );
 }

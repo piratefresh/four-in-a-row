@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from "react";
-import { useNextStep } from "nextstepjs";
 import {
   DndContext,
   DragOverlay,
@@ -32,15 +31,10 @@ import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "./roomBoardLayout";
 import { useRoomGameContext } from "../context/RoomGameContext";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
+import { useTutorialAdapterContext } from "../tutorial/TutorialAdapter";
 import type { WordTileSize } from "../table/word-tile-v2";
 import {
-  FIRST_BOT_GAME_SHUFFLE_STEP,
-  FIRST_BOT_GAME_TOUR,
-  FIRST_BOT_GAME_WORD_BUILDER_STEP,
   IN_GAME_HELPER_STEPS,
-  TUTORIAL_TARGET_WORD,
-  getRoomCodeFromPathname,
-  getTourStepStorageKey,
 } from "@/components/onboarding/wordPokerTours";
 
 type SortableBuilderTileProps = {
@@ -159,8 +153,7 @@ export function RoomHandsBoardV2({
   chatDraft,
   tutorialReplayControl,
 }: RoomHandsBoardProps) {
-  const { currentStep, currentTour, setCurrentStep } = useNextStep();
-  // Helper function to determine blind position for a player
+  const tutorial = useTutorialAdapterContext();
   const getBlindPosition = (
     playerId: string,
   ): "dealer" | "small" | "big" | undefined => {
@@ -278,55 +271,22 @@ export function RoomHandsBoardV2({
         .toUpperCase(),
     [builderTiles, choiceSelections],
   );
-  const hasBuiltTutorialTarget =
-    normalizedWordPreview === TUTORIAL_TARGET_WORD ||
-    normalizedActiveBuilderWord === TUTORIAL_TARGET_WORD;
+
+  const builtWord = normalizedWordPreview || normalizedActiveBuilderWord;
 
   useEffect(() => {
-    if (
-      currentTour !== FIRST_BOT_GAME_TOUR ||
-      currentStep !== FIRST_BOT_GAME_WORD_BUILDER_STEP ||
-      !hasBuiltTutorialTarget
-    ) {
-      return;
+    if (builtWord.length >= 2) {
+      tutorial.onWordBuilt(builtWord);
     }
+  }, [builtWord, tutorial]);
 
-    setCurrentStep(FIRST_BOT_GAME_WORD_BUILDER_STEP + 1, 50);
-  }, [
-    currentStep,
-    currentTour,
-    hasBuiltTutorialTarget,
-    setCurrentStep,
-  ]);
-
-  const handleShuffleTilesWithTutorialAdvance = () => {
+  const handleShuffleTilesClick = () => {
     handleShuffleTiles();
-
-    if (
-      currentTour === FIRST_BOT_GAME_TOUR &&
-      currentStep === FIRST_BOT_GAME_SHUFFLE_STEP
-    ) {
-      let roomCode: string | null = null;
-      if (typeof window !== "undefined") {
-        roomCode = getRoomCodeFromPathname(window.location.pathname);
-        const stepKey = getTourStepStorageKey(
-          FIRST_BOT_GAME_TOUR,
-          "shuffle",
-          roomCode,
-        );
-        window.localStorage.setItem(
-          stepKey,
-          "true",
-        );
-      }
-
-      setCurrentStep(FIRST_BOT_GAME_WORD_BUILDER_STEP, 50);
-    }
+    tutorial.onShuffleTiles();
   };
 
   if (!bottomHand) return null;
 
-  // Bottom player is always at index 0 after rotation
   const myName = getPlayerName(bottomHand.playerId);
   const hasBottomPlayerFolded =
     !!activePlayerId &&
@@ -445,7 +405,6 @@ export function RoomHandsBoardV2({
 
             {!isPhase0 && (
               <div className="relative z-10 flex items-center justify-center px-2 xs:px-4">
-                {/* Wrapper with actual size including avatar overflow - responsive to match table size */}
                 <div
                   id="tutorial-room-table"
                   className="relative flex items-center justify-center"
@@ -540,7 +499,7 @@ export function RoomHandsBoardV2({
                 handleSubmitWord={handleSubmitWord}
                 onShuffleTiles={
                   showInlineBottomPanelShuffle
-                    ? handleShuffleTilesWithTutorialAdvance
+                    ? handleShuffleTilesClick
                     : undefined
                 }
                 disableShuffle={
@@ -619,7 +578,7 @@ export function RoomHandsBoardV2({
                 utility={
                   showShuffleControl && !showInlineBottomPanelShuffle
                     ? {
-                        onShuffleTiles: handleShuffleTilesWithTutorialAdvance,
+                        onShuffleTiles: handleShuffleTilesClick,
                         disableShuffle: isValidating,
                       }
                     : undefined

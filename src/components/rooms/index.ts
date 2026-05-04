@@ -28,6 +28,10 @@ export { useRoomDetailsController } from './hooks/useRoomDetailsController'
 export { useRoomPresence } from './hooks/useRoomPresence'
 export { useRoomWordBuilder } from './hooks/useRoomWordBuilder'
 
+// Tutorial adapter
+export { TutorialAdapterProvider, useTutorialAdapterContext } from './tutorial/TutorialAdapter'
+export { useTutorialAdapter } from './tutorial/useTutorialAdapter'
+
 // Lobby
 export { RoomList } from './lobby/RoomList'
 export { ShowdownResultsPanel } from './lobby/ShowdownResultsPanel'
