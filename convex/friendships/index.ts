@@ -1,3 +1,4 @@
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
@@ -16,7 +17,7 @@ export function orderedPair(a: string, b: string): [string, string] {
 }
 
 async function getUserProfile(
-  ctx: { db: any },
+  ctx: QueryCtx | MutationCtx,
   userId: string,
 ): Promise<{ name: string; image: string | null } | null> {
   try {
@@ -32,7 +33,7 @@ async function getUserProfile(
 }
 
 export async function isAlreadyFriends(
-  ctx: { db: any },
+  ctx: QueryCtx | MutationCtx,
   userId: string,
   otherUserId: string,
 ): Promise<boolean> {
