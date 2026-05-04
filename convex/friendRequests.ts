@@ -2,25 +2,12 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireVerifiedUser } from "./verifyUser";
-import { getAuthUserByPlayerAuthUserId } from "./rooms/helpers";
+import { isAlreadyFriends } from "./friendships";
 import { authComponent } from "./auth";
-
-export const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
-
-export function isUserOnline(lastSeenAt: number | null, now?: number): boolean {
-  if (lastSeenAt === null) return false;
-  return ((now ?? Date.now()) - lastSeenAt) < ONLINE_THRESHOLD_MS;
-}
-
-export function orderedPair(a: string, b: string): [string, string] {
-  return a < b ? [a, b] : [b, a];
-}
 
 export function isSelfRequest(userId: string, targetUserId: string): boolean {
   return userId === targetUserId;
 }
-
-// ==================== User Profile Helpers ====================
 
 async function getUserProfile(
   ctx: { db: any },
@@ -38,23 +25,7 @@ async function getUserProfile(
   }
 }
 
-// ==================== Friendship Helpers ====================
-
-async function isAlreadyFriends(
-  ctx: { db: any },
-  userId: string,
-  otherUserId: string,
-): Promise<boolean> {
-  const [a, b] = userId < otherUserId ? [userId, otherUserId] : [otherUserId, userId];
-  const friendship = await ctx.db
-    .query("friendships")
-    .withIndex("by_userA", (q: any) => q.eq("userA", a))
-    .filter((q: any) => q.eq(q.field("userB"), b))
-    .first();
-  return friendship !== null;
-}
-
-async function hasPendingRequest(
+export async function hasPendingRequest(
   ctx: { db: any },
   fromUserId: string,
   toUserId: string,
@@ -67,7 +38,17 @@ async function hasPendingRequest(
   return existing !== null;
 }
 
-// ==================== searchUsers ====================
+export async function countPendingIncoming(
+  ctx: { db: any },
+  userId: string,
+): Promise<number> {
+  const incoming = await ctx.db
+    .query("friendRequests")
+    .withIndex("by_to_status", (q: any) =>
+      q.eq("toUserId", userId).eq("status", "pending"))
+    .collect();
+  return incoming.length;
+}
 
 export const searchUsers = query({
   args: { query: v.string() },
@@ -136,8 +117,6 @@ export const searchUsers = query({
   },
 });
 
-// ==================== sendFriendRequest ====================
-
 export const sendFriendRequest = mutation({
   args: { toUserId: v.string() },
   handler: async (ctx, args) => {
@@ -148,7 +127,7 @@ export const sendFriendRequest = mutation({
       throw new ConvexError({ code: "INVALID_USER", message: "Target user ID is required." });
     }
 
-    if (toUserId === authUserId) {
+    if (isSelfRequest(authUserId, toUserId)) {
       throw new ConvexError({ code: "SELF_REQUEST", message: "You cannot send a friend request to yourself." });
     }
 
@@ -197,8 +176,6 @@ export const sendFriendRequest = mutation({
   },
 });
 
-// ==================== acceptFriendRequest ====================
-
 export const acceptFriendRequest = mutation({
   args: { requestId: v.id("friendRequests") },
   handler: async (ctx, args) => {
@@ -232,8 +209,6 @@ export const acceptFriendRequest = mutation({
   },
 });
 
-// ==================== declineFriendRequest ====================
-
 export const declineFriendRequest = mutation({
   args: { requestId: v.id("friendRequests") },
   handler: async (ctx, args) => {
@@ -258,8 +233,6 @@ export const declineFriendRequest = mutation({
   },
 });
 
-// ==================== cancelFriendRequest ====================
-
 export const cancelFriendRequest = mutation({
   args: { requestId: v.id("friendRequests") },
   handler: async (ctx, args) => {
@@ -283,78 +256,6 @@ export const cancelFriendRequest = mutation({
     return { status: "cancelled" as const };
   },
 });
-
-// ==================== listFriends ====================
-
-export const listFriends = query({
-  args: {},
-  handler: async (ctx) => {
-    const { authUserId } = await requireVerifiedUser(ctx);
-    const now = Date.now();
-
-    const asA = await ctx.db
-      .query("friendships")
-      .withIndex("by_userA", (q: any) => q.eq("userA", authUserId))
-      .collect();
-    const asB = await ctx.db
-      .query("friendships")
-      .withIndex("by_userB", (q: any) => q.eq("userB", authUserId))
-      .collect();
-
-    const friendUserIds = [
-      ...asA.map((f: any) => f.userB),
-      ...asB.map((f: any) => f.userA),
-    ];
-
-    const results = [];
-    for (const friendUserId of friendUserIds) {
-      const profile = await getUserProfile(ctx, friendUserId);
-
-      const activePlayer = await ctx.db
-        .query("players")
-        .withIndex("authUserId_status", (q: any) =>
-          q.eq("authUserId", friendUserId).eq("status", "active"))
-        .first();
-
-      const recentPlayer = !activePlayer
-        ? await ctx.db
-            .query("players")
-            .withIndex("authUserId_status", (q: any) => q.eq("authUserId", friendUserId))
-            .order("desc")
-            .first()
-        : null;
-
-      const lastSeenAt = activePlayer?.lastSeenAt ?? recentPlayer?.lastSeenAt ?? null;
-      const isOnline = activePlayer ? now - activePlayer.lastSeenAt < ONLINE_THRESHOLD_MS : false;
-
-      let activeRoomCode: string | null = null;
-      if (activePlayer) {
-        const room = await ctx.db.get(activePlayer.roomId);
-        if (room) {
-          activeRoomCode = room.code;
-        }
-      }
-
-      results.push({
-        userId: friendUserId,
-        name: profile?.name ?? "Unknown",
-        image: profile?.image ?? null,
-        isOnline,
-        lastSeenAt,
-        activeRoomCode,
-      });
-    }
-
-    results.sort((a, b) => {
-      if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
-      return (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0);
-    });
-
-    return results;
-  },
-});
-
-// ==================== listPendingRequests ====================
 
 export const listPendingRequests = query({
   args: {},
@@ -400,53 +301,5 @@ export const listPendingRequests = query({
     }
 
     return { incoming: incomingResults, outgoing: outgoingResults };
-  },
-});
-
-// ==================== removeFriend ====================
-
-export const removeFriend = mutation({
-  args: { userId: v.string() },
-  handler: async (ctx, args) => {
-    const { authUserId } = await requireVerifiedUser(ctx);
-
-    const [a, b] =
-      authUserId < args.userId
-        ? [authUserId, args.userId]
-        : [args.userId, authUserId];
-
-    const friendship = await ctx.db
-      .query("friendships")
-      .withIndex("by_userA", (q: any) => q.eq("userA", a))
-      .filter((q: any) => q.eq(q.field("userB"), b))
-      .first();
-
-    if (!friendship) {
-      throw new ConvexError({ code: "NOT_FRIENDS", message: "You are not friends with this user." });
-    }
-
-    await ctx.db.delete(friendship._id);
-
-    return { ok: true };
-  },
-});
-
-// ==================== pendingNotificationCount ====================
-
-export const pendingNotificationCount = query({
-  args: {},
-  handler: async (ctx) => {
-    const { authUserId } = await requireVerifiedUser(ctx);
-
-    const incoming = await ctx.db
-      .query("friendRequests")
-      .withIndex("by_to_status", (q: any) =>
-        q.eq("toUserId", authUserId).eq("status", "pending"))
-      .collect();
-
-    return {
-      friendRequests: incoming.length,
-      gameInvites: 0,
-    };
   },
 });
