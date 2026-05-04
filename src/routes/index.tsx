@@ -170,6 +170,12 @@ function App() {
     });
   };
 
+  const handleSelectLeaderboard = () => {
+    startTransition(() => {
+      void navigate({ to: "/leaderboard" });
+    });
+  };
+
   const handleResumeRoom = async () => {
     if (!activeRoom?.code) return;
     await navigate({ to: "/rooms/$code", params: { code: activeRoom.code } });
@@ -271,6 +277,7 @@ function App() {
           onResumeRoom={() => {
             void handleResumeRoom();
           }}
+          onSelectLeaderboard={handleSelectLeaderboard}
         />
         <ActivityTicker />
         </>

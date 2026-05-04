@@ -1,4 +1,4 @@
-import { Brain, Globe2, WifiOff } from "lucide-react";
+import { Brain, Globe2, Trophy, WifiOff } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +38,7 @@ type HomeModeMenuProps = {
   onStartOffline: (difficulty: OfflineDifficulty) => void;
   onPlayTutorial: () => void;
   onResumeRoom?: () => void;
+  onSelectLeaderboard?: () => void;
 };
 
 export function HomeModeMenu({
@@ -53,6 +54,7 @@ export function HomeModeMenu({
   onStartOffline,
   onPlayTutorial,
   onResumeRoom,
+  onSelectLeaderboard,
 }: HomeModeMenuProps) {
   const canResumeActiveRoom = Boolean(activeRoomCode && !activeRoomTutorialId);
 
@@ -144,6 +146,16 @@ export function HomeModeMenu({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {onSelectLeaderboard ? (
+            <ModeCard
+              icon={<Trophy className="size-5" strokeWidth={2.25} />}
+              label="Leaderboard"
+              description="Top players & best words"
+              onSelect={onSelectLeaderboard}
+              disabled={isStartingOffline || isStartingTutorial}
+            />
+          ) : null}
 
           <Tips className="mt-1" />
         </div>
