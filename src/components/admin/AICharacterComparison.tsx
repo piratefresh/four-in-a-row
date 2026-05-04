@@ -1,4 +1,4 @@
-import { Doc } from "../../../convex/_generated/dataModel";
+import type { StatsRow } from "./types";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -24,26 +24,21 @@ const BOT_DISPLAY_NAMES: Record<string, string> = {
 };
 
 type AICharacterComparisonProps = {
-  data: Array<{
-    characterId: string;
-    stats: Doc<"playerStats"> | null;
-  }>;
+  data: StatsRow[];
 };
 
 export function AICharacterComparison({ data }: AICharacterComparisonProps) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {data.map(({ characterId, stats }) => {
-          const displayName = BOT_DISPLAY_NAMES[characterId] ?? characterId;
+        {data.map((stat) => {
+          const characterId = stat.identity.characterId ?? "unknown";
+          const displayName = BOT_DISPLAY_NAMES[characterId] ?? stat.identity.name;
           const personality = getPersonalityForCharacter(characterId);
           const badge = PERSONALITY_BADGES[personality] ?? {
             label: personality,
             className: "bg-white/10 text-stone-200",
           };
-          const netChips = stats
-            ? safeNumber(stats.totalChipsWon) - safeNumber(stats.totalChipsLost)
-            : 0;
 
           return (
             <div
@@ -57,20 +52,21 @@ export function AICharacterComparison({ data }: AICharacterComparisonProps) {
                 </Badge>
               </div>
 
-              {stats ? (
-                <div className="space-y-3 text-sm">
-                  <StatRow label="Games" value={formatNumber(stats.gamesPlayed)} />
-                  <StatRow label="Win Rate" value={formatPercent(stats.winRate)} />
-                  <StatRow label="Net Chips" value={formatSignedNumber(netChips)} />
-                  <StatRow label="Avg Score" value={formatDecimal(stats.avgWordScore)} />
-                  <StatRow label="Best Word" value={stats.bestWord ?? "-"} />
-                  <StatRow label="Bluffs" value={formatNumber(stats.totalBluffs)} />
-                  <StatRow label="Fallbacks" value={formatNumber(stats.totalFallbacks)} />
-                  <StatRow label="Avg Hand Strength" value={formatCompactDecimal(stats.avgHandStrength)} />
-                </div>
-              ) : (
-                <p className="text-sm text-stone-500">No data yet</p>
-              )}
+              <div className="space-y-3 text-sm">
+                <StatRow label="Games" value={formatNumber(stat.gamesPlayed)} />
+                <StatRow label="Win Rate" value={formatRate(stat.winRate)} />
+                <StatRow label="Net Chips" value={formatSignedNumber(stat.netChips)} />
+                <StatRow label="Avg Score" value={formatDecimal(stat.avgWordScore)} />
+                <StatRow label="Best Word" value={stat.bestWord ?? "-"} />
+                <StatRow label="Bluffs" value={formatNumber(stat.totalBluffs)} />
+                <StatRow label="Bluff Rate" value={formatRate(stat.bluffRate)} />
+                <StatRow label="Fallbacks" value={formatNumber(stat.totalFallbacks)} />
+                <StatRow label="Fallback Rate" value={formatRate(stat.fallbackRate)} />
+                <StatRow label="VPIP" value={formatRate(stat.vpip)} />
+                <StatRow label="Aggression" value={formatDecimal(stat.aggressionFactor)} />
+                <StatRow label="Avg Hand Str" value={formatCompactDecimal(stat.avgHandStrength)} />
+                <StatRow label="Avg Latency" value={stat.avgLatencyMs ? `${formatDecimal(stat.avgLatencyMs)}ms` : "-"} />
+              </div>
             </div>
           );
         })}
@@ -87,20 +83,19 @@ export function AICharacterComparison({ data }: AICharacterComparisonProps) {
               <TableHead className="h-14 text-right text-stone-500">Net Chips</TableHead>
               <TableHead className="h-14 text-right text-stone-500">Avg Score</TableHead>
               <TableHead className="h-14 text-right text-stone-500">Bluffs</TableHead>
-              <TableHead className="h-14 pr-6 text-right text-stone-500">Fallbacks</TableHead>
+              <TableHead className="h-14 text-right text-stone-500">Fallbacks</TableHead>
+              <TableHead className="h-14 pr-6 text-right text-stone-500">VPIP</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map(({ characterId, stats }) => {
-              const displayName = BOT_DISPLAY_NAMES[characterId] ?? characterId;
+            {data.map((stat) => {
+              const characterId = stat.identity.characterId ?? "unknown";
+              const displayName = BOT_DISPLAY_NAMES[characterId] ?? stat.identity.name;
               const personality = getPersonalityForCharacter(characterId);
               const badge = PERSONALITY_BADGES[personality] ?? {
                 label: personality,
                 className: "bg-white/10 text-stone-200",
               };
-              const netChips = stats
-                ? safeNumber(stats.totalChipsWon) - safeNumber(stats.totalChipsLost)
-                : 0;
 
               return (
                 <TableRow key={characterId} className="border-white/10 text-stone-200 hover:bg-white/[0.045]">
@@ -110,18 +105,15 @@ export function AICharacterComparison({ data }: AICharacterComparisonProps) {
                       {badge.label}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">{formatNumber(stats?.gamesPlayed)}</TableCell>
-                  <TableCell className="text-right">
-                    {stats ? formatPercent(stats.winRate) : "-"}
+                  <TableCell className="text-right">{formatNumber(stat.gamesPlayed)}</TableCell>
+                  <TableCell className="text-right">{formatRate(stat.winRate)}</TableCell>
+                  <TableCell className={`text-right ${stat.netChips >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    {formatSignedNumber(stat.netChips)}
                   </TableCell>
-                  <TableCell className={`text-right ${netChips >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                    {formatSignedNumber(netChips)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {stats ? formatDecimal(stats.avgWordScore) : "-"}
-                  </TableCell>
-                  <TableCell className="text-right">{formatNumber(stats?.totalBluffs)}</TableCell>
-                  <TableCell className="pr-6 text-right">{formatNumber(stats?.totalFallbacks)}</TableCell>
+                  <TableCell className="text-right">{formatDecimal(stat.avgWordScore)}</TableCell>
+                  <TableCell className="text-right">{formatNumber(stat.totalBluffs)}</TableCell>
+                  <TableCell className="text-right">{formatNumber(stat.totalFallbacks)}</TableCell>
+                  <TableCell className="pr-6 text-right">{formatRate(stat.vpip)}</TableCell>
                 </TableRow>
               );
             })}
@@ -151,27 +143,23 @@ function StatRow({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function safeNumber(value: number | null | undefined) {
-  return Number.isFinite(value) ? Number(value) : 0;
-}
-
 function formatNumber(value: number | null | undefined) {
-  return safeNumber(value).toLocaleString();
+  return (Number.isFinite(value) ? Number(value) : 0).toLocaleString();
 }
 
 function formatSignedNumber(value: number | null | undefined) {
-  const safeValue = safeNumber(value);
-  return `${safeValue > 0 ? "+" : ""}${safeValue.toLocaleString()}`;
+  const safe = Number.isFinite(value) ? Number(value) : 0;
+  return `${safe > 0 ? "+" : ""}${safe.toLocaleString()}`;
 }
 
 function formatDecimal(value: number | null | undefined) {
-  return safeNumber(value).toFixed(1);
+  return (Number.isFinite(value) ? Number(value) : 0).toFixed(1);
 }
 
 function formatCompactDecimal(value: number | null | undefined) {
-  return safeNumber(value).toFixed(2);
+  return (Number.isFinite(value) ? Number(value) : 0).toFixed(2);
 }
 
-function formatPercent(value: number | null | undefined) {
-  return `${(safeNumber(value) * 100).toFixed(1)}%`;
+function formatRate(value: number | null | undefined) {
+  return `${((Number.isFinite(value) ? Number(value) : 0) * 100).toFixed(1)}%`;
 }

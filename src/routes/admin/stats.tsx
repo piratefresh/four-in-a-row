@@ -19,7 +19,7 @@ function AdminStatsPage() {
   const [filter, setFilter] = useState<"all" | "players" | "bots">("all");
 
   const allStats = useQuery(api.playerStats.getAllStats, { filter });
-  const aiComparison = useQuery(api.playerStats.getAICharacterComparison);
+  const botStats = useQuery(api.playerStats.getAllStats, { filter: "bots" });
   const filters: Array<{ value: typeof filter; label: string }> = [
     { value: "all", label: "All" },
     { value: "players", label: "Players" },
@@ -88,8 +88,8 @@ function AdminStatsPage() {
           </TabsContent>
 
           <TabsContent value="ai-comparison">
-            {aiComparison ? (
-              <AICharacterComparison data={aiComparison} />
+            {botStats ? (
+              <AICharacterComparison data={botStats} />
             ) : (
               <p className="text-stone-500">Loading AI comparison...</p>
             )}
