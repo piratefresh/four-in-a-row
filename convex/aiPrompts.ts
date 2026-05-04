@@ -192,7 +192,7 @@ All available: ${vars.allTilesAvailable}
 ${vars.strategyHint}
 ${vars.believesPlayer === true ? "\n## Mental State\nYou are distracted by the player's bold claims. Your focus is slightly impaired — you might not find the absolute best word." : ""}${vars.believesPlayer === false ? "\n## Mental State\nYou are confident the player is bluffing. You feel energized and focused on finding a strong word." : ""}
 
-Build the best word you can from the available tiles. The word must be 2-7 letters and a valid English word (CSW24 dictionary). Using all 7 tiles gives a +10 bonus.`;
+Build the best word you can from the available tiles. Prefer common, familiar English words over obscure dictionary words when scores are close. The word must be 2-7 letters and a valid English word (CSW24 dictionary). Using all 7 tiles gives a +10 bonus.`;
   },
 };
 

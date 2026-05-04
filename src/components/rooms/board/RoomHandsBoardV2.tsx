@@ -436,6 +436,7 @@ export function RoomHandsBoardV2({
                       name={myName}
                       avatarUrl={getPlayerAvatar(bottomHand.playerId)}
                       chips={bottomHand.chips ?? 0}
+                      bet={0}
                       actionLabel={formatPlayerActionLabel(
                         bottomHand.lastAction,
                       )}
@@ -443,11 +444,11 @@ export function RoomHandsBoardV2({
                       isActiveTurn={currentTurnPlayerId === bottomHand.playerId}
                       isCurrentPlayer
                       blindPosition={getBlindPosition(bottomHand.playerId)}
-                      avatarSizeClass="h-[52px] w-[52px] xs:h-[60px] xs:w-[60px] sm:h-24 sm:w-24"
-                      initialsClass="text-[11px] xs:text-[12px] sm:text-[18px]"
-                      infoCardClassName="min-w-[84px] px-2 py-1 xs:min-w-[92px] xs:px-2 xs:py-1 sm:min-w-[132px] sm:px-4 sm:py-2"
+                      avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
+                      initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"
                       betClassName="left-auto right-0 translate-x-1/4"
                       mobileInfoPlacement="top"
+                      infoLayout="compact"
                     />
                   </div>
                 </div>
