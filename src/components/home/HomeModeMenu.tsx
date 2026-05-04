@@ -1,4 +1,4 @@
-import { Brain, Globe2, Waves, WifiOff } from "lucide-react";
+import { Brain, Globe2, WifiOff } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,7 +49,7 @@ export function HomeModeMenu({
   statusMessage,
   onOfflineDifficultyChange,
   onSelectOnline,
-  onSelectRiverRun,
+  onSelectRiverRun: _onSelectRiverRun,
   onStartOffline,
   onPlayTutorial,
   onResumeRoom,
@@ -89,15 +89,6 @@ export function HomeModeMenu({
             tone="recommended"
             disabled={isStartingOffline || isStartingTutorial}
             onSelect={onPlayTutorial}
-          />
-
-          <ModeCard
-            icon={<Waves className="size-5" strokeWidth={2.25} />}
-            label="River Run"
-            description="Beat the target score"
-            tone="warm"
-            disabled={isStartingOffline || isStartingTutorial}
-            onSelect={onSelectRiverRun}
           />
 
           <ModeCard
