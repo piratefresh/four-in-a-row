@@ -40,9 +40,9 @@ export const compactMetadataSlotClasses: Record<Exclude<WordTileSize, "lg">, str
 };
 
 export const choiceSummaryClasses: Record<WordTileSize, string> = {
-  xs: "px-1 py-0 text-[8px] whitespace-nowrap",
-  sm: "px-1 py-0 text-[8px] whitespace-nowrap",
-  md: "px-1 py-0 text-[9px] whitespace-nowrap",
+  xs: "bottom-1 left-1 px-1 py-0 text-[8px] whitespace-nowrap",
+  sm: "bottom-1 left-1 px-1 py-0 text-[8px] whitespace-nowrap",
+  md: "bottom-1.5 left-1.5 px-1 py-0 text-[9px] whitespace-nowrap",
   lg: "bottom-1.5 left-1.5 px-1.5 py-0.5 text-[10px] sm:bottom-2 sm:left-2 sm:text-xs",
 };
 

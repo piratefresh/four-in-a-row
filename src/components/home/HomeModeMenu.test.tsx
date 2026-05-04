@@ -13,6 +13,7 @@ describe("HomeModeMenu", () => {
         statusMessage={null}
         onOfflineDifficultyChange={vi.fn()}
         onSelectOnline={vi.fn()}
+        onSelectRiverRun={vi.fn()}
         onStartOffline={vi.fn()}
         onPlayTutorial={vi.fn()}
       />,
@@ -20,6 +21,8 @@ describe("HomeModeMenu", () => {
 
     expect(markup).toContain("Offline Mode");
     expect(markup).toContain("Play vs. bots, no signup");
+    expect(markup).toContain("River Run");
+    expect(markup).toContain("Beat the target score");
     expect(markup).toContain("Power-ups");
     expect(markup).toContain("aria-haspopup=\"menu\"");
     expect(markup).toContain("disabled");
@@ -36,6 +39,7 @@ describe("HomeModeMenu", () => {
         statusMessage={null}
         onOfflineDifficultyChange={vi.fn()}
         onSelectOnline={vi.fn()}
+        onSelectRiverRun={vi.fn()}
         onStartOffline={vi.fn()}
         onPlayTutorial={vi.fn()}
       />,

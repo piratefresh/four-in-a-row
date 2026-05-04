@@ -25,6 +25,12 @@ export const appTables = {
     title: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("closed")),
     mode: v.optional(v.union(v.literal("riverRunSolo"))),
+    // Legacy rooms used gameType. Absence of `mode` is the canonical
+    // regular Word Poker room shape; keep this so old documents validate.
+    gameType: v.optional(v.union(
+      v.literal("wordPoker"),
+      v.literal("riverRun"),
+    )),
     maxPlayers: v.number(),
     tutorialId: v.optional(v.union(v.literal("first-bot-game"))),
     isBotGame: v.optional(v.boolean()),

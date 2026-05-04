@@ -43,7 +43,7 @@ export function TileContent({ letters, values, isChoiceCard, selectedLetter, sho
         <span className="translate-y-[-1px] font-display font-extrabold leading-none tracking-[-0.03em]">
           {selectedLetter}
         </span>
-        {size === "lg" ? <ChoiceSummaryBadge letters={letters} selectedLetter={selectedLetter} size={size} variant={variant} /> : null}
+        <ChoiceSummaryBadge letters={letters} selectedLetter={selectedLetter} size={size} variant={variant} />
         {showValue && inlineValue && typeof value === "number" ? <ValueBadge value={value} size={size} variant={variant} /> : null}
       </div>
     );

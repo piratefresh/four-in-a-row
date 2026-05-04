@@ -12,13 +12,16 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RoomsRouteImport } from './routes/rooms'
+import { Route as RiverRunRouteImport } from './routes/river-run'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoomsIndexRouteImport } from './routes/rooms.index'
+import { Route as RiverRunIndexRouteImport } from './routes/river-run.index'
 import { Route as RoomsCodeRouteImport } from './routes/rooms.$code'
+import { Route as RiverRunCodeRouteImport } from './routes/river-run.$code'
 import { Route as ResultsCodeRouteImport } from './routes/results.$code'
 import { Route as DevTileShowcaseRouteImport } from './routes/dev.tile-showcase'
 import { Route as DevTableShowcaseRouteImport } from './routes/dev.table-showcase'
@@ -48,6 +51,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const RoomsRoute = RoomsRouteImport.update({
   id: '/rooms',
   path: '/rooms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RiverRunRoute = RiverRunRouteImport.update({
+  id: '/river-run',
+  path: '/river-run',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -80,10 +88,20 @@ const RoomsIndexRoute = RoomsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => RoomsRoute,
 } as any)
+const RiverRunIndexRoute = RiverRunIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RiverRunRoute,
+} as any)
 const RoomsCodeRoute = RoomsCodeRouteImport.update({
   id: '/$code',
   path: '/$code',
   getParentRoute: () => RoomsRoute,
+} as any)
+const RiverRunCodeRoute = RiverRunCodeRouteImport.update({
+  id: '/$code',
+  path: '/$code',
+  getParentRoute: () => RiverRunRoute,
 } as any)
 const ResultsCodeRoute = ResultsCodeRouteImport.update({
   id: '/results/$code',
@@ -167,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/river-run': typeof RiverRunRouteWithChildren
   '/rooms': typeof RoomsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -177,7 +196,9 @@ export interface FileRoutesByFullPath {
   '/dev/table-showcase': typeof DevTableShowcaseRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
+  '/river-run/$code': typeof RiverRunCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
+  '/river-run/': typeof RiverRunIndexRoute
   '/rooms/': typeof RoomsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -203,7 +224,9 @@ export interface FileRoutesByTo {
   '/dev/table-showcase': typeof DevTableShowcaseRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
+  '/river-run/$code': typeof RiverRunCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
+  '/river-run': typeof RiverRunIndexRoute
   '/rooms': typeof RoomsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -221,6 +244,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/river-run': typeof RiverRunRouteWithChildren
   '/rooms': typeof RoomsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -231,7 +255,9 @@ export interface FileRoutesById {
   '/dev/table-showcase': typeof DevTableShowcaseRoute
   '/dev/tile-showcase': typeof DevTileShowcaseRoute
   '/results/$code': typeof ResultsCodeRoute
+  '/river-run/$code': typeof RiverRunCodeRoute
   '/rooms/$code': typeof RoomsCodeRoute
+  '/river-run/': typeof RiverRunIndexRoute
   '/rooms/': typeof RoomsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/demo/api/names': typeof DemoApiNamesRoute
@@ -250,6 +276,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/reset-password'
+    | '/river-run'
     | '/rooms'
     | '/settings'
     | '/verify-email'
@@ -260,7 +287,9 @@ export interface FileRouteTypes {
     | '/dev/table-showcase'
     | '/dev/tile-showcase'
     | '/results/$code'
+    | '/river-run/$code'
     | '/rooms/$code'
+    | '/river-run/'
     | '/rooms/'
     | '/api/auth/$'
     | '/demo/api/names'
@@ -286,7 +315,9 @@ export interface FileRouteTypes {
     | '/dev/table-showcase'
     | '/dev/tile-showcase'
     | '/results/$code'
+    | '/river-run/$code'
     | '/rooms/$code'
+    | '/river-run'
     | '/rooms'
     | '/api/auth/$'
     | '/demo/api/names'
@@ -303,6 +334,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/register'
     | '/reset-password'
+    | '/river-run'
     | '/rooms'
     | '/settings'
     | '/verify-email'
@@ -313,7 +345,9 @@ export interface FileRouteTypes {
     | '/dev/table-showcase'
     | '/dev/tile-showcase'
     | '/results/$code'
+    | '/river-run/$code'
     | '/rooms/$code'
+    | '/river-run/'
     | '/rooms/'
     | '/api/auth/$'
     | '/demo/api/names'
@@ -331,6 +365,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  RiverRunRoute: typeof RiverRunRouteWithChildren
   RoomsRoute: typeof RoomsRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
@@ -372,6 +407,13 @@ declare module '@tanstack/react-router' {
       path: '/rooms'
       fullPath: '/rooms'
       preLoaderRoute: typeof RoomsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/river-run': {
+      id: '/river-run'
+      path: '/river-run'
+      fullPath: '/river-run'
+      preLoaderRoute: typeof RiverRunRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -416,12 +458,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoomsIndexRouteImport
       parentRoute: typeof RoomsRoute
     }
+    '/river-run/': {
+      id: '/river-run/'
+      path: '/'
+      fullPath: '/river-run/'
+      preLoaderRoute: typeof RiverRunIndexRouteImport
+      parentRoute: typeof RiverRunRoute
+    }
     '/rooms/$code': {
       id: '/rooms/$code'
       path: '/$code'
       fullPath: '/rooms/$code'
       preLoaderRoute: typeof RoomsCodeRouteImport
       parentRoute: typeof RoomsRoute
+    }
+    '/river-run/$code': {
+      id: '/river-run/$code'
+      path: '/$code'
+      fullPath: '/river-run/$code'
+      preLoaderRoute: typeof RiverRunCodeRouteImport
+      parentRoute: typeof RiverRunRoute
     }
     '/results/$code': {
       id: '/results/$code'
@@ -531,6 +587,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface RiverRunRouteChildren {
+  RiverRunCodeRoute: typeof RiverRunCodeRoute
+  RiverRunIndexRoute: typeof RiverRunIndexRoute
+}
+
+const RiverRunRouteChildren: RiverRunRouteChildren = {
+  RiverRunCodeRoute: RiverRunCodeRoute,
+  RiverRunIndexRoute: RiverRunIndexRoute,
+}
+
+const RiverRunRouteWithChildren = RiverRunRoute._addFileChildren(
+  RiverRunRouteChildren,
+)
+
 interface RoomsRouteChildren {
   RoomsCodeRoute: typeof RoomsCodeRoute
   RoomsIndexRoute: typeof RoomsIndexRoute
@@ -549,6 +619,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  RiverRunRoute: RiverRunRouteWithChildren,
   RoomsRoute: RoomsRouteWithChildren,
   SettingsRoute: SettingsRoute,
   VerifyEmailRoute: VerifyEmailRoute,

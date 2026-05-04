@@ -88,9 +88,9 @@ export const updatePlayerStats = internalMutation({
       const reachedShowdown = playerSubmissions.length > 0 || !hand.hasFolded;
       const wonShowdown = won && reachedShowdown && playerSubmissions.length > 0;
 
-      const newWordsSubmitted = existingStats.wordsSubmitted + playerSubmissions.length;
+      const newWordsSubmitted = (existingStats.wordsSubmitted ?? 0) + playerSubmissions.length;
       const allScores = playerSubmissions.map((s) => s.score);
-      const existingTotalScore = existingStats.avgWordScore * existingStats.wordsSubmitted;
+      const existingTotalScore = (existingStats.avgWordScore ?? 0) * (existingStats.wordsSubmitted ?? 0);
       const newTotalScore = existingTotalScore + allScores.reduce((a, b) => a + b, 0);
       const newAvgWordScore = newWordsSubmitted > 0 ? newTotalScore / newWordsSubmitted : 0;
 
@@ -117,8 +117,8 @@ export const updatePlayerStats = internalMutation({
         characterId,
       });
 
-      const newGamesPlayed = existingStats.gamesPlayed + 1;
-      const newGamesWon = existingStats.gamesWon + (won ? 1 : 0);
+      const newGamesPlayed = (existingStats.gamesPlayed ?? 0) + 1;
+      const newGamesWon = (existingStats.gamesWon ?? 0) + (won ? 1 : 0);
       const newWinRate = newGamesPlayed > 0 ? newGamesWon / newGamesPlayed : 0;
       const existingAiDecisions = existingStats.totalAiDecisions ?? 0;
       const newAiDecisions = existingAiDecisions + aiTraceStats.totalAiDecisions;
@@ -145,20 +145,20 @@ export const updatePlayerStats = internalMutation({
         gamesPlayed: newGamesPlayed,
         gamesWon: newGamesWon,
         winRate: newWinRate,
-        totalChipsWon: existingStats.totalChipsWon + chipsWon,
-        totalChipsLost: existingStats.totalChipsLost + chipsLost,
-        bestChipFinish: Math.max(existingStats.bestChipFinish, hand.chips),
-        showdownsReached: existingStats.showdownsReached + (reachedShowdown ? 1 : 0),
-        showdownsWon: existingStats.showdownsWon + (wonShowdown ? 1 : 0),
+        totalChipsWon: (existingStats.totalChipsWon ?? 0) + chipsWon,
+        totalChipsLost: (existingStats.totalChipsLost ?? 0) + chipsLost,
+        bestChipFinish: Math.max(existingStats.bestChipFinish ?? 0, hand.chips),
+        showdownsReached: (existingStats.showdownsReached ?? 0) + (reachedShowdown ? 1 : 0),
+        showdownsWon: (existingStats.showdownsWon ?? 0) + (wonShowdown ? 1 : 0),
         wordsSubmitted: newWordsSubmitted,
         avgWordScore: newAvgWordScore,
         bestWord,
         bestWordScore,
         longestWord,
-        totalChecks: existingStats.totalChecks + actionCounts.check,
-        totalCalls: existingStats.totalCalls + actionCounts.call,
-        totalRaises: existingStats.totalRaises + actionCounts.raise,
-        totalFolds: existingStats.totalFolds + actionCounts.fold,
+        totalChecks: (existingStats.totalChecks ?? 0) + actionCounts.check,
+        totalCalls: (existingStats.totalCalls ?? 0) + actionCounts.call,
+        totalRaises: (existingStats.totalRaises ?? 0) + actionCounts.raise,
+        totalFolds: (existingStats.totalFolds ?? 0) + actionCounts.fold,
         totalBluffs: (existingStats.totalBluffs ?? 0) + aiTraceStats.totalBluffs,
         totalFallbacks: (existingStats.totalFallbacks ?? 0) + aiTraceStats.totalFallbacks,
         avgHandStrength: newAvgHandStrength,

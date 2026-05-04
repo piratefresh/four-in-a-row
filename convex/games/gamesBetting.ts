@@ -457,8 +457,13 @@ export async function internalProcessBotTurnHandler(
         currentBet: game.currentBet,
         believesPlayer,
       });
-    } catch {
-      // best-effort: never block the game
+    } catch (dialogError) {
+      console.warn("[bot-turn] sendDialogue failed", {
+        gameId: args.gameId,
+        playerId: args.playerId,
+        action,
+        error: String(dialogError),
+      });
     }
   };
 
