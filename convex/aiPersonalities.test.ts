@@ -232,7 +232,7 @@ describe("aiPersonalities", () => {
 
     it("returns null for a trigger with no reactions defined", () => {
       // Cautious profile doesn't define reactions for all triggers
-      const reaction = getRandomReaction(AI_PERSONALITIES.CAUTIOUS, "playerCheck", () => 0.5);
+      const reaction = getRandomReaction(AI_PERSONALITIES.CAUTIOUS, "showdownResult", () => 0.5);
       expect(reaction).toBeNull();
     });
 
