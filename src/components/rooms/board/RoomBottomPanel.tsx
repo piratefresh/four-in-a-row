@@ -176,6 +176,12 @@ function getHiddenCommunityTileCount(
   }
 }
 
+export function shouldShowSubmitWordAction(
+  gameStage: RoomBottomPanelProps["gameStage"],
+): boolean {
+  return gameStage === "showdown";
+}
+
 export function RoomBottomPanel({
   isPhase1,
   mySubmission,
@@ -201,8 +207,13 @@ export function RoomBottomPanel({
   helperTip,
 }: RoomBottomPanelProps) {
   const hiddenTileCount = getHiddenCommunityTileCount(gameStage);
-  const showSubmitAction = gameStage === "showdown" && wordPreview.length >= 2;
+  const showSubmitAction = shouldShowSubmitWordAction(gameStage);
   const showActionRow = showSubmitAction || !!onShuffleTiles;
+  const isSubmitWordDisabled =
+    !isShowdownSubmissionOpen ||
+    isValidating ||
+    hasUnresolvedChoices ||
+    wordPreview.length < 2;
 
   return (
     <div
@@ -398,11 +409,7 @@ export function RoomBottomPanel({
                       id="tutorial-submit-word"
                       variant="submit"
                       onClick={handleSubmitWord}
-                      disabled={
-                        !isShowdownSubmissionOpen ||
-                        isValidating ||
-                        hasUnresolvedChoices
-                      }
+                      disabled={isSubmitWordDisabled}
                     >
                       {!isShowdownSubmissionOpen
                         ? "Finish tutorial"
@@ -410,6 +417,8 @@ export function RoomBottomPanel({
                           ? "Validating..."
                           : hasUnresolvedChoices
                             ? "Select Letters"
+                            : wordPreview.length < 2
+                              ? "Select Tiles"
                             : "Submit Word"}
                     </ActionButton>
                   ) : null}

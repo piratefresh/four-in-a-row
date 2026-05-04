@@ -10,6 +10,7 @@ import {
 import { roomConfigValidator, resolvedGameConfigValidator } from "./gameConfig";
 import {
   riverRunPhaseValidator,
+  riverRunSubmissionValidator,
   riverRunStatusValidator,
   riverRunTileValidator,
 } from "./riverRunState";
@@ -167,6 +168,7 @@ export const appTables = {
     currentTarget: v.number(),
     phase: riverRunPhaseValidator,
     tiles: v.array(riverRunTileValidator),
+    submissions: v.optional(v.array(riverRunSubmissionValidator)),
     credits: v.number(),
     handScore: v.number(),
     totalScore: v.number(),

@@ -255,7 +255,7 @@ export function useRoomDetailsController(
         !(
           game?.stage === "showdown" &&
           game.status === "active" &&
-          game.showdownStartedAt !== undefined
+          game.showdownStartedAt === undefined
         ),
       isTutorialBettingPaused,
       isTutorialRoom,
