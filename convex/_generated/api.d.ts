@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activityFeed from "../activityFeed.js";
 import type * as ai from "../ai.js";
 import type * as aiActionsCache from "../aiActionsCache.js";
 import type * as aiBettingConstants from "../aiBettingConstants.js";
@@ -85,6 +86,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activityFeed: typeof activityFeed;
   ai: typeof ai;
   aiActionsCache: typeof aiActionsCache;
   aiBettingConstants: typeof aiBettingConstants;

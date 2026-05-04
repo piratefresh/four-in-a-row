@@ -9,6 +9,7 @@ import {
   logTutorialDebug,
 } from "@/lib/tutorial-guest";
 import { HomeModeMenu } from "@/components/home/HomeModeMenu";
+import { ActivityTicker } from "@/components/home/ActivityTicker";
 import { OnboardingSetupScreen } from "@/components/home/OnboardingSetupScreen";
 import { SplashScreen } from "@/components/home/SplashScreen";
 import {
@@ -251,7 +252,8 @@ function App() {
       ) : showOnboardingSetupScreen ? (
         <OnboardingSetupScreen stage={onboardingSetupStage} />
       ) : (
-        <HomeModeMenu
+        <>
+          <HomeModeMenu
           activeRoomCode={activeRoom?.code}
           activeRoomTutorialId={activeRoom?.tutorialId}
           isStartingOffline={isStartingOffline}
@@ -270,6 +272,8 @@ function App() {
             void handleResumeRoom();
           }}
         />
+        <ActivityTicker />
+        </>
       )}
     </>
   );

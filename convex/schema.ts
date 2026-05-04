@@ -369,6 +369,11 @@ export const appTables = {
   })
     .index("by_userA", ["userA"])
     .index("by_userB", ["userB"]),
+  activityFeed: defineTable({
+    displayText: v.string(),
+    type: v.union(v.literal("game_started"), v.literal("game_completed")),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
 };
 
 export const tables = {

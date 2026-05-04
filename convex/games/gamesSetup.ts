@@ -16,6 +16,7 @@ import {
 import { resolveConfig, type ResolvedGameConfig } from "../gameConfig";
 import { FIRST_BOT_GAME_TUTORIAL_ID } from "../rooms/helpers";
 import { createTutorialDeal } from "../tutorialDeck";
+import { recordGameStart } from "../activityFeed";
 import { scheduleBotTurnIfNeeded, setRoomUsersActiveGameId } from "./gamesProgression";
 import {
   AI_DEALER_PLAYER_ID,
@@ -454,6 +455,7 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
   });
   await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
   await scheduleBotTurnIfNeeded(ctx, game._id);
+  await recordGameStart(ctx, game._id);
 
   return {
     ok: true,
@@ -556,6 +558,7 @@ export async function internalStartGameHandler(
   });
   await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
   await scheduleBotTurnIfNeeded(ctx, game._id);
+  await recordGameStart(ctx, game._id);
 
   return { ok: true };
 }

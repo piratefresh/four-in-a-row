@@ -9,6 +9,7 @@ import { getBotCharacterForAuthUserId, getBotCharacterForSeed, isBluffLikely, sh
 import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 import { tutorialBotShowdownWord } from "../tutorialBots";
 import { calculateScore, getHighestScoringTileValue } from "./gamesScoring";
+import { recordGameCompletion } from "../activityFeed";
 
 export type SubmitWordArgs = {
   gameId: Doc<"games">["_id"];
@@ -76,6 +77,7 @@ async function insertGameCompleteTrace(
     winnerScore: args.winnerScore,
     metadata: { reason: args.reason },
   });
+  await recordGameCompletion(ctx, game._id);
 }
 
 function getTileIdentityKey(

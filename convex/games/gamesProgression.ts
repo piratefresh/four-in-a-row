@@ -1,3 +1,4 @@
+import { recordGameCompletion } from "../activityFeed";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -486,6 +487,7 @@ export async function handlePostActionProgression(
         stage: "showdown",
         metadata: { reason: "no_remaining_players" },
       });
+      await recordGameCompletion(ctx, game._id);
       // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
       return;
     }
@@ -554,6 +556,7 @@ export async function handlePostActionProgression(
         stage: game.stage,
         metadata: { reason: "no_next_stage" },
       });
+      await recordGameCompletion(ctx, game._id);
       // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
       return;
     }
