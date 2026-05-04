@@ -5,7 +5,20 @@ import { requireVerifiedUser } from "./verifyUser";
 import { getAuthUserByPlayerAuthUserId } from "./rooms/helpers";
 import { authComponent } from "./auth";
 
-const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+export const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+
+export function isUserOnline(lastSeenAt: number | null, now?: number): boolean {
+  if (lastSeenAt === null) return false;
+  return ((now ?? Date.now()) - lastSeenAt) < ONLINE_THRESHOLD_MS;
+}
+
+export function orderedPair(a: string, b: string): [string, string] {
+  return a < b ? [a, b] : [b, a];
+}
+
+export function isSelfRequest(userId: string, targetUserId: string): boolean {
+  return userId === targetUserId;
+}
 
 // ==================== User Profile Helpers ====================
 
