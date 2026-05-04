@@ -92,17 +92,28 @@ export function FriendsPage() {
                       <span className="text-xs text-emerald-400">Friends</span>
                     ) : user.relationshipStatus === "pending_sent" ? (
                       <span className="text-xs text-amber-400">Request Sent</span>
-                    ) : user.relationshipStatus === "pending_received" ? (
-                      <button
-                        type="button"
-                        className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700"
-                        onClick={async () => {
-                          await sendRequest({ toUserId: user.userId });
-                          toast.success(`Friend request sent to ${user.name}`);
-                        }}
-                      >
-                        Accept
-                      </button>
+                    ) : user.relationshipStatus === "pending_received" && "pendingRequestId" in user ? (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                          onClick={async () => {
+                            await acceptRequest({ requestId: (user as any).pendingRequestId });
+                            toast.success(`You are now friends with ${user.name}`);
+                          }}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-md bg-slate-600 px-3 py-1 text-xs font-medium text-white hover:bg-slate-700"
+                          onClick={async () => {
+                            await declineRequest({ requestId: (user as any).pendingRequestId });
+                          }}
+                        >
+                          Decline
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"

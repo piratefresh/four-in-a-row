@@ -128,6 +128,7 @@ export const searchUsers = query({
         name: user.name ?? "Unknown",
         image: user.image ?? null,
         relationshipStatus,
+        ...(incomingPending ? { pendingRequestId: incomingPending._id } : {}),
       });
     }
 
