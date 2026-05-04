@@ -486,7 +486,7 @@ export async function handlePostActionProgression(
         stage: "showdown",
         metadata: { reason: "no_remaining_players" },
       });
-      await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: game._id });
+      // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
       return;
     }
 
@@ -554,7 +554,7 @@ export async function handlePostActionProgression(
         stage: game.stage,
         metadata: { reason: "no_next_stage" },
       });
-      await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: game._id });
+      // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
       return;
     }
   } else {

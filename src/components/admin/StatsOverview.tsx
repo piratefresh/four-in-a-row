@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Doc } from "../../../convex/_generated/dataModel";
+import type { StatsRow } from "./types";
 import {
   Table,
   TableBody,
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { PlayerStatCard } from "./PlayerStatCard";
 
 type StatsOverviewProps = {
-  stats: Doc<"playerStats">[];
+  stats: StatsRow[];
 };
 
 export function StatsOverview({ stats }: StatsOverviewProps) {
@@ -22,9 +22,7 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
     return <p className="text-stone-500">No stats available yet.</p>;
   }
 
-  const sorted = [...stats].sort(
-    (a, b) => safeNumber(b.winRate) - safeNumber(a.winRate),
-  );
+  const sorted = [...stats].sort((a, b) => b.winRate - a.winRate);
   const chartStats = sorted.slice(0, 8);
 
   return (
@@ -40,37 +38,31 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
               <TableHead className="h-14 text-right text-stone-500">Net Chips</TableHead>
               <TableHead className="h-14 text-right text-stone-500">Avg Score</TableHead>
               <TableHead className="h-14 text-stone-500">Best Word</TableHead>
+              <TableHead className="h-14 text-right text-stone-500">VPIP</TableHead>
               <TableHead className="h-14 pr-6 text-right text-stone-500">Fold %</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.map((stat) => {
-              const totalActions =
-                safeNumber(stat.totalChecks) +
-                safeNumber(stat.totalCalls) +
-                safeNumber(stat.totalRaises) +
-                safeNumber(stat.totalFolds);
-              const foldRate =
-                totalActions > 0
-                  ? (safeNumber(stat.totalFolds) / totalActions) * 100
-                  : 0;
-              const netChips =
-                safeNumber(stat.totalChipsWon) - safeNumber(stat.totalChipsLost);
-              const rowId = stat.authUserId ?? stat.characterId ?? stat._id;
+              const rowId =
+                stat.identity.authUserId ??
+                stat.identity.characterId ??
+                stat.identity.name;
+              const isBot = stat.identity.type === "bot";
 
               return (
                 <TableRow
-                  key={stat._id}
+                  key={rowId}
                   className="cursor-pointer border-white/10 text-stone-200 hover:bg-white/[0.045]"
                   onClick={() =>
                     setExpandedId(expandedId === rowId ? null : rowId)
                   }
                 >
                   <TableCell className="px-6 font-medium text-white">
-                    {stat.playerName}
+                    {stat.identity.name}
                   </TableCell>
                   <TableCell>
-                    {stat.isBot ? (
+                    {isBot ? (
                       <Badge className="rounded-full border border-white/10 bg-white/12 px-2 text-stone-100">
                         AI
                       </Badge>
@@ -87,14 +79,14 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
                     {formatNumber(stat.gamesPlayed)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {formatPercent(stat.winRate)}
+                    {formatRate(stat.winRate)}
                   </TableCell>
                   <TableCell
                     className={`text-right ${
-                      netChips >= 0 ? "text-emerald-400" : "text-rose-400"
+                      stat.netChips >= 0 ? "text-emerald-400" : "text-rose-400"
                     }`}
                   >
-                    {formatSignedNumber(netChips)}
+                    {formatSignedNumber(stat.netChips)}
                   </TableCell>
                   <TableCell className="text-right">
                     {formatDecimal(stat.avgWordScore)}
@@ -111,8 +103,11 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
                       <span className="text-stone-600">-</span>
                     )}
                   </TableCell>
+                  <TableCell className="text-right">
+                    {formatRate(stat.vpip)}
+                  </TableCell>
                   <TableCell className="pr-6 text-right">
-                    {formatPercentFromNumber(foldRate)}
+                    {formatRate(stat.foldPercent)}
                   </TableCell>
                 </TableRow>
               );
@@ -125,7 +120,10 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
         <PlayerStatCard
           stat={
             sorted.find(
-              (s) => (s.authUserId ?? s.characterId ?? s._id) === expandedId,
+              (s) =>
+                (s.identity.authUserId ??
+                  s.identity.characterId ??
+                  s.identity.name) === expandedId,
             )!
           }
           onClose={() => setExpandedId(null)}
@@ -135,26 +133,23 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
       <div className="grid gap-5 lg:grid-cols-2">
         <ComparisonPanel
           title="Win rate spread"
-          legend={`${chartStats[0]?.playerName ?? "Leader"} ${formatPercent(
+          legend={`${chartStats[0]?.identity.name ?? "Leader"} ${formatRate(
             chartStats[0]?.winRate ?? 0,
           )}`}
-          points={chartStats.map((stat) => safeNumber(stat.winRate) * 100)}
+          points={chartStats.map((stat) => stat.winRate * 100)}
           accent="stroke-[#f1f7a5]"
           fill="rgba(161,214,122,0.18)"
-          labels={chartStats.map((stat) => stat.playerName)}
+          labels={chartStats.map((stat) => stat.identity.name)}
         />
         <ComparisonPanel
           title="Net chips"
-          legend={`${chartStats[0]?.playerName ?? "Leader"} ${formatSignedNumber(
-            safeNumber(chartStats[0]?.totalChipsWon) -
-              safeNumber(chartStats[0]?.totalChipsLost),
+          legend={`${chartStats[0]?.identity.name ?? "Leader"} ${formatSignedNumber(
+            chartStats[0]?.netChips ?? 0,
           )}`}
-          points={chartStats.map(
-            (stat) => safeNumber(stat.totalChipsWon) - safeNumber(stat.totalChipsLost),
-          )}
+          points={chartStats.map((stat) => stat.netChips)}
           accent="stroke-[#f09975]"
           fill="rgba(209,77,91,0.16)"
-          labels={chartStats.map((stat) => stat.playerName)}
+          labels={chartStats.map((stat) => stat.identity.name)}
         />
       </div>
     </div>
@@ -226,7 +221,7 @@ function ComparisonPanel({
 }
 
 function buildChartPath(values: number[]) {
-  const safeValues = values.map(safeNumber);
+  const safeValues = values.map((v) => (Number.isFinite(v) ? v : 0));
   if (safeValues.length === 0) return "";
   const min = Math.min(...safeValues);
   const max = Math.max(...safeValues);
@@ -242,27 +237,19 @@ function buildChartPath(values: number[]) {
     .join(" ");
 }
 
-function safeNumber(value: number | null | undefined) {
-  return Number.isFinite(value) ? Number(value) : 0;
-}
-
 function formatNumber(value: number | null | undefined) {
-  return safeNumber(value).toLocaleString();
+  return (Number.isFinite(value) ? Number(value) : 0).toLocaleString();
 }
 
 function formatSignedNumber(value: number | null | undefined) {
-  const safeValue = safeNumber(value);
-  return `${safeValue > 0 ? "+" : ""}${safeValue.toLocaleString()}`;
+  const safe = Number.isFinite(value) ? Number(value) : 0;
+  return `${safe > 0 ? "+" : ""}${safe.toLocaleString()}`;
 }
 
 function formatDecimal(value: number | null | undefined) {
-  return safeNumber(value).toFixed(1);
+  return (Number.isFinite(value) ? Number(value) : 0).toFixed(1);
 }
 
-function formatPercent(value: number | null | undefined) {
-  return `${(safeNumber(value) * 100).toFixed(1)}%`;
-}
-
-function formatPercentFromNumber(value: number | null | undefined) {
-  return `${safeNumber(value).toFixed(1)}%`;
+function formatRate(value: number | null | undefined) {
+  return `${((Number.isFinite(value) ? Number(value) : 0) * 100).toFixed(1)}%`;
 }

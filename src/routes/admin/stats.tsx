@@ -17,13 +17,40 @@ export const Route = createFileRoute("/admin/stats")({
 
 function AdminStatsPage() {
   const [filter, setFilter] = useState<"all" | "players" | "bots">("all");
+  const [timeMode, setTimeMode] = useState<"all" | "7d" | "30d" | "custom">("all");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
 
-  const allStats = useQuery(api.playerStats.getAllStats, { filter });
-  const aiComparison = useQuery(api.playerStats.getAICharacterComparison);
+  const timeArgs =
+    timeMode === "all"
+      ? {}
+      : timeMode === "custom" && customStart && customEnd
+        ? {
+            dateRange: {
+              start: new Date(customStart).getTime(),
+              end: new Date(customEnd + "T23:59:59").getTime(),
+            },
+          }
+        : { days: timeMode === "7d" ? 7 : 30 };
+
+  const allStats = useQuery(api.playerStats.getAllStats, {
+    filter,
+    ...timeArgs,
+  });
+  const botStats = useQuery(api.playerStats.getAllStats, {
+    filter: "bots",
+    ...timeArgs,
+  });
   const filters: Array<{ value: typeof filter; label: string }> = [
     { value: "all", label: "All" },
     { value: "players", label: "Players" },
     { value: "bots", label: "AI Characters" },
+  ];
+  const timePresets: Array<{ value: typeof timeMode; label: string }> = [
+    { value: "all", label: "All Time" },
+    { value: "7d", label: "Last 7 Days" },
+    { value: "30d", label: "Last 30 Days" },
+    { value: "custom", label: "Custom" },
   ];
 
   return (
@@ -64,6 +91,41 @@ function AdminStatsPage() {
 
           <TabsContent value="leaderboard" className="space-y-6">
             <div className="flex flex-wrap gap-2">
+              {timePresets.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setTimeMode(item.value)}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                    timeMode === item.value
+                      ? "border-white/16 bg-white/12 text-white"
+                      : "border-white/8 bg-black/20 text-stone-500 hover:border-white/16 hover:text-stone-200"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            {timeMode === "custom" && (
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-stone-200"
+                />
+                <span className="text-stone-500">to</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-stone-200"
+                />
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2">
               {filters.map((item) => (
                 <button
                   key={item.value}
@@ -88,8 +150,8 @@ function AdminStatsPage() {
           </TabsContent>
 
           <TabsContent value="ai-comparison">
-            {aiComparison ? (
-              <AICharacterComparison data={aiComparison} />
+            {botStats ? (
+              <AICharacterComparison data={botStats} />
             ) : (
               <p className="text-stone-500">Loading AI comparison...</p>
             )}
