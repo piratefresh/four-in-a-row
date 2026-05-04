@@ -340,12 +340,34 @@ export const appTables = {
     responseText: v.string(),
     createdAt: v.number(),
   })
-    .index("by_personality_trigger", ["personality", "trigger"])
+     .index("by_personality_trigger", ["personality", "trigger"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 1024,
       filterFields: ["personality", "trigger"],
     }),
+  friendRequests: defineTable({
+    fromUserId: v.string(),
+    toUserId: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("accepted"),
+      v.literal("declined"),
+      v.literal("cancelled"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_from_status", ["fromUserId", "status"])
+    .index("by_to_status", ["toUserId", "status"])
+    .index("by_pair", ["fromUserId", "toUserId"]),
+  friendships: defineTable({
+    userA: v.string(),
+    userB: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_userA", ["userA"])
+    .index("by_userB", ["userB"]),
 };
 
 export const tables = {

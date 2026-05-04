@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { authClient } from "@/lib/auth-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { dismissRoomRejoin } from "@/lib/room-rejoin-dismissal";
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft, ChevronDown, Users } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +38,7 @@ export default function Header() {
       ? decodeURIComponent(resultsMatch[1]).toUpperCase()
       : null;
   const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
+  const pendingNotifications = useQuery(api["friendships/notifications"].pendingNotificationCount);
   const roomData = useQuery(
     api.rooms.getRoomMembers,
     roomCode ? { code: roomCode } : "skip",
@@ -184,6 +185,18 @@ export default function Header() {
               <DropdownMenuItem asChild>
                 <Link to="/settings">Settings</Link>
               </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/friends" className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Friends
+                  {pendingNotifications && (pendingNotifications.friendRequests + pendingNotifications.gameInvites) > 0 ? (
+                    <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                      {pendingNotifications.friendRequests + pendingNotifications.gameInvites}
+                    </span>
+                  ) : null}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
                   void authClient.signOut();
