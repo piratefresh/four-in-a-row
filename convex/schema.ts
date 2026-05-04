@@ -25,12 +25,7 @@ export const appTables = {
     title: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("closed")),
     mode: v.optional(v.union(v.literal("riverRunSolo"))),
-    // Legacy rooms used gameType. Absence of `mode` is the canonical
-    // regular Word Poker room shape; keep this so old documents validate.
-    gameType: v.optional(v.union(
-      v.literal("wordPoker"),
-      v.literal("riverRun"),
-    )),
+    gameType: v.optional(v.string()),
     maxPlayers: v.number(),
     tutorialId: v.optional(v.union(v.literal("first-bot-game"))),
     isBotGame: v.optional(v.boolean()),
@@ -346,12 +341,39 @@ export const appTables = {
     responseText: v.string(),
     createdAt: v.number(),
   })
-    .index("by_personality_trigger", ["personality", "trigger"])
+     .index("by_personality_trigger", ["personality", "trigger"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 1024,
       filterFields: ["personality", "trigger"],
     }),
+  friendRequests: defineTable({
+    fromUserId: v.string(),
+    toUserId: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("accepted"),
+      v.literal("declined"),
+      v.literal("cancelled"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_from_status", ["fromUserId", "status"])
+    .index("by_to_status", ["toUserId", "status"])
+    .index("by_pair", ["fromUserId", "toUserId"]),
+  friendships: defineTable({
+    userA: v.string(),
+    userB: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_userA", ["userA"])
+    .index("by_userB", ["userB"]),
+  activityFeed: defineTable({
+    displayText: v.string(),
+    type: v.union(v.literal("game_started"), v.literal("game_completed")),
+    createdAt: v.number(),
+  }).index("by_createdAt", ["createdAt"]),
 };
 
 export const tables = {

@@ -16,14 +16,8 @@ interface RoomReactionsInput {
   roomData: {
     room: { _id: string; status: string; tutorialId?: string | null };
   } | null | undefined;
-  game: {
-    _id: string;
-    status: string;
-    currentBet?: number;
-    currentPlayerIndex?: number;
-    stage?: string;
-  } | null | undefined;
-  myPlayer: unknown | null;
+  game: any;
+  myPlayer: any;
   playerId: string | null;
   didShowdownExpire: boolean;
   didLobbyExpire: boolean;
@@ -31,7 +25,7 @@ interface RoomReactionsInput {
   gameMessage: string | null;
   setGameMessage: (msg: string | null) => void;
   resetLeftFlag: () => void;
-  leaveCurrentRoom: (silent: boolean) => Promise<boolean>;
+  leaveCurrentRoom: (_silent: boolean) => Promise<boolean>;
 }
 
 export function useRoomReactions(input: RoomReactionsInput) {

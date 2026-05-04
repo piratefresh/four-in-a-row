@@ -6,7 +6,7 @@ export function useRoomReady(
   code: string,
   isTutorialRoom: boolean,
   hasSessionUser: boolean,
-  tutorialGuestAuthUserId: string | undefined,
+  tutorialGuestAuthUserId: string | null | undefined,
 ) {
   const [isTogglingReady, setIsTogglingReady] = useState(false);
   const toggleReady = useMutation(api.rooms.toggleReady);

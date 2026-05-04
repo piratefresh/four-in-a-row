@@ -5,8 +5,8 @@ const DEALER_PLAYER_ID = "ai_dealer";
 const INITIAL_CHIPS = 1000;
 
 export function useRoomDisplay(
-  roomData: { members: Array<Record<string, unknown>>; room: { status: string } } | null | undefined,
-  playerHands: Array<{ playerId: string; createdAt?: number; tiles?: unknown[] }> | undefined,
+  roomData: { members: any[]; room: { status: string } } | null | undefined,
+  playerHands: any[] | undefined,
   game: { status?: string } | null | undefined,
   playerId: string | null,
   nameMatchedPlayerId: string | null,

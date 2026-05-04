@@ -16,13 +16,14 @@ describe("HomeModeMenu", () => {
         onSelectRiverRun={vi.fn()}
         onStartOffline={vi.fn()}
         onPlayTutorial={vi.fn()}
+        onSelectLeaderboard={vi.fn()}
       />,
     );
 
     expect(markup).toContain("Offline Mode");
     expect(markup).toContain("Play vs. bots, no signup");
-    expect(markup).toContain("River Run");
-    expect(markup).toContain("Beat the target score");
+    expect(markup).toContain("Leaderboard");
+    expect(markup).toContain("Top players");
     expect(markup).toContain("Power-ups");
     expect(markup).toContain("aria-haspopup=\"menu\"");
     expect(markup).toContain("disabled");

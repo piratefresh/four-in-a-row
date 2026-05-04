@@ -18,7 +18,7 @@ export function useRoomLeave(code: string) {
   }, [code]);
 
   const leaveCurrentRoom = useCallback(
-    async (silent: boolean): Promise<boolean> => {
+    async (_silent: boolean): Promise<boolean> => {
       if (hasLeftRoomRef.current) return true;
       try {
         await leaveRoom({ code: codeRef.current });

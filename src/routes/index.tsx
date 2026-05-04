@@ -9,6 +9,7 @@ import {
   logTutorialDebug,
 } from "@/lib/tutorial-guest";
 import { HomeModeMenu } from "@/components/home/HomeModeMenu";
+import { ActivityTicker } from "@/components/home/ActivityTicker";
 import { OnboardingSetupScreen } from "@/components/home/OnboardingSetupScreen";
 import { SplashScreen } from "@/components/home/SplashScreen";
 import {
@@ -178,6 +179,12 @@ function App() {
     });
   };
 
+  const handleSelectLeaderboard = () => {
+    startTransition(() => {
+      void navigate({ to: "/leaderboard" });
+    });
+  };
+
   const handleResumeRoom = async () => {
     if (!activeRoom?.code) return;
     await navigate({ to: "/rooms/$code", params: { code: activeRoom.code } });
@@ -262,7 +269,8 @@ function App() {
       ) : showOnboardingSetupScreen ? (
         <OnboardingSetupScreen stage={onboardingSetupStage} />
       ) : (
-        <HomeModeMenu
+        <>
+          <HomeModeMenu
           activeRoomCode={activeRoom?.code}
           activeRoomTutorialId={activeRoom?.tutorialId ?? null}
           isStartingOffline={isStartingOffline}
@@ -281,7 +289,10 @@ function App() {
           onResumeRoom={() => {
             void handleResumeRoom();
           }}
+          onSelectLeaderboard={handleSelectLeaderboard}
         />
+        <ActivityTicker />
+        </>
       )}
     </>
   );

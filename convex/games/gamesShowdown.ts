@@ -9,6 +9,7 @@ import { getBotCharacterForAuthUserId, getBotCharacterForSeed, isBluffLikely, sh
 import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 import { tutorialBotShowdownWord } from "../tutorialBots";
 import { calculateScore, getHighestScoringTileValue } from "./gamesScoring";
+import { recordGameCompletion } from "../activityFeed";
 
 export type SubmitWordArgs = {
   gameId: Doc<"games">["_id"];
@@ -76,6 +77,7 @@ async function insertGameCompleteTrace(
     winnerScore: args.winnerScore,
     metadata: { reason: args.reason },
   });
+  await recordGameCompletion(ctx, game._id);
 }
 
 function getTileIdentityKey(
@@ -326,7 +328,7 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
   if (eligiblePlayerIds.length === 0) {
     await ctx.db.patch(game._id, { status: "completed", updatedAt: now });
     await insertGameCompleteTrace(ctx, game, { reason: "no_eligible_players_after_submit" });
-    await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: gameId });
+    // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
   } else {
     const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", gameId)).collect();
     const submissionsByPlayer = new Map<string, (typeof allSubmissions)[number]>();
@@ -344,7 +346,7 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
         winnerScore: winningSubmission.score,
         reason: "all_showdown_submissions_received",
       });
-      await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: gameId });
+      // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
     }
   }
 
@@ -374,7 +376,7 @@ export async function forfeitShowdownHandler(ctx: MutationCtx, args: ShowdownArg
   if (eligiblePlayerIds.length === 0) {
     await ctx.db.patch(game._id, { status: "completed", updatedAt: now });
     await insertGameCompleteTrace(ctx, game, { reason: "all_players_forfeited" });
-    await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
+    // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
     return { ok: true, forfeited: true, resolved: true, hasWinner: false };
   }
   if (eligiblePlayerIds.length === 1) {
@@ -388,7 +390,7 @@ export async function forfeitShowdownHandler(ctx: MutationCtx, args: ShowdownArg
         winnerScore: winnerSubmission.score,
         reason: "one_player_left_after_forfeit",
       });
-      await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
+      // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
       return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId };
     }
     return { ok: true, forfeited: true, resolved: false, hasWinner: false };
@@ -404,7 +406,7 @@ export async function forfeitShowdownHandler(ctx: MutationCtx, args: ShowdownArg
     winnerScore: winningSubmission.score,
     reason: "forfeit_completed_remaining_showdown",
   });
-  await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
+  // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
   return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId: winningSubmission.playerId };
 }
 
@@ -430,7 +432,7 @@ export async function resolveShowdownHandler(ctx: MutationCtx, args: { gameId: D
   if (eligiblePlayerIds.length === 0) {
     await ctx.db.patch(game._id, { status: "completed", updatedAt: Date.now() });
     await insertGameCompleteTrace(ctx, game, { reason: "resolve_no_eligible_players" });
-    await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
+    // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
     return { ok: true, hasWinner: false, message: "No eligible players for showdown." };
   }
   const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
@@ -444,7 +446,7 @@ export async function resolveShowdownHandler(ctx: MutationCtx, args: { gameId: D
   if (eligibleSubmissions.length === 0) {
     await ctx.db.patch(game._id, { status: "completed", updatedAt: Date.now() });
     await insertGameCompleteTrace(ctx, game, { reason: "resolve_no_valid_submissions" });
-    await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
+    // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
     return { ok: true, hasWinner: false, message: "No valid submissions for showdown." };
   }
   const sortedSubmissions = [...eligibleSubmissions].sort(compareRankedSubmissions);
@@ -457,7 +459,7 @@ export async function resolveShowdownHandler(ctx: MutationCtx, args: { gameId: D
     winnerScore: winningSubmission.score,
     reason: "manual_or_timer_resolution",
   });
-  await ctx.runMutation(internal.playerStats.updatePlayerStats, { gameId: args.gameId });
+  // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
   return { ok: true, hasWinner: true, winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, allSubmissions: sortedSubmissions.map((submission) => ({ playerId: submission.playerId, word: submission.word, score: submission.score, scoreBreakdown: submission.scoreBreakdown })) };
 }
 

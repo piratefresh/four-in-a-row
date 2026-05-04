@@ -1,4 +1,4 @@
-import { Brain, Globe2, Waves, WifiOff } from "lucide-react";
+import { Brain, Globe2, Trophy, WifiOff } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +38,7 @@ type HomeModeMenuProps = {
   onStartOffline: (difficulty: OfflineDifficulty) => void;
   onPlayTutorial: () => void;
   onResumeRoom?: () => void;
+  onSelectLeaderboard?: () => void;
 };
 
 export function HomeModeMenu({
@@ -49,10 +50,11 @@ export function HomeModeMenu({
   statusMessage,
   onOfflineDifficultyChange,
   onSelectOnline,
-  onSelectRiverRun,
+  onSelectRiverRun: _onSelectRiverRun,
   onStartOffline,
   onPlayTutorial,
   onResumeRoom,
+  onSelectLeaderboard,
 }: HomeModeMenuProps) {
   const canResumeActiveRoom = Boolean(activeRoomCode && !activeRoomTutorialId);
 
@@ -89,15 +91,6 @@ export function HomeModeMenu({
             tone="recommended"
             disabled={isStartingOffline || isStartingTutorial}
             onSelect={onPlayTutorial}
-          />
-
-          <ModeCard
-            icon={<Waves className="size-5" strokeWidth={2.25} />}
-            label="River Run"
-            description="Beat the target score"
-            tone="warm"
-            disabled={isStartingOffline || isStartingTutorial}
-            onSelect={onSelectRiverRun}
           />
 
           <ModeCard
@@ -153,6 +146,16 @@ export function HomeModeMenu({
               })}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {onSelectLeaderboard ? (
+            <ModeCard
+              icon={<Trophy className="size-5" strokeWidth={2.25} />}
+              label="Leaderboard"
+              description="Top players & best words"
+              onSelect={onSelectLeaderboard}
+              disabled={isStartingOffline || isStartingTutorial}
+            />
+          ) : null}
 
           <Tips className="mt-1" />
         </div>

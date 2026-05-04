@@ -78,6 +78,7 @@ export function BlankRoomPhase({
             infoCardClassName="min-w-[84px] px-2 py-1 xs:min-w-[92px] xs:px-2 xs:py-1 sm:min-w-[132px] sm:px-4 sm:py-2"
             betClassName="left-auto right-0 translate-x-1/4"
             mobileInfoPlacement="top"
+            infoLayout="compact"
           />
         </div>
       </div>

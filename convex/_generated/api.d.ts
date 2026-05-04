@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activityFeed from "../activityFeed.js";
 import type * as ai from "../ai.js";
 import type * as aiActionsCache from "../aiActionsCache.js";
 import type * as aiBettingConstants from "../aiBettingConstants.js";
@@ -18,6 +19,9 @@ import type * as aiPrompts from "../aiPrompts.js";
 import type * as aiStrategy from "../aiStrategy.js";
 import type * as aiTools from "../aiTools.js";
 import type * as aiTracing from "../aiTracing.js";
+import type * as ai_aiBetting from "../ai/aiBetting.js";
+import type * as ai_aiShared from "../ai/aiShared.js";
+import type * as ai_aiShowdown from "../ai/aiShowdown.js";
 import type * as auth from "../auth.js";
 import type * as clearOldGames from "../clearOldGames.js";
 import type * as constants from "../constants.js";
@@ -26,6 +30,9 @@ import type * as csw24 from "../csw24.js";
 import type * as debugBots from "../debugBots.js";
 import type * as emails from "../emails.js";
 import type * as embeddings from "../embeddings.js";
+import type * as friendships_index from "../friendships/index.js";
+import type * as friendships_notifications from "../friendships/notifications.js";
+import type * as friendships_requests from "../friendships/requests.js";
 import type * as gameConfig from "../gameConfig.js";
 import type * as gameRules from "../gameRules.js";
 import type * as gameState from "../gameState.js";
@@ -79,6 +86,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activityFeed: typeof activityFeed;
   ai: typeof ai;
   aiActionsCache: typeof aiActionsCache;
   aiBettingConstants: typeof aiBettingConstants;
@@ -89,6 +97,9 @@ declare const fullApi: ApiFromModules<{
   aiStrategy: typeof aiStrategy;
   aiTools: typeof aiTools;
   aiTracing: typeof aiTracing;
+  "ai/aiBetting": typeof ai_aiBetting;
+  "ai/aiShared": typeof ai_aiShared;
+  "ai/aiShowdown": typeof ai_aiShowdown;
   auth: typeof auth;
   clearOldGames: typeof clearOldGames;
   constants: typeof constants;
@@ -97,6 +108,9 @@ declare const fullApi: ApiFromModules<{
   debugBots: typeof debugBots;
   emails: typeof emails;
   embeddings: typeof embeddings;
+  "friendships/index": typeof friendships_index;
+  "friendships/notifications": typeof friendships_notifications;
+  "friendships/requests": typeof friendships_requests;
   gameConfig: typeof gameConfig;
   gameRules: typeof gameRules;
   gameState: typeof gameState;

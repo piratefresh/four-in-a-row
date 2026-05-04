@@ -195,6 +195,13 @@ export function RoomHandsBoardV2({
     isShowdownSubmissionOpen,
   } = useRoomGameContext();
 
+  useEffect(() => {
+    if (isMyTurn) {
+      const audio = new Audio("/your-round-sound.mp3");
+      audio.play().catch(() => {});
+    }
+  }, [isMyTurn]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
