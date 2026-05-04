@@ -3,7 +3,7 @@ import {
   isUserOnline,
   orderedPair,
   ONLINE_THRESHOLD_MS,
-} from "./friendships";
+} from "./index";
 
 describe("friendships helpers", () => {
   describe("isUserOnline", () => {

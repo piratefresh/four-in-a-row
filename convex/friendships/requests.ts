@@ -1,9 +1,9 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireVerifiedUser } from "./verifyUser";
-import { isAlreadyFriends } from "./friendships";
-import { authComponent } from "./auth";
+import { requireVerifiedUser } from "../verifyUser";
+import { isAlreadyFriends } from "./index";
+import { authComponent } from "../auth";
 
 export function isSelfRequest(userId: string, targetUserId: string): boolean {
   return userId === targetUserId;

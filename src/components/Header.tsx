@@ -38,7 +38,7 @@ export default function Header() {
       ? decodeURIComponent(resultsMatch[1]).toUpperCase()
       : null;
   const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
-  const pendingNotifications = useQuery(api.notifications.pendingNotificationCount);
+  const pendingNotifications = useQuery(api["friendships/notifications"].pendingNotificationCount);
   const roomData = useQuery(
     api.rooms.getRoomMembers,
     roomCode ? { code: roomCode } : "skip",

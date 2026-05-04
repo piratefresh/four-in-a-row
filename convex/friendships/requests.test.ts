@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isSelfRequest } from "./friendRequests";
+import { isSelfRequest } from "./requests";
 
 describe("friendRequests helpers", () => {
   describe("isSelfRequest", () => {

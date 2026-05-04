@@ -1,8 +1,8 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireVerifiedUser } from "./verifyUser";
-import { authComponent } from "./auth";
+import { requireVerifiedUser } from "../verifyUser";
+import { authComponent } from "../auth";
 
 export const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
 

@@ -1,6 +1,6 @@
-import { query } from "./_generated/server";
-import { requireVerifiedUser } from "./verifyUser";
-import { countPendingIncoming } from "./friendRequests";
+import { query } from "../_generated/server";
+import { requireVerifiedUser } from "../verifyUser";
+import { countPendingIncoming } from "./requests";
 
 export const pendingNotificationCount = query({
   args: {},

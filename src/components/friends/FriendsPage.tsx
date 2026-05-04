@@ -27,17 +27,17 @@ export function FriendsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
-  const pendingRequests = useQuery(api.friendRequests.listPendingRequests);
+  const pendingRequests = useQuery(api["friendships/requests"].listPendingRequests);
   const friends = useQuery(api.friendships.listFriends);
   const searchResults = useQuery(
-    api.friendRequests.searchUsers,
+    api["friendships/requests"].searchUsers,
     debouncedQuery.length > 0 ? { query: debouncedQuery } : "skip",
   );
 
-  const sendRequest = useMutation(api.friendRequests.sendFriendRequest);
-  const acceptRequest = useMutation(api.friendRequests.acceptFriendRequest);
-  const declineRequest = useMutation(api.friendRequests.declineFriendRequest);
-  const cancelRequest = useMutation(api.friendRequests.cancelFriendRequest);
+  const sendRequest = useMutation(api["friendships/requests"].sendFriendRequest);
+  const acceptRequest = useMutation(api["friendships/requests"].acceptFriendRequest);
+  const declineRequest = useMutation(api["friendships/requests"].declineFriendRequest);
+  const cancelRequest = useMutation(api["friendships/requests"].cancelFriendRequest);
   const removeFriend = useMutation(api.friendships.removeFriend);
 
   useEffect(() => {
