@@ -90,13 +90,15 @@ export function PhasePlayerBadge({
     mobileInfoPlacement === "top"
       ? "bottom-full mb-2"
       : "top-full mt-2";
-  const statusLabel = isThinking
-    ? "Thinking..."
-    : actionLabel
-      ? actionLabel
-      : isActiveTurn
-        ? "Thinking..."
-        : "Waiting";
+  const statusLabel = isCurrentPlayer && isActiveTurn
+    ? "Your Turn"
+    : isThinking
+      ? "Thinking..."
+      : actionLabel
+        ? actionLabel
+        : isActiveTurn
+          ? "Thinking..."
+          : "Waiting";
 
   useEffect(() => {
     if (infoLayout !== "card" || !mobileInfoOpen) return;
@@ -173,7 +175,7 @@ export function PhasePlayerBadge({
           <Avatar
             className={`relative z-0 overflow-hidden rounded-full border bg-[#d7d0ff] ${
               isActiveTurn
-                ? "border-[#f4d37a] shadow-[0_0_0_3px_rgba(244,211,122,0.32),0_0_24px_rgba(244,211,122,0.55),0_8px_24px_rgba(0,0,0,0.35)]"
+                ? "border-gold-bright shadow-[0_0_0_3px_rgba(212,165,74,0.32),0_0_24px_rgba(212,165,74,0.55),0_8px_24px_rgba(0,0,0,0.35)] animate-pulse"
                 : "border-white/25 shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
             } ${avatarSizeClass}`}
           >
@@ -224,24 +226,30 @@ export function PhasePlayerBadge({
         />
       )}
       {infoLayout === "compact" ? (
-        <div className="mt-1 flex max-w-[112px] flex-col items-center text-center sm:max-w-[140px]">
-          <div className="max-w-full truncate font-mono text-[10px] font-semibold uppercase leading-none text-[#f3f1ea] sm:text-[12px]">
+        <div className="mt-1.5 flex max-w-[120px] flex-col items-center text-center sm:max-w-[160px]">
+          <div className="max-w-full truncate font-mono text-[11px] font-semibold uppercase leading-none text-[#f3f1ea] sm:text-[13px]">
             {name}
             {isCurrentPlayer ? (
               <span className="ml-1 text-[#d7c27a]">(you)</span>
             ) : null}
           </div>
-          <div
-            className={`mt-1 max-w-full truncate font-mono text-[8px] font-semibold uppercase leading-none sm:text-[10px] ${
-              isThinking || isActiveTurn
-                ? "text-[#f0a64a]"
-                : actionLabel
-                  ? "text-[#d4af37]"
-                  : "text-[#d4af37]/75"
-            }`}
-          >
-            {statusLabel}
-          </div>
+          {isActiveTurn && isCurrentPlayer ? (
+            <div className="mt-1 rounded-full bg-[#f4d37a] px-2.5 py-0.5 text-[9px] font-bold uppercase leading-none text-[#2b1810] shadow-[0_0_10px_rgba(244,211,122,0.45),0_1px_6px_rgba(0,0,0,0.35)] sm:text-[11px] sm:px-3 sm:py-1">
+              {statusLabel}
+            </div>
+          ) : (
+            <div
+              className={`mt-1 max-w-full truncate font-mono text-[9px] font-bold uppercase leading-none sm:text-[11px] ${
+                isThinking || isActiveTurn
+                  ? "text-[#f0a64a]"
+                  : actionLabel
+                    ? "text-[#d4af37]"
+                    : "text-[#d4af37]/75"
+              }`}
+            >
+              {statusLabel}
+            </div>
+          )}
         </div>
       ) : null}
     </div>
