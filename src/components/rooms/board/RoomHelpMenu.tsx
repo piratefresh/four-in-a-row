@@ -20,7 +20,7 @@ export const ROOM_HELP_TIPS: HelpTip[] = [
   {
     title: "How do I move letters?",
     body: "Tap any letter to activate it, then drag it into position to form your word.",
-    mediaSrc: "/drag%20and%20reorder.gif",
+    mediaSrc: "/drag-and-reorder.gif",
   },
   {
     title: "How do I use the double letter tile?",
