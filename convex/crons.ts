@@ -18,7 +18,7 @@ crons.interval(
 crons.interval(
   "refresh-stats-cache",
   { hours: 1 },
-  internal.statsCache.computeStats,
+  api.statsCache.computeStats,
   { filter: "all" },
 );
 
