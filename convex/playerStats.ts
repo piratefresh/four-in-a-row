@@ -191,13 +191,6 @@ export const getAllStats = query({
         if (!playerInfo) continue;
         const acc = getAccumulator(playerInfo);
 
-        // Count showdowns reached/won
-        const hand = hands.find((h) => h.playerId === sub.playerId);
-        if (hand && !hand.hasFolded) {
-          // They're in showdown if they haven't folded and submitted a word
-          // But we can't dedupe per-game here simply. Let's handle with a set.
-        }
-
         acc.allWords.push({
           word: sub.word,
           score: sub.score,

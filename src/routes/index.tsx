@@ -170,6 +170,15 @@ function App() {
     });
   };
 
+  const handleSelectRiverRun = () => {
+    setJoinMessage(null);
+    startTransition(() => {
+      void navigate({
+        to: "/river-run",
+      });
+    });
+  };
+
   const handleSelectLeaderboard = () => {
     startTransition(() => {
       void navigate({ to: "/leaderboard" });
@@ -183,7 +192,9 @@ function App() {
 
   const handlePlayTutorial = async () => {
     const displayName = getTutorialDisplayName();
-    const guestAuthUserId = session?.user ? undefined : getTutorialGuestId();
+    const guestAuthUserId = session?.user
+      ? undefined
+      : (getTutorialGuestId() ?? undefined);
     logTutorialDebug("home:start-tutorial:clicked", {
       hasSessionUser: Boolean(session?.user),
       convexAuthUserState:
@@ -261,13 +272,14 @@ function App() {
         <>
           <HomeModeMenu
           activeRoomCode={activeRoom?.code}
-          activeRoomTutorialId={activeRoom?.tutorialId}
+          activeRoomTutorialId={activeRoom?.tutorialId ?? null}
           isStartingOffline={isStartingOffline}
           isStartingTutorial={isStartingTutorial}
           offlineDifficulty={offlineDifficulty}
           statusMessage={joinMessage}
           onOfflineDifficultyChange={setOfflineDifficulty}
           onSelectOnline={handleSelectOnline}
+          onSelectRiverRun={handleSelectRiverRun}
           onStartOffline={(difficulty) => {
             void startOfflineGame({ difficulty });
           }}

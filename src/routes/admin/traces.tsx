@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { useQuery } from "convex/react";
+import { usePaginatedQuery } from "convex/react";
 import { Activity, Bell, Database, RefreshCw } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import {
@@ -32,10 +32,16 @@ function AdminTracesPage() {
   const [botOnly, setBotOnly] = useState(false);
   const [fallbackOnly, setFallbackOnly] = useState(false);
   const [failedOnly, setFailedOnly] = useState(false);
-  const traces = useQuery(api.aiTracing.getTraces, { limit: 250 });
+  const { results, isLoading, loadMore, status } = usePaginatedQuery(
+    api.aiTracing.getTraces,
+    {},
+    { initialNumItems: 250 },
+  );
+
+  const hasMore = status === "CanLoadMore";
 
   const metrics = useMemo(() => {
-    const rows = traces ?? [];
+    const rows = results ?? [];
     const aiCount = rows.filter((trace) => trace.category.startsWith("ai_")).length;
     const fallbackCount = rows.filter((trace) => trace.usedFallback).length;
     const failedCount = rows.filter((trace) => !trace.success).length;
@@ -47,7 +53,7 @@ function AdminTracesPage() {
       failedCount,
       latestLabel: latest ? new Date(latest).toLocaleTimeString() : "No traces",
     };
-  }, [traces]);
+  }, [results]);
 
   return (
     <main className="min-h-[calc(100dvh-4rem)] bg-[#08090b] text-white">
@@ -135,23 +141,46 @@ function AdminTracesPage() {
               onFailedOnlyChange={setFailedOnly}
             />
 
-            {traces ? (
-              <TraceTable
-                traces={traces}
-                group={group}
-                component={component}
-                decisionSource={decisionSource}
-                difficulty={difficulty}
-                character={character}
-                gameId={gameId}
-                search={search}
-                botOnly={botOnly}
-                fallbackOnly={fallbackOnly}
-                failedOnly={failedOnly}
-              />
-            ) : (
+            {results && results.length > 0 ? (
+              <>
+                <TraceTable
+                  traces={results}
+                  group={group}
+                  component={component}
+                  decisionSource={decisionSource}
+                  difficulty={difficulty}
+                  character={character}
+                  gameId={gameId}
+                  search={search}
+                  botOnly={botOnly}
+                  fallbackOnly={fallbackOnly}
+                  failedOnly={failedOnly}
+                />
+                {hasMore ? (
+                  <div className="flex justify-center pb-4">
+                    <button
+                      type="button"
+                      onClick={() => loadMore(250)}
+                      disabled={isLoading}
+                      className="rounded-md border border-white/10 bg-[#0c0d10] px-4 py-2 text-sm text-white/70 transition-colors hover:bg-white/10 disabled:opacity-50"
+                    >
+                      {isLoading ? "Loading..." : `Load more (${results.length} loaded)`}
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            ) : isLoading ? (
               <div className="grid min-h-80 place-items-center rounded-md border border-white/10 bg-[#0c0d10] text-sm text-white/45">
                 Loading traces...
+              </div>
+            ) : (
+              <div className="grid min-h-80 place-items-center rounded-md border border-white/10 bg-[#0c0d10] text-center">
+                <div>
+                  <p className="text-sm font-semibold text-white">No traces found.</p>
+                  <p className="mt-1 text-sm text-white/45">
+                    Start a dev game with bots to populate this stream.
+                  </p>
+                </div>
               </div>
             )}
           </div>

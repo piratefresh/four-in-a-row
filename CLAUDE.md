@@ -5,3 +5,17 @@ When working on Convex code, **always read `convex/_generated/ai/guidelines.md` 
 
 Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
 <!-- convex-ai-end -->
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in Linear with standard project-board flow (backlog → in progress → done). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — one `CONTEXT.md` and one `docs/adr/` at the repo root. See `docs/agents/domain.md`.

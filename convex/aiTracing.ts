@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import type { Doc } from "./_generated/dataModel";
 
 const traceCategoryValidator = v.union(
@@ -92,25 +93,24 @@ export const insertGameTrace = internalMutation({
 export const getTraces = query({
   args: {
     category: v.optional(traceCategoryValidator),
-    limit: v.optional(v.number()),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    const limit = Math.min(Math.max(Math.floor(args.limit ?? 200), 1), 500);
-    const traces = args.category
-      ? await ctx.db
-          .query("gameTraces")
-          .withIndex("by_category_createdAt", (q) =>
-            q.eq("category", args.category!),
-          )
-          .order("desc")
-          .take(limit)
-      : await ctx.db
-          .query("gameTraces")
-          .withIndex("by_createdAt")
-          .order("desc")
-          .take(limit);
+    if (args.category) {
+      return await ctx.db
+        .query("gameTraces")
+        .withIndex("by_category_createdAt", (q) =>
+          q.eq("category", args.category!),
+        )
+        .order("desc")
+        .paginate(args.paginationOpts);
+    }
 
-    return traces;
+    return await ctx.db
+      .query("gameTraces")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 
