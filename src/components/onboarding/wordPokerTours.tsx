@@ -134,7 +134,7 @@ export const wordPokerTours = [
             as the community letters open up.
           </>
         ),
-        selector: "#tutorial-phase-title",
+        selector: "#phase-title",
         side: "bottom",
         pointerPadding: 0,
         pointerRadius: 0,
@@ -295,8 +295,8 @@ export const wordPokerTours = [
               Total = {strongExampleScore.total}
             </div>
             <div className="text-sm leading-relaxed text-slate-700">
-              Here, `R` is a `2L` tile, so it scores `2` instead of `1`.
-              `G` is a `3L` tile, so it scores `6` instead of `2`.
+              Here, `R` is a `2L` tile, so it scores `2` instead of `1`. `G` is
+              a `3L` tile, so it scores `6` instead of `2`.
             </div>
           </div>
         ),

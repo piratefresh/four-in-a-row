@@ -5,8 +5,11 @@ import {
   RIVER_RUN_INITIAL_CREDITS,
   RIVER_RUN_INITIAL_SCORE,
   RIVER_RUN_TARGET_CURVE,
-  RIVER_RUN_TILE_COUNT,
+  RIVER_RUN_DRAFT_CANDIDATE_COUNT,
+  RIVER_RUN_DRAFT_KEEP_COUNT,
+  RIVER_RUN_POST_DRAFT_TILE_COUNT,
   createRiverRunTile,
+  revealRiverRunTilesForPhase,
 } from "../riverRunState";
 import { createShuffledDeck } from "../gameState";
 import { requireVerifiedUser } from "../verifyUser";
@@ -29,7 +32,7 @@ export async function createSoloRunForCurrentUser(
 
   const deck = createShuffledDeck();
   const tiles = deck
-    .slice(0, RIVER_RUN_TILE_COUNT)
+    .slice(0, RIVER_RUN_DRAFT_CANDIDATE_COUNT)
     .map((tile, index) => createRiverRunTile(tile, index));
   const runId = await ctx.db.insert("riverRunRuns", {
     roomId: container.roomId,
@@ -38,7 +41,7 @@ export async function createSoloRunForCurrentUser(
     targetCurve: [...RIVER_RUN_TARGET_CURVE],
     targetIndex: 0,
     currentTarget: RIVER_RUN_TARGET_CURVE[0],
-    phase: "deal",
+    phase: "draft",
     tiles,
     submissions: [],
     credits: RIVER_RUN_INITIAL_CREDITS,
@@ -56,7 +59,82 @@ export async function createSoloRunForCurrentUser(
     playerId: container.playerId,
     runId,
     target: RIVER_RUN_TARGET_CURVE[0],
-    phase: "deal" as const,
+    phase: "draft" as const,
+    status: "active" as const,
+  };
+}
+
+export async function submitDraftDiscardForCurrentUser(
+  ctx: MutationCtx,
+  args: {
+    code?: string;
+    runId?: Doc<"riverRunRuns">["_id"];
+    keptIndices: number[];
+  },
+) {
+  const { run } = await requireSoloRunForCurrentUser(ctx, {
+    code: args.code,
+    runId: args.runId,
+  });
+
+  if (run.status !== "active") {
+    throw new ConvexError({
+      code: "INVALID_RUN_STATUS",
+      message: "Discards can only be submitted for active runs.",
+    });
+  }
+
+  if (run.phase !== "draft") {
+    throw new ConvexError({
+      code: "INVALID_RUN_PHASE",
+      message: "Discards can only be submitted during the draft phase.",
+    });
+  }
+
+  const { keptIndices } = args;
+  if (
+    keptIndices.length !== RIVER_RUN_DRAFT_KEEP_COUNT
+    || new Set(keptIndices).size !== keptIndices.length
+  ) {
+    throw new ConvexError({
+      code: "INVALID_DISCARD_SELECTION",
+      message: `Select exactly ${RIVER_RUN_DRAFT_KEEP_COUNT} unique tiles to keep.`,
+    });
+  }
+
+  for (const index of keptIndices) {
+    if (!Number.isInteger(index) || index < 0 || index >= RIVER_RUN_DRAFT_CANDIDATE_COUNT) {
+      throw new ConvexError({
+        code: "INVALID_DISCARD_INDEX",
+        message: `Tile index ${index} is outside the valid range (0-${RIVER_RUN_DRAFT_CANDIDATE_COUNT - 1}).`,
+      });
+    }
+  }
+
+  const keptTiles = keptIndices
+    .sort((a, b) => a - b)
+    .map((index) => ({ ...run.tiles[index]! }));
+  const extraDeck = createShuffledDeck();
+  const newTiles = extraDeck
+    .slice(0, RIVER_RUN_POST_DRAFT_TILE_COUNT - RIVER_RUN_DRAFT_KEEP_COUNT)
+    .map((tile) => ({
+      tile,
+      revealed: false,
+      flippedThisHand: false,
+    }));
+  const assembledTiles = [...keptTiles, ...newTiles];
+  const tiles = revealRiverRunTilesForPhase(assembledTiles, "expand");
+  const submittedAt = Date.now();
+
+  await ctx.db.patch(run._id, {
+    phase: "expand",
+    tiles,
+    updatedAt: submittedAt,
+  });
+
+  return {
+    ok: true,
+    phase: "expand" as const,
     status: "active" as const,
   };
 }
@@ -78,6 +156,13 @@ export async function submitPhaseWordForCurrentUser(
     throw new ConvexError({
       code: "INVALID_RUN_STATUS",
       message: "Words can only be submitted for active runs.",
+    });
+  }
+
+  if (run.phase === "draft") {
+    throw new ConvexError({
+      code: "INVALID_RUN_PHASE",
+      message: "No word submission during draft phase. Submit your discards instead.",
     });
   }
 

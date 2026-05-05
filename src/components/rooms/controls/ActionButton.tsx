@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../../lib/utils";
 
 const actionButtonVariants = cva(
-  "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded border px-2 py-2 text-center font-mono text-[9px] uppercase tracking-[0.1em] transition-[background-color,border-color,color,opacity,transform] duration-150 outline-none hover:-translate-y-px active:translate-y-0 disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-45 focus-visible:ring-[3px] focus-visible:ring-gold/35 xs:min-h-10 xs:px-3 xs:text-[10px] sm:min-h-11 sm:px-4 sm:text-[11px]",
+  "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded border px-2 py-2 text-center font-mono text-xs uppercase tracking-[0.1em] transition-[background-color,border-color,color,opacity,transform] duration-150 outline-none hover:-translate-y-px active:translate-y-0 disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-45 focus-visible:ring-[3px] focus-visible:ring-gold/35 xs:min-h-10 xs:px-3 sm:min-h-11 sm:px-4",
   {
     variants: {
       variant: {
@@ -12,8 +12,7 @@ const actionButtonVariants = cva(
         call: "border-cream/20 bg-cream/10 text-cream hover:border-cream/30 hover:bg-cream/15",
         raise:
           "border-gold-bright bg-gold font-bold text-felt-deep hover:bg-gold-bright",
-        fold:
-          "border-game-red/30 bg-game-red/15 text-[#f0a6a6] hover:border-game-red/45 hover:bg-game-red/20",
+        fold: "border-game-red/30 bg-game-red/15 text-[#f0a6a6] hover:border-game-red/45 hover:bg-game-red/20",
         submit:
           "border-gold-bright bg-gold font-bold text-felt-deep hover:bg-gold-bright",
       },

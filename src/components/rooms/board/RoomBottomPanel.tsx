@@ -350,9 +350,15 @@ export function RoomBottomPanel({
           </div>
         ) : (
           <>
-            <div className="mb-1.5 flex flex-col items-center gap-1 sm:mb-2 sm:gap-1.5">
-              <div className="text-center text-sm font-bold text-white sm:text-xl">
-                <span className="tracking-[0.2em]">{wordPreview || " "}</span>{" "}
+            <div className="flex flex-col items-center gap-1 sm:gap-1.5">
+              <div className="text-center font-bold text-white sm:text-xl">
+                {wordPreview ? (
+                  <span className="tracking-[0.2em]">{wordPreview}</span>
+                ) : (
+                  <span className="text-sm font-normal text-white/40 sm:text-base">
+                    Select letters to preview
+                  </span>
+                )}{" "}
                 <span className="text-[#f4d98b]">
                   {wordScorePreview
                     ? `${wordScorePreview.total}pts`
@@ -397,7 +403,7 @@ export function RoomBottomPanel({
 
             <div className="mt-2 flex flex-col items-center gap-1.5 sm:mt-4 sm:gap-2">
               {showActionRow && (
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex flex-nowrap items-center justify-center gap-2">
                   {onShuffleTiles ? (
                     <ShuffleTilesButton
                       onClick={onShuffleTiles}
@@ -419,7 +425,7 @@ export function RoomBottomPanel({
                             ? "Select Letters"
                             : wordPreview.length < 2
                               ? "Select Tiles"
-                            : "Submit Word"}
+                              : "Submit Word"}
                     </ActionButton>
                   ) : null}
                 </div>

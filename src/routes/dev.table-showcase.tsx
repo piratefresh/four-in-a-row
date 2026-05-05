@@ -43,12 +43,12 @@ const SCENARIOS: Array<{ id: ShowcaseScenario; label: string }> = [
 
 const BET_POSITION_CLASS: Record<"top" | "left" | "right" | "bottom", string> =
   {
-    top: "left-[59%] top-[34%] -translate-x-1/2 -translate-y-1/2 sm:left-[58%] sm:top-[32%]",
-    left: "left-[34%] top-[50%] -translate-x-1/2 -translate-y-1/2 sm:left-[35%]",
+    top: "left-[58%] top-[28%] -translate-x-1/2 -translate-y-1/2 sm:left-[58%] sm:top-[26%]",
+    left: "left-[28%] top-[48%] -translate-x-1/2 -translate-y-1/2 sm:left-[27%]",
     right:
-      "left-[66%] top-[50%] -translate-x-1/2 -translate-y-1/2 sm:left-[65%]",
+      "left-[72%] top-[48%] -translate-x-1/2 -translate-y-1/2 sm:left-[73%]",
     bottom:
-      "left-[58%] top-[64%] -translate-x-1/2 -translate-y-1/2 sm:left-[57%] sm:top-[63%]",
+      "left-[57%] top-[72%] -translate-x-1/2 -translate-y-1/2 sm:left-[57%] sm:top-[71%]",
   };
 
 const PLAYERS = {

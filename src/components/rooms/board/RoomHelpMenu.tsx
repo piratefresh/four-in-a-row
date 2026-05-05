@@ -8,6 +8,7 @@ import {
 type HelpTip = {
   title: string;
   body: string;
+  mediaSrc?: string;
   mediaLabel?: string;
   actions?: Array<{
     label: string;
@@ -19,12 +20,12 @@ export const ROOM_HELP_TIPS: HelpTip[] = [
   {
     title: "How do I move letters?",
     body: "Tap any letter to activate it, then drag it into position to form your word.",
-    mediaLabel: "GIF placeholder - letter tap and drag",
+    mediaSrc: "/drag%20and%20reorder.gif",
   },
   {
     title: "How do I use the double letter tile?",
     body: "Tap the double letter tile to bring up your choices, then select the letter you want. Changed your mind? Just tap it again to swap it out.",
-    mediaLabel: "GIF placeholder - double letter selection and swap",
+    mediaSrc: "/multiletter.gif",
   },
   {
     title: "Can I shuffle my letters?",
@@ -46,10 +47,26 @@ export const ROOM_HELP_TIPS: HelpTip[] = [
   },
 ];
 
-function HelpMediaPlaceholder({ label }: { label: string }) {
+function HelpMedia({
+  src,
+  label,
+}: {
+  src?: string;
+  label?: string;
+}) {
   return (
-    <div className="mt-2 flex aspect-video w-full items-center justify-center rounded-md border border-dashed border-gold/45 bg-black/20 px-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-gold/75">
-      {label}
+    <div className="mt-2 flex aspect-video w-full items-center justify-center rounded-md border border-dashed border-gold/45 bg-black/20 overflow-hidden">
+      {src ? (
+        <img
+          src={src}
+          alt={label ?? ""}
+          className="h-full w-full object-contain"
+        />
+      ) : label ? (
+        <span className="px-3 text-center font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-gold/75">
+          {label}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -98,8 +115,8 @@ export function RoomHelpMenuContent() {
                 ))}
               </ul>
             ) : null}
-            {tip.mediaLabel ? (
-              <HelpMediaPlaceholder label={tip.mediaLabel} />
+            {tip.mediaSrc || tip.mediaLabel ? (
+              <HelpMedia src={tip.mediaSrc} label={tip.mediaLabel} />
             ) : null}
           </section>
         ))}

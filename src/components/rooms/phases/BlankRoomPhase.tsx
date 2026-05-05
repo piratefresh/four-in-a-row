@@ -73,8 +73,8 @@ export function BlankRoomPhase({
             chips={bottomPlayer.chips}
             bet={bottomPlayer.bet}
             isCurrentPlayer
-            avatarSizeClass="h-[52px] w-[52px] xs:h-[60px] xs:w-[60px] sm:h-24 sm:w-24"
-            initialsClass="text-[11px] xs:text-[12px] sm:text-[18px]"
+            avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
+            initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"
             infoCardClassName="min-w-[84px] px-2 py-1 xs:min-w-[92px] xs:px-2 xs:py-1 sm:min-w-[132px] sm:px-4 sm:py-2"
             betClassName="left-auto right-0 translate-x-1/4"
             mobileInfoPlacement="top"

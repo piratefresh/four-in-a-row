@@ -18,16 +18,18 @@ export function useRoomTimers(
   playerId: string | null,
   getPlayerName: (playerId: string) => string,
   isTutorialRoom: boolean,
+  paused = false,
 ) {
   const [liveNow, setLiveNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (paused) return;
     if (game?.status !== "active" && game?.status !== "waiting") return;
     const interval = window.setInterval(() => {
       setLiveNow(Date.now());
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [game?.status]);
+  }, [game?.status, paused]);
 
   const turnClockTimeRemaining = useMemo(() => {
     if (game?.turnClockExpiresAt === undefined) return null;
@@ -99,6 +101,7 @@ export function useRoomTimers(
     };
 
     tick();
+    if (paused) return;
     showdownTimerIntervalRef.current = setInterval(tick, 100);
 
     return () => {
@@ -107,7 +110,7 @@ export function useRoomTimers(
         showdownTimerIntervalRef.current = null;
       }
     };
-  }, [game?.stage, game?.status, game?.showdownStartedAt, showdownTimerMs]);
+  }, [game?.stage, game?.status, game?.showdownStartedAt, showdownTimerMs, paused]);
 
   const didShowdownExpire =
     showdownTimeRemaining !== null && showdownTimeRemaining <= 0;

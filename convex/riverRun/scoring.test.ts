@@ -61,9 +61,9 @@ function runFixture(
     roomId: "room-id" as Id<"rooms">,
     playerId: "player-id" as Id<"players">,
     authUserId: "auth-user-id",
-    targetCurve: [45],
+    targetCurve: [30],
     targetIndex: 0,
-    currentTarget: 45,
+    currentTarget: 30,
     phase,
     tiles,
     submissions,
@@ -99,7 +99,7 @@ describe("River Run scoring", () => {
   it("requires submitted words to be buildable from revealed tiles", () => {
     const scored = scoreRiverRunPhase({
       run: runFixture(
-        "deal",
+        "expand",
         [singleTile("A", 1), singleTile("C", 3), hiddenSingleTile("E", 1)],
         [],
       ),
@@ -118,21 +118,40 @@ describe("River Run scoring", () => {
   it("replaces the current phase submission and returns the hand total", () => {
     const result = scoreRiverRunPhase({
       run: runFixture(
-        "turn",
+        "expand",
         [singleTile("A", 1), singleTile("C", 3, "3L"), singleTile("E", 1)],
-        [submission("deal", 8), submission("turn", 5)],
+        [submission("expand", 5)],
       ),
       word: "ace",
       submittedAt: 2,
     });
 
-    expect(result.phase).toBe("turn");
+    expect(result.phase).toBe("expand");
     expect(result.submission.score).toBe(14);
     expect(result.submissions.map((entry) => [entry.phase, entry.score]))
       .toEqual([
-        ["deal", 8],
-        ["turn", 14],
+        ["expand", 14],
       ]);
-    expect(result.handScore).toBe(22);
+    expect(result.handScore).toBe(14);
+  });
+
+  it("sums expand and finale scores into hand total", () => {
+    const result = scoreRiverRunPhase({
+      run: runFixture(
+        "finale",
+        [singleTile("A", 1), singleTile("B", 3, "3L"), singleTile("E", 1)],
+        [submission("expand", 14)],
+      ),
+      word: "ab",
+      submittedAt: 3,
+    });
+
+    expect(result.phase).toBe("finale");
+    expect(result.submissions.map((entry) => [entry.phase, entry.score]))
+      .toEqual([
+        ["expand", 14],
+        ["finale", 10],
+      ]);
+    expect(result.handScore).toBe(24);
   });
 });

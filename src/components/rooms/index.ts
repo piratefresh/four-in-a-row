@@ -37,5 +37,8 @@ export { RoomList } from './lobby/RoomList'
 export { ShowdownResultsPanel } from './lobby/ShowdownResultsPanel'
 export { RoomDevTools } from './lobby/RoomDevTools'
 
+// Room header
+export { RoomHeader } from './RoomHeader'
+
 // Game overlays
 export { GameCompletedOverlay } from './overlays/GameCompletedOverlay'
