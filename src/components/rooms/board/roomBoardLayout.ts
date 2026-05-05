@@ -10,4 +10,4 @@ export const ROOM_OPPONENT_POSITION_CLASS: Record<
 };
 
 export const ROOM_BOTTOM_BADGE_POSITION_CLASS =
-  "absolute bottom-[12%] left-1/2 z-40 -translate-x-1/2 translate-y-1/4 xs:bottom-[15%] sm:bottom-[12%]";
+  "absolute bottom-[8%] left-1/2 z-40 -translate-x-1/2 translate-y-1/4 xs:bottom-[10%] sm:bottom-[8%]";

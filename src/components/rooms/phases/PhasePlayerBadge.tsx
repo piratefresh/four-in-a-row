@@ -239,12 +239,12 @@ export function PhasePlayerBadge({
             </div>
           ) : (
             <div
-              className={`mt-1 max-w-full truncate font-mono text-[9px] font-bold uppercase leading-none sm:text-[11px] ${
+              className={`mt-1 max-w-full truncate rounded-full px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase leading-none shadow-[0_1px_6px_rgba(0,0,0,0.35)] sm:text-[11px] sm:px-3 sm:py-1 ${
                 isThinking || isActiveTurn
-                  ? "text-[#f0a64a]"
+                  ? "bg-[#1a4a2a] text-[#f0a64a]"
                   : actionLabel
-                    ? "text-[#d4af37]"
-                    : "text-[#d4af37]/75"
+                    ? "bg-[#1a4a2a] text-[#d4af37]"
+                    : "bg-[#1a4a2a] text-[#d4af37]/75"
               }`}
             >
               {statusLabel}

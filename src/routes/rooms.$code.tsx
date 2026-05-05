@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import {
   RoomGameProvider,
   RoomHandsBoardV2,
+  RoomHeader,
   RoomPageProvider,
   useRoomDetailsController,
 } from "@/components/rooms";
@@ -28,6 +29,7 @@ import { FIRST_BOT_GAME_TOUR } from "@/components/onboarding/wordPokerTours";
 
 type RoomSearch = {
   tutorial?: "intro" | "restart";
+  pause?: string;
 };
 
 export const Route = createFileRoute("/rooms/$code")({
@@ -36,6 +38,8 @@ export const Route = createFileRoute("/rooms/$code")({
       search.tutorial === "intro" || search.tutorial === "restart"
         ? search.tutorial
         : undefined,
+    pause:
+      typeof search.pause === "string" ? search.pause : undefined,
   }),
   head: ({ params }) => {
     const roomCode = params.code.toUpperCase();
@@ -84,6 +88,7 @@ function RoomDetailsPage() {
     onDevFillRoomWithBots,
   } = useRoomDetailsController(code, {
     allowGuestTutorial: forcedTutorialReplay,
+    paused: search.pause !== undefined,
   });
   const preferences = useQuery(
     api.userPreferences.getMyPreferences,
@@ -253,12 +258,18 @@ function RoomDetailsPage() {
       <TutorialAdapterProvider value={tutorialAdapter}>
         {tutorialAdapter.launcher}
         {tutorialAdapter.phaseSync}
-        <div
-          className="relative [@media(min-width:1441px)]:pr-[400px]"
-          data-testid="room-content"
-        >
-          <RoomGameProvider value={roomGameContextValue}>
-            <RoomHandsBoardV2
+        <RoomGameProvider value={roomGameContextValue}>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <RoomHeader
+              roomCode={code}
+              gameStatus={game?.status}
+              gameStage={game?.stage}
+            />
+            <div
+              className="relative flex flex-1 [@media(min-width:1441px)]:pr-[400px]"
+              data-testid="room-content"
+            >
+              <RoomHandsBoardV2
               gameId={game._id}
               activePlayerId={activePlayerId}
               helperTipsEnabled={helperTipsEnabled}
@@ -278,6 +289,8 @@ function RoomDetailsPage() {
               chatDraft={chat.draftMessage}
               tutorialReplayControl={tutorialAdapter.replayButton}
             />
+            </div>
+          </div>
           </RoomGameProvider>
 
           {!tutorialAdapter.isTutorialRoom && (
@@ -299,7 +312,6 @@ function RoomDetailsPage() {
               />
             </>
           )}
-        </div>
       </TutorialAdapterProvider>
     </RoomPageProvider>
   );

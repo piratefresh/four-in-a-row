@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
   createSoloRunForCurrentUser,
+  submitDraftDiscardForCurrentUser,
   submitPhaseWordForCurrentUser,
 } from "./riverRun/lifecycle";
 import {
@@ -33,6 +34,17 @@ export const getSoloRun = query({
   },
   handler: async (ctx, args) => {
     return getSoloRunForViewer(ctx, args);
+  },
+});
+
+export const submitDraftDiscard = mutation({
+  args: {
+    code: v.optional(v.string()),
+    runId: v.optional(v.id("riverRunRuns")),
+    keptIndices: v.array(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return submitDraftDiscardForCurrentUser(ctx, args);
   },
 });
 

@@ -4,6 +4,7 @@ import {
   Scripts,
   createRootRouteWithContext,
   useRouteContext,
+  useMatchRoute,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
@@ -135,6 +136,13 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const matchRoute = useMatchRoute();
+  const isRoomOrResultsView =
+    matchRoute({ to: "/rooms/$code" }) || matchRoute({ to: "/results/$code" });
+  const isLoginOrRegisterView =
+    matchRoute({ to: "/login" }) || matchRoute({ to: "/register" });
+  const showHeader = !isRoomOrResultsView && !isLoginOrRegisterView;
+
   return (
     <html lang="en">
       <head>
@@ -143,9 +151,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body className="bg-felt text-cream">
         <AppTourProvider>
           <div className="flex min-h-dvh flex-col">
-            <Header />
+            {showHeader && <Header />}
             <VerifyEmailBanner />
-            <div className="flex-1">{children}</div>
+            <div className="flex flex-1 flex-col min-h-0">{children}</div>
           </div>
         </AppTourProvider>
         <Toaster richColors />

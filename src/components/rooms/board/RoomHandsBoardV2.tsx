@@ -115,12 +115,12 @@ function SortableBuilderTile({
 
 const BET_POSITION_CLASS: Record<"top" | "left" | "right" | "bottom", string> =
   {
-    top: "left-[59%] top-[34%] -translate-x-1/2 -translate-y-1/2 sm:left-[58%] sm:top-[32%]",
-    left: "left-[34%] top-[50%] -translate-x-1/2 -translate-y-1/2 sm:left-[35%]",
+    top: "left-[58%] top-[28%] -translate-x-1/2 -translate-y-1/2 sm:left-[58%] sm:top-[26%]",
+    left: "left-[28%] top-[48%] -translate-x-1/2 -translate-y-1/2 sm:left-[27%]",
     right:
-      "left-[66%] top-[50%] -translate-x-1/2 -translate-y-1/2 sm:left-[65%]",
+      "left-[72%] top-[48%] -translate-x-1/2 -translate-y-1/2 sm:left-[73%]",
     bottom:
-      "left-[58%] top-[64%] -translate-x-1/2 -translate-y-1/2 sm:left-[57%] sm:top-[63%]",
+      "left-[57%] top-[72%] -translate-x-1/2 -translate-y-1/2 sm:left-[57%] sm:top-[71%]",
   };
 
 function formatPlayerActionLabel(
@@ -372,7 +372,7 @@ export function RoomHandsBoardV2({
         handleDragEnd(event);
       }}
     >
-      <div className="relative flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-gradient-felt-table font-serif text-[#f1eee7] [@media(max-height:460px)]:h-[calc(100dvh-4rem)]">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-gradient-felt-table font-serif text-[#f1eee7] [@media(max-height:460px)]:min-h-0">
         <div className="absolute right-3 top-3 z-40 sm:right-4 sm:top-4">
           <RoomHelpMenu />
         </div>
@@ -463,9 +463,9 @@ export function RoomHandsBoardV2({
             )}
           </div>
 
-          <div className="flex flex-col items-center gap-1 px-4 sm:gap-4 [@media(max-height:460px)]:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+          <div className="flex flex-col items-center gap-1 px-4 sm:gap-2 [@media(max-height:460px)]:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
             {isPhase0 ? (
-              <div className="pointer-events-none invisible">
+              <div className="hidden">
                 <RoomBottomPanel
                   isPhase1={true}
                   mySubmission={null}
@@ -487,7 +487,9 @@ export function RoomHandsBoardV2({
                   helperTip={builderHelperTip}
                 />
               </div>
-            ) : (
+            ) : null}
+            {!isPhase0 && (
+              <>
               <RoomBottomPanel
                 isPhase1={isPhase1}
                 mySubmission={mySubmission}
@@ -527,7 +529,6 @@ export function RoomHandsBoardV2({
                 hasFolded={hasBottomPlayerFolded}
                 helperTip={builderHelperTip}
               />
-            )}
 
             {showTableRaiseSlider ? (
               <div className="w-full max-w-[42rem] px-3 sm:px-4">
@@ -541,6 +542,8 @@ export function RoomHandsBoardV2({
                 />
               </div>
             ) : null}
+              </>
+            )}
 
             {showReadyButton && (
               <RoomActionControls
@@ -557,7 +560,9 @@ export function RoomHandsBoardV2({
               />
             )}
 
-            {((showBettingControls && !hasBottomPlayerFolded) ||
+            {!isPhase0 && (
+              <>
+                {((showBettingControls && !hasBottomPlayerFolded) ||
               (showShuffleControl && !showInlineBottomPanelShuffle)) && (
               <RoomActionControls
                 betting={
@@ -593,6 +598,8 @@ export function RoomHandsBoardV2({
                 }
                 helperTip={actionsHelperTip}
               />
+            )}
+              </>
             )}
           </div>
         </main>

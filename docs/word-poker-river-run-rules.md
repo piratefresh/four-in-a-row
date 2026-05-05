@@ -4,7 +4,7 @@
 
 River Run v1 is a solo Word Poker run.
 
-The player plays a sequence of hands against a rising target score. Each hand has Deal, Turn, and River phases. The player submits one word per phase, the three phase scores are added into a hand total, and the hand total is compared to the current target.
+The player plays a sequence of hands against a rising target score. Each hand has three phases: Draft, Expand, and Finale. Draft is a tile selection phase — no word is submitted. Expand and Finale are scoring phases where the player submits one word each. The two phase scores are added into a hand total, and the hand total is compared to the current target.
 
 This rebuild is solo-only. 1v1 versus matches, opponent scoring, shared shops, hand-win races, and first-to-3 match logic are out of scope for the v1 River Run rebuild.
 
@@ -17,10 +17,12 @@ Clear every target in the target curve before missing one.
 Initial target curve:
 
 ```text
-[45, 55, 70, 85, 105, 130, 160, 195]
+[30, 40, 55, 70, 90, 115, 145, 180]
 ```
 
-The first hand uses target `45`. Each passed hand advances to the next target.
+The first hand uses target `30`. Each passed hand advances to the next target.
+
+> Note: The target curve is calibrated for 2 scored phases (Expand and Finale only). Rebalance if scoring changes.
 
 ---
 
@@ -28,22 +30,22 @@ The first hand uses target `45`. Each passed hand advances to the next target.
 
 | State | Meaning |
 |---|---|
-| Active | The player is currently playing Deal, Turn, or River. |
+| Active | The player is currently in Draft, Expand, or Finale. |
 | Shop | The player cleared a target and may buy or skip an upgrade before the next hand. |
-| Failed | The player finished River with a hand total below the current target. |
+| Failed | The player finished Finale with a hand total below the current target. |
 | Completed | The player cleared the final target in the curve. |
 
 ---
 
 ## Pass, Fail, and Completion
 
-A hand passes when the River phase resolves and:
+A hand passes when the Finale phase resolves and:
 
 ```text
 Hand Total >= Current Target
 ```
 
-A hand fails when the River phase resolves and:
+A hand fails when the Finale phase resolves and:
 
 ```text
 Hand Total < Current Target
@@ -57,48 +59,53 @@ Passing the final target completes the run. Failed and completed runs are termin
 
 ## Hand Structure
 
-Each hand has 7 total tiles.
+Each hand starts with 10 candidate tiles and ends with 7 active tiles.
 
-Tiles are revealed across 3 phases:
+Tiles flow through 3 phases:
 
-1. Deal
-2. Turn
-3. River
-
-The player submits one word per phase.
+1. **Draft** — 10 tiles shown. Discard 6, keep 4. No word submitted.
+2. **Expand** — 2 random tiles revealed. 6 total. Submit one word.
+3. **Finale** — 1 random tile revealed. 7 total. Submit one word.
 
 ---
 
-## Phase 1: Deal
+## Phase 1: Draft
 
-Reveal 4 tiles.
+10 candidate tiles are shown face-up all at once.
 
-The player makes one word using the revealed tiles.
+The player discards exactly 6 and keeps 4. Discarded tiles are removed for the rest of the hand.
+
+No word is submitted during Draft. This phase is purely strategic.
 
 Example:
 
 ```text
-A T S R ? ? ?
+Candidates: A  T  S  R  V  Q  E  N  L  O
 ```
 
-Possible words:
+Decision points a player might face:
 
-- STAR
-- RATS
-- SAT
+- Keep `A E N O` for strong vowel coverage going into Expand.
+- Keep `A T S R` as a tight consonant-heavy set, gambling on good Expand reveals.
+- Keep `Q R S T` to chase a high point value, hoping for a `U` in Expand or Finale.
+- Discard both `V` and `Q` immediately — rack poison if no supporting tiles appear.
+
+The 6 discarded tiles are gone. They do not return during Expand or Finale.
 
 ---
 
-## Phase 2: Turn
+## Phase 2: Expand
 
-Reveal 2 more tiles, for 6 total revealed tiles.
+2 new random tiles are revealed and added to the 4 kept tiles, for 6 total.
 
-The player makes one word using any revealed tiles.
+The player submits one word using any of the 6 available tiles.
 
 Example:
 
 ```text
-A T S R E N ?
+Kept:     A T S R
+Revealed: E N
+Total:    A T S R E N
 ```
 
 Possible words:
@@ -109,16 +116,18 @@ Possible words:
 
 ---
 
-## Phase 3: River
+## Phase 3: Finale
 
-Reveal the final tile, for all 7 tiles.
+1 final random tile is revealed, bringing the total to 7.
 
-The player makes one word using any revealed tiles.
+The player submits one word using any of the 7 available tiles.
 
 Example:
 
 ```text
-A T S E R N I
+Expand tiles: A T S R E N
+Revealed:     I
+Total:        A T S R E N I
 ```
 
 Possible words:
@@ -127,7 +136,7 @@ Possible words:
 - RETAINS
 - ANTSIER
 
-After the River word is submitted, the hand total is resolved against the current target.
+After the Finale word is submitted, the hand total is resolved against the current target.
 
 ---
 
@@ -135,34 +144,31 @@ After the River word is submitted, the hand total is resolved against the curren
 
 Letters are reusable across phases.
 
-A letter used during Deal can still be used during Turn and River.
+A tile used in the Expand word can still be used in the Finale word.
 
 Example:
 
-- Deal word: STAR
-- Turn word: ASTERN
-- River word: NASTIER
+- Expand word: ASTERN
+- Finale word: NASTIER
 
-This is allowed.
-
-Within a single submitted word, the word can only use letters that are available in the currently revealed tiles.
+This is allowed. Within a single submitted word, the word can only use letters available in the currently revealed tile pool.
 
 ---
 
 ## Scoring
 
-Each phase word gives points.
+Only Expand and Finale words score points. Draft has no score.
 
-At the end of the hand, the 3 phase scores are added together.
+At the end of the hand, the 2 phase scores are added together.
 
 Example:
 
 | Phase | Word | Score |
 |---|---|---:|
-| Deal | STAR | 8 |
-| Turn | ASTERN | 22 |
-| River | NASTIER | 48 |
-| Total |  | 78 |
+| Draft | *(discard phase)* | — |
+| Expand | ASTERN | 22 |
+| Finale | NASTIER | 48 |
+| Total | | 70 |
 
 If the current target is `70`, this hand passes.
 
@@ -195,7 +201,7 @@ Credits are earned after successful hands.
 
 Credits can be used to:
 
-1. Flip a revealed tile during a phase.
+1. Flip a revealed tile during Expand or Finale.
 2. Buy power-ups after a passed hand.
 3. Refresh the shop.
 
@@ -207,7 +213,7 @@ Credits can be used to:
 |---|---:|
 | Start a run | 0 |
 | Clear a target | +3 |
-| Use all 7 tiles on River | +2 |
+| Use all 7 tiles on Finale | +2 |
 | Invalid or missing word | +0 for that phase |
 
 Failed and completed runs do not enter the shop.
@@ -216,9 +222,9 @@ Failed and completed runs do not enter the shop.
 
 ## Flip Tile
 
-During a phase, the player may spend credits to Flip one revealed tile.
+During Expand or Finale, the player may spend credits to Flip one revealed tile.
 
-A Flip rerolls that tile into a new letter.
+A Flip rerolls that tile into a new random letter.
 
 Example:
 
@@ -232,11 +238,14 @@ The player Flips `L`.
 A T S E R N I
 ```
 
+Flip is not available during Draft. During Draft, the player shapes their tile pool by choosing which 4 tiles to keep.
+
 ---
 
 ## Flip Rules
 
 - Flip costs 2 credits.
+- Only available during Expand and Finale.
 - Only revealed tiles can be Flipped.
 - Max 1 Flip per phase.
 - Flipped tiles stay changed for the rest of the hand.
@@ -297,10 +306,11 @@ In scope:
 
 - Solo run creation.
 - Rising target curve.
-- Deal, Turn, and River submissions.
+- Draft discard phase: 10 shown, discard 6, keep 4. No word submitted.
+- Expand and Finale word submissions.
 - Hand total versus target resolution.
 - Credits from successful hands.
-- One tile Flip per phase.
+- One tile Flip per phase (Expand and Finale only).
 - Between-hand shop after passed non-final targets.
 - Failed and completed terminal states.
 
@@ -318,17 +328,16 @@ Out of scope:
 ## Recommended MVP Rules
 
 - River Run is solo-only for v1.
-- Target curve is `[45, 55, 70, 85, 105, 130, 160, 195]`.
-- Each hand has Deal, Turn, and River phases.
-- Deal reveals 4 tiles.
-- Turn reveals 2 more tiles, for 6 total.
-- River reveals the final tile, for 7 total.
-- The player submits one word per phase.
-- Letters can be reused across phases.
-- Total score across all 3 phases is the hand total.
+- Target curve is `[30, 40, 55, 70, 90, 115, 145, 180]`.
+- Each hand has Draft, Expand, and Finale phases.
+- Draft shows 10 candidate tiles. Player discards 6, keeps 4. No word submitted.
+- Expand reveals 2 random tiles, for 6 total. Player submits one word.
+- Finale reveals 1 random tile, for 7 total. Player submits one word.
+- Letters can be reused across Expand and Finale.
+- Total score across Expand and Finale is the hand total.
 - A hand passes when hand total meets or beats the current target.
-- A hand fails when hand total is below the current target after River.
+- A hand fails when hand total is below the current target after Finale.
 - Passing the final target completes the run.
 - Passing a non-final target enters the shop before the next hand.
 - Flip costs 2 credits.
-- Max 1 Flip per phase.
+- Max 1 Flip per phase (Expand and Finale only).

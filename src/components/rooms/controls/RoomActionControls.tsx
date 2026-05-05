@@ -71,12 +71,13 @@ export function RoomActionControls({
       <>
         <div
           id="tutorial-room-actions"
-          className="flex w-[92vw] flex-row items-center justify-center gap-2 sm:w-auto sm:gap-3"
+          className="flex w-[92vw] flex-col items-center justify-center gap-2 sm:w-auto sm:gap-3"
         >
           {helperTip}
           {ready.lobbyInactivityTimeRemainingMs !== undefined ? (
             <CountdownTimer
               label="Room idle"
+              size="large"
               timeRemainingMs={ready.lobbyInactivityTimeRemainingMs}
             />
           ) : null}
@@ -230,10 +231,10 @@ export function RoomActionControls({
               </div>
 
               <div className="flex w-full items-end justify-center sm:hidden">
-                {helperTip ? (
-                  <div className="mr-1.5 shrink-0 xs:mr-2">{helperTip}</div>
-                ) : null}
                 <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 xs:gap-2">
+                  {helperTip ? (
+                    <div className="mr-1.5 shrink-0 xs:mr-2">{helperTip}</div>
+                  ) : null}
                   {utility?.onShuffleTiles ? (
                     <ShuffleTilesButton
                       onClick={() => utility.onShuffleTiles?.()}

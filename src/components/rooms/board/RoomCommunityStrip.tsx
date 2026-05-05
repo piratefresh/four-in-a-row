@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
 import { WordTile, type WordTileSize } from "../table/word-tile-v2";
-import { CountdownTimer } from "@/components/ui/countdown-timer";
-import { useRoomGameContext } from "../context/RoomGameContext";
 
 type CommunityStripTile =
   | {
@@ -32,24 +30,11 @@ export function RoomCommunityStrip({
   tileSize = "md",
   helperTip,
 }: RoomCommunityStripProps) {
-  const { showdownTimeRemaining, turnTimeRemaining } = useRoomGameContext();
-
-  const timerMs = showdownTimeRemaining ?? turnTimeRemaining;
-  const isActionTimer = turnTimeRemaining !== null;
-
   return (
     <div
       id="tutorial-community-letters"
       className="relative flex-none px-4 pb-2 text-center"
     >
-      <div className="flex justify-center md:absolute md:left-4 md:top-0 md:justify-start">
-        <CountdownTimer
-          label={isActionTimer ? "Action" : "Showdown"}
-          timeRemainingMs={timerMs}
-          variant={isActionTimer ? "action" : "default"}
-          size={isActionTimer ? "large" : "compact"}
-        />
-      </div>
       <div className="flex flex-col items-center sm:gap-3">
         <div className="flex items-center justify-center gap-1.5 text-[11px] leading-none text-[#f1eee7] sm:gap-2 sm:text-[24px]">
           <span>Community Letters</span>

@@ -29,7 +29,7 @@ const ANTE_AMOUNT = 20;
 
 export function useRoomDetailsController(
   code: string,
-  options: { allowGuestTutorial?: boolean } = {},
+  options: { allowGuestTutorial?: boolean; paused?: boolean } = {},
 ) {
   // --- Data layer ---
   const queries = useRoomQueries(code, options);
@@ -130,6 +130,7 @@ export function useRoomDetailsController(
     playerId,
     display.getPlayerName,
     isTutorialRoom,
+    options.paused,
   );
 
   // --- Betting actions ---

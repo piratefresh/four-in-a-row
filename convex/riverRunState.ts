@@ -1,10 +1,15 @@
 import { v } from "convex/values";
 import { gameDeckTileValidator, type GameDeckTile } from "./gameState";
 
-export const RIVER_RUN_TARGET_CURVE = [45, 55, 70, 85, 105, 130, 160, 195] as const;
+export const RIVER_RUN_TARGET_CURVE = [30, 40, 55, 70, 90, 115, 145, 180] as const;
 export const RIVER_RUN_INITIAL_CREDITS = 0;
 export const RIVER_RUN_INITIAL_SCORE = 0;
-export const RIVER_RUN_TILE_COUNT = 7;
+export const RIVER_RUN_DRAFT_CANDIDATE_COUNT = 10;
+export const RIVER_RUN_DRAFT_KEEP_COUNT = 4;
+export const RIVER_RUN_EXPAND_NEW_TILE_COUNT = 2;
+export const RIVER_RUN_FINALE_NEW_TILE_COUNT = 1;
+export const RIVER_RUN_POST_DRAFT_TILE_COUNT =
+  RIVER_RUN_DRAFT_KEEP_COUNT + RIVER_RUN_EXPAND_NEW_TILE_COUNT + RIVER_RUN_FINALE_NEW_TILE_COUNT;
 export const RIVER_RUN_LENGTH_BONUS: Record<number, number> = {
   2: 0,
   3: 3,
@@ -14,15 +19,15 @@ export const RIVER_RUN_LENGTH_BONUS: Record<number, number> = {
   7: 25,
 };
 
-export const RIVER_RUN_PHASES = ["deal", "turn", "river"] as const;
+export const RIVER_RUN_PHASES = ["draft", "expand", "finale"] as const;
 export type RiverRunPhase = (typeof RIVER_RUN_PHASES)[number];
 export const RIVER_RUN_REVEALED_TILE_COUNT_BY_PHASE: Record<
   RiverRunPhase,
   number
 > = {
-  deal: 4,
-  turn: 6,
-  river: 7,
+  draft: RIVER_RUN_DRAFT_CANDIDATE_COUNT,
+  expand: RIVER_RUN_DRAFT_KEEP_COUNT + RIVER_RUN_EXPAND_NEW_TILE_COUNT,
+  finale: RIVER_RUN_POST_DRAFT_TILE_COUNT,
 };
 
 export const RIVER_RUN_STATUSES = [
@@ -34,9 +39,9 @@ export const RIVER_RUN_STATUSES = [
 export type RiverRunStatus = (typeof RIVER_RUN_STATUSES)[number];
 
 export const riverRunPhaseValidator = v.union(
-  v.literal("deal"),
-  v.literal("turn"),
-  v.literal("river"),
+  v.literal("draft"),
+  v.literal("expand"),
+  v.literal("finale"),
 );
 
 export const riverRunStatusValidator = v.union(
@@ -108,17 +113,17 @@ export function createRiverRunTile(
 ): RiverRunTile {
   return {
     tile,
-    revealed: index < RIVER_RUN_REVEALED_TILE_COUNT_BY_PHASE.deal,
+    revealed: index < RIVER_RUN_REVEALED_TILE_COUNT_BY_PHASE.draft,
   };
 }
 
 export function getNextRiverRunPhase(phase: RiverRunPhase): RiverRunPhase | null {
   switch (phase) {
-    case "deal":
-      return "turn";
-    case "turn":
-      return "river";
-    case "river":
+    case "draft":
+      return "expand";
+    case "expand":
+      return "finale";
+    case "finale":
       return null;
   }
 }
