@@ -59,7 +59,7 @@ function RiverRunLandingRoute() {
 
   return (
     <main className="min-h-dvh overflow-hidden bg-felt-deep text-cream">
-      <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+      <div className="mx-auto flex min-h-dvh w-full flex-col px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
         <div className="flex items-center justify-between gap-3">
           <Link
             to="/"
@@ -77,13 +77,13 @@ function RiverRunLandingRoute() {
           <div className="max-w-3xl">
             <div className="mb-5 inline-flex items-center gap-2 rounded-sm bg-cream/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-gold">
               <Waves className="size-4" aria-hidden="true" />
-              Deal / Turn / River
+              Draft / Expand / Finale
             </div>
             <h1 className="font-display text-5xl font-black leading-none text-cream sm:text-7xl">
               River Run
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-7 text-cream/78 sm:text-xl sm:leading-8">
-              Beat the target score with three words. Clear the river, raise the
+              Beat the target score with two words. Clear the river, raise the
               target, and keep the run alive.
             </p>
 
@@ -100,7 +100,7 @@ function RiverRunLandingRoute() {
                 <ChevronRight className="size-5" aria-hidden="true" />
               </button>
               <span className="font-mono text-xs uppercase tracking-[0.18em] text-cream/55">
-                Target curve starts at 45
+                Target curve starts at 30
               </span>
             </div>
 
@@ -113,9 +113,9 @@ function RiverRunLandingRoute() {
 
           <div className="grid gap-3 rounded-md border border-cream/12 bg-black/18 p-4">
             {[
-              ["Deal", "4 tiles revealed"],
-              ["Turn", "6 tiles revealed"],
-              ["River", "7 tiles revealed"],
+              ["Draft", "10 tiles. Discard 6, keep 4."],
+              ["Expand", "6 tiles revealed"],
+              ["Finale", "7 tiles revealed"],
             ].map(([phase, detail], index) => (
               <div
                 key={phase}
@@ -138,7 +138,7 @@ function RiverRunLandingRoute() {
                 aria-hidden="true"
               />
               <p className="text-sm leading-5 text-cream/75">
-                Hit or beat the current target after River to reach the next
+                Hit or beat the current target after Finale to reach the next
                 hand.
               </p>
             </div>

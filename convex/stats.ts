@@ -60,9 +60,12 @@ export const getTodayStats = query({
 export const getAllTimeStats = query({
   args: {},
   handler: async (ctx) => {
-    // Get all valid word submissions
+    // Default to last 30 days to avoid 16 MB read limit
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const allSubmissions = await ctx.db.query("wordSubmissions").collect();
-    const validSubmissions = allSubmissions.filter((s) => s.score > 0);
+    const validSubmissions = allSubmissions.filter(
+      (s) => s.score > 0 && s.createdAt >= cutoff,
+    );
 
     // Find longest word ever
     let longestWord = "";

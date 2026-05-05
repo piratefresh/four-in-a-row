@@ -83,7 +83,7 @@ function RiverRunShell({
 }) {
   return (
     <main className="min-h-dvh bg-felt-deep text-cream">
-      <div className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
+      <div className="mx-auto flex min-h-dvh w-full flex-col px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <Link
             to="/river-run"

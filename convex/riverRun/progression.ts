@@ -2,13 +2,15 @@ import type { Doc } from "../_generated/dataModel";
 import {
   getNextRiverRunPhase,
   revealRiverRunTilesForPhase,
+  type RiverRunPhase,
 } from "../riverRunState";
 
 export function getProgressionPatch(
   run: Doc<"riverRunRuns">,
   handScore: number,
 ) {
-  const nextPhase = getNextRiverRunPhase(run.phase);
+  const phase = run.phase as RiverRunPhase;
+  const nextPhase = getNextRiverRunPhase(phase);
   if (nextPhase) {
     return {
       phase: nextPhase,
@@ -24,7 +26,7 @@ export function getProgressionPatch(
   const passedTarget = handScore >= run.currentTarget;
   if (!passedTarget) {
     return {
-      phase: run.phase,
+      phase,
       tiles: run.tiles,
       status: "failed" as const,
       currentTarget: run.currentTarget,
@@ -37,7 +39,7 @@ export function getProgressionPatch(
   const completed = nextTargetIndex >= run.targetCurve.length;
   if (completed) {
     return {
-      phase: run.phase,
+      phase,
       tiles: run.tiles,
       status: "completed" as const,
       currentTarget: run.currentTarget,
@@ -47,7 +49,7 @@ export function getProgressionPatch(
   }
 
   return {
-    phase: run.phase,
+    phase,
     tiles: run.tiles,
     status: "shop" as const,
     currentTarget: run.targetCurve[nextTargetIndex]!,

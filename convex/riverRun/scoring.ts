@@ -193,7 +193,7 @@ export function scoreRiverRunPhase({
   word,
   submittedAt,
 }: RiverRunPhaseScoringInput): RiverRunPhaseScoringResult {
-  const phase = run.phase;
+  const phase = run.phase as RiverRunPhase;
   const revealedTiles = run.tiles.filter((tile) => tile.revealed);
   const scored = scorePhaseWord(word, revealedTiles);
   const submission: RiverRunSubmission = {
@@ -201,8 +201,8 @@ export function scoreRiverRunPhase({
     ...scored,
     submittedAt,
   };
-  const submissions = [
-    ...(run.submissions ?? []).filter((entry) => entry.phase !== phase),
+  const submissions: RiverRunSubmission[] = [
+    ...(run.submissions ?? []).filter((entry) => entry.phase !== phase) as RiverRunSubmission[],
     submission,
   ];
 

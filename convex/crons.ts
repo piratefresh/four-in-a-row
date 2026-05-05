@@ -15,4 +15,11 @@ crons.interval(
   internal.activityFeed.cleanupOldActivity,
 );
 
+crons.interval(
+  "refresh-stats-cache",
+  { hours: 1 },
+  internal.statsCache.computeStats,
+  { filter: "all" },
+);
+
 export default crons;

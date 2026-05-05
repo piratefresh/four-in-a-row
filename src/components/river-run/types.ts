@@ -1,4 +1,4 @@
-export type RiverRunPhase = "deal" | "turn" | "river";
+export type RiverRunPhase = "draft" | "expand" | "finale";
 export type RiverRunStatus = "active" | "shop" | "failed" | "completed";
 export type TileMultiplier = "2L" | "3L";
 
@@ -70,4 +70,4 @@ export type SelectedTile = {
   wasChoice: boolean;
 };
 
-export const RIVER_RUN_PHASES: RiverRunPhase[] = ["deal", "turn", "river"];
+export const RIVER_RUN_PHASES: RiverRunPhase[] = ["draft", "expand", "finale"];

@@ -310,6 +310,20 @@ export const appTables = {
     gameId: v.id("games"),
     createdAt: v.number(),
   }).index("by_gameId", ["gameId"]),
+  // Cached stats snapshot (written by computeStats action, read by getAllStats query)
+  statsSnapshot: defineTable({
+    cacheKey: v.string(),
+    stats: v.string(), // JSON-serialized StatsRow[]
+    computedAt: v.number(),
+    computing: v.boolean(),
+    computingStartedAt: v.optional(v.number()),
+  }).index("by_key", ["cacheKey"]),
+  // Temporary per-chunk accumulator storage during stats computation
+  statsChunks: defineTable({
+    batchId: v.string(),
+    chunkIndex: v.number(),
+    data: v.string(), // JSON-serialized partial accumulators
+  }).index("by_batch", ["batchId"]),
   aiActionsCache: defineTable({
     personality: v.string(),
     trigger: v.string(),

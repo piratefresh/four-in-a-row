@@ -428,7 +428,7 @@ export async function scheduleBotTurnIfNeeded(
         gameId,
         playerId: currentTurnHand.playerId,
         turnStartedAt: game.turnStartedAt,
-        timeoutMs: config.turnClockGraceMs,
+        timeoutMs: room?.isBotGame ? 60_000 : config.turnClockGraceMs,
       });
     }
     console.log("scheduleBotTurnIfNeeded: Current player is not a bot, skipping bot action");

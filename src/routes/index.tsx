@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useNextStep } from "nextstepjs";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -8,6 +9,7 @@ import {
   getTutorialGuestId,
   logTutorialDebug,
 } from "@/lib/tutorial-guest";
+import { dismissRoomRejoin } from "@/lib/room-rejoin-dismissal";
 import { HomeModeMenu } from "@/components/home/HomeModeMenu";
 import { ActivityTicker } from "@/components/home/ActivityTicker";
 import { OnboardingSetupScreen } from "@/components/home/OnboardingSetupScreen";
@@ -36,6 +38,23 @@ function App() {
   const { data: session } = authClient.useSession();
   const convexAuthUser = useQuery(api.auth.getCurrentUser);
   const activeRoom = useQuery(api.rooms.getMyActiveRoom);
+  const leaveRoom = useMutation(api.rooms.leaveRoom);
+  const { closeNextStep } = useNextStep();
+  const closeTutorialRoomProcessedRef = useRef(false);
+
+  useEffect(() => {
+    if (activeRoom === undefined) return;
+    if (closeTutorialRoomProcessedRef.current) return;
+    if (!activeRoom || !activeRoom.tutorialId) return;
+
+    closeTutorialRoomProcessedRef.current = true;
+    closeNextStep();
+    leaveRoom({}).catch(() => {});
+    if (activeRoom.code) {
+      dismissRoomRejoin(activeRoom.code);
+    }
+  }, [activeRoom, closeNextStep, leaveRoom]);
+
   const createRoom = useMutation(api.rooms.createRoom);
   const createTutorialBotRoom = useMutation(
     api.rooms.createTutorialBotRoom,

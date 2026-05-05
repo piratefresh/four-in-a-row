@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatsOverview } from "@/components/admin/StatsOverview";
@@ -33,14 +33,31 @@ function AdminStatsPage() {
           }
         : { days: timeMode === "7d" ? 7 : 30 };
 
-  const allStats = useQuery(api.playerStats.getAllStats, {
+  const computeArgs = {
     filter,
     ...timeArgs,
-  });
-  const botStats = useQuery(api.playerStats.getAllStats, {
-    filter: "bots",
-    ...timeArgs,
-  });
+  };
+
+  const allCached = useQuery(api.statsCache.getCachedStats, computeArgs);
+  const botCached = useQuery(api.statsCache.getCachedStats, { filter: "bots", ...timeArgs });
+  const computeStats = useMutation(api.statsCache.computeStats);
+  const [computing, setComputing] = useState(false);
+
+  const handleRefresh = async () => {
+    setComputing(true);
+    try {
+      await computeStats({ filter, ...timeArgs });
+      await computeStats({ filter: "bots", ...timeArgs });
+    } catch (e) {
+      console.error("Failed to compute stats", e);
+    }
+    setComputing(false);
+  };
+
+  const allStats = allCached?.stats;
+  const botStats = botCached?.stats;
+  const isComputing = computing || allCached?.computing || botCached?.computing;
+  const computedAt = allCached?.computedAt ?? 0;
   const filters: Array<{ value: typeof filter; label: string }> = [
     { value: "all", label: "All" },
     { value: "players", label: "Players" },
@@ -90,7 +107,7 @@ function AdminStatsPage() {
           </TabsList>
 
           <TabsContent value="leaderboard" className="space-y-6">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {timePresets.map((item) => (
                 <button
                   key={item.value}
@@ -105,6 +122,18 @@ function AdminStatsPage() {
                   {item.label}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={isComputing}
+                className={`ml-auto rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                  isComputing
+                    ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:border-emerald-500/50 hover:bg-emerald-500/20"
+                }`}
+              >
+                {isComputing ? "Computing..." : "Refresh Stats"}
+              </button>
             </div>
 
             {timeMode === "custom" && (
@@ -142,18 +171,47 @@ function AdminStatsPage() {
               ))}
             </div>
 
-            {allStats ? (
+            {computedAt > 0 && !isComputing && (
+              <p className="text-xs text-stone-500">
+                Last refreshed: {new Date(computedAt).toLocaleString()}
+              </p>
+            )}
+
+            {isComputing && (
+              <p className="text-sm text-yellow-400/80">
+                Computing stats across multiple batches... this may take a moment.
+              </p>
+            )}
+
+            {allStats && allStats.length > 0 ? (
               <StatsOverview stats={allStats} />
-            ) : (
-              <p className="text-stone-500">Loading stats...</p>
+            ) : !isComputing && (
+              <p className="text-stone-500">
+                No stats cached yet. Click "Refresh Stats" to compute.
+              </p>
             )}
           </TabsContent>
 
           <TabsContent value="ai-comparison">
-            {botStats ? (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={isComputing}
+                className={`ml-auto rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                  isComputing
+                    ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:border-emerald-500/50 hover:bg-emerald-500/20"
+                }`}
+              >
+                {isComputing ? "Computing..." : "Refresh Stats"}
+              </button>
+            </div>
+
+            {botStats && botStats.length > 0 ? (
               <AICharacterComparison data={botStats} />
-            ) : (
-              <p className="text-stone-500">Loading AI comparison...</p>
+            ) : !isComputing && (
+              <p className="text-stone-500">No stats cached yet.</p>
             )}
           </TabsContent>
         </Tabs>

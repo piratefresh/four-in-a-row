@@ -72,6 +72,7 @@ import type * as rooms_tutorial from "../rooms/tutorial.js";
 import type * as showdownSolver from "../showdownSolver.js";
 import type * as simpleBots from "../simpleBots.js";
 import type * as stats from "../stats.js";
+import type * as statsCache from "../statsCache.js";
 import type * as testDeck from "../testDeck.js";
 import type * as tutorialBots from "../tutorialBots.js";
 import type * as tutorialDeck from "../tutorialDeck.js";
@@ -150,6 +151,7 @@ declare const fullApi: ApiFromModules<{
   showdownSolver: typeof showdownSolver;
   simpleBots: typeof simpleBots;
   stats: typeof stats;
+  statsCache: typeof statsCache;
   testDeck: typeof testDeck;
   tutorialBots: typeof tutorialBots;
   tutorialDeck: typeof tutorialDeck;

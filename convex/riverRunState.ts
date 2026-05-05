@@ -42,6 +42,11 @@ export const riverRunPhaseValidator = v.union(
   v.literal("draft"),
   v.literal("expand"),
   v.literal("finale"),
+  // Legacy v0 phases — tolerated by the schema so existing data passes
+  // validation. New runs always use draft / expand / finale.
+  v.literal("deal"),
+  v.literal("turn"),
+  v.literal("river"),
 );
 
 export const riverRunStatusValidator = v.union(

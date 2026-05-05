@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { useQuery } from "convex/react";
+import { useEffect, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { useNextStep } from "nextstepjs";
 import {
   RoomGameProvider,
   RoomHandsBoardV2,
@@ -25,6 +26,7 @@ import {
   getTutorialGuestId,
   logTutorialDebug,
 } from "@/lib/tutorial-guest";
+import { dismissRoomRejoin } from "@/lib/room-rejoin-dismissal";
 import { FIRST_BOT_GAME_TOUR } from "@/components/onboarding/wordPokerTours";
 
 type RoomSearch = {
@@ -133,6 +135,23 @@ function RoomDetailsPage() {
     !tutorialAdapter.isTutorialRoom &&
     preferences?.showInGameHelper === true &&
     !activePlayerHasFolded;
+
+  const { closeNextStep } = useNextStep();
+  const leaveRoomByCode = useMutation(api.rooms.leaveRoomByCode);
+  const isTutorialRoomRef = useRef(tutorialAdapter.isTutorialRoom);
+  isTutorialRoomRef.current = tutorialAdapter.isTutorialRoom;
+  const codeRef = useRef(code);
+  codeRef.current = code;
+
+  useEffect(() => {
+    return () => {
+      if (isTutorialRoomRef.current) {
+        closeNextStep();
+        leaveRoomByCode({ code: codeRef.current }).catch(() => {});
+        dismissRoomRejoin(codeRef.current);
+      }
+    };
+  }, [closeNextStep, leaveRoomByCode]);
 
   useEffect(() => {
     if (!tutorialAdapter.isTutorialRoom && !forcedTutorialReplay) return;

@@ -43,9 +43,9 @@ export function RiverRunTileRack({
   onSelect: (tile: SelectedTile) => void;
 }) {
   const newlyRevealedIndices: Set<number> =
-    phase === "turn"
+    phase === "expand"
       ? new Set([4, 5])
-      : phase === "river"
+      : phase === "finale"
         ? new Set([6])
         : new Set();
 

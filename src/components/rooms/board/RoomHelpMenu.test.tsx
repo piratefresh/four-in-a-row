@@ -22,9 +22,7 @@ describe("RoomHelpMenu", () => {
     expect(markup).toContain("Check");
     expect(markup).toContain("Call");
     expect(markup).toContain("highest scoring word wins the pot");
-    expect(markup).toContain("GIF placeholder - letter tap and drag");
-    expect(markup).toContain(
-      "GIF placeholder - double letter selection and swap",
-    );
+    expect(markup).toContain('src="/drag-and-reorder.gif"');
+    expect(markup).toContain('src="/multiletter.gif"');
   });
 });
