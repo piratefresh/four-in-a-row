@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRoomPresence } from "@/components/rooms/hooks/useRoomPresence";
 import { ShowdownResultsScreen } from "@/components/rooms/results/ShowdownResultsScreen";
 import { TutorialSignupWall } from "@/components/rooms/results/TutorialSignupWall";
@@ -36,9 +36,38 @@ function ResultsPage() {
   const createRoom = useMutation(api.rooms.createRoom);
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
+  const redealGameForRoom = useMutation(api.games.redealGameForRoom);
   const [isStartingNewGame, setIsStartingNewGame] = useState(false);
+  const [isStartingPlayAgain, setIsStartingPlayAgain] = useState(false);
   const [showTutorialSignupWall, setShowTutorialSignupWall] = useState(false);
   const [tutorialGuestAuthUserId] = useState(() => getTutorialGuestId());
+
+  const COUNTDOWN_SECONDS = 60;
+  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (countdown === 0) {
+      void handleReturnToOnlineRooms();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown]);
 
   const roomData = useQuery(api.rooms.getRoomMembers, {
     code,
@@ -119,7 +148,27 @@ function ResultsPage() {
     }
   };
 
+  const handlePlayAgainOnline = async () => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+
+    setIsStartingPlayAgain(true);
+
+    try {
+      const result = await redealGameForRoom({ roomId: roomData?.room._id ?? "" });
+      if (!result.ok) {
+        console.error("Failed to redeal:", result.reason);
+        return;
+      }
+      await navigate({ to: "/rooms/$code", params: { code } });
+    } catch (error) {
+      console.error("Error playing again:", error);
+    } finally {
+      setIsStartingPlayAgain(false);
+    }
+  };
+
   const handleReturnToOnlineRooms = async () => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
     try {
       await leaveRoom({});
     } catch (error) {
@@ -216,6 +265,9 @@ function ResultsPage() {
       isGuestTutorialGame={isGuestTutorialGame}
       onPlayAnotherOffline={handlePlayAnotherOffline}
       isStartingNewGame={isStartingNewGame}
+      onPlayAgainOnline={handlePlayAgainOnline}
+      isStartingPlayAgain={isStartingPlayAgain}
+      countdown={countdown}
     />
   );
 }

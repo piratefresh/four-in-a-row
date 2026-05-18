@@ -47,6 +47,9 @@ type ShowdownResultsScreenProps = {
   isGuestTutorialGame?: boolean;
   onPlayAnotherOffline?: () => void;
   isStartingNewGame?: boolean;
+  onPlayAgainOnline?: () => void;
+  isStartingPlayAgain?: boolean;
+  countdown?: number;
 };
 
 const PLAYER_GRADIENTS = [
@@ -70,6 +73,9 @@ export function ShowdownResultsScreen({
   isGuestTutorialGame,
   onPlayAnotherOffline,
   isStartingNewGame,
+  onPlayAgainOnline,
+  isStartingPlayAgain,
+  countdown,
 }: ShowdownResultsScreenProps) {
   const submissions = showdownResults.allSubmissions ?? [];
   const currentPlayerSubmission = useMemo(() => {
@@ -180,16 +186,27 @@ export function ShowdownResultsScreen({
             <>
               <button
                 type="button"
-                onClick={onReturnToOnlineRooms}
-                className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01]"
+                onClick={onPlayAgainOnline}
+                disabled={isStartingPlayAgain}
+                data-testid="play-again-button"
+                className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Return to Room List
+                {isStartingPlayAgain ? "Starting..." : "Play Again"}
+              </button>
+
+              <button
+                type="button"
+                onClick={onReturnToOnlineRooms}
+                data-testid="lobby-button"
+                className="flex-1 rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-4 py-4 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01]"
+              >
+                Lobby
               </button>
 
               <button
                 type="button"
                 onClick={onReturnToMainMenu}
-                className="flex-1 rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-6 py-4 text-base font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01]"
+                className="rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-4 py-4 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01]"
               >
                 Main Menu
               </button>
@@ -202,7 +219,9 @@ export function ShowdownResultsScreen({
             ? "Return home when you are ready."
             : isOfflineGame
               ? "Start another bot game or return home."
-              : "Return to the room list or head back home."}
+              : countdown != null
+                ? `Auto-leaving in ${countdown}s`
+                : "Return to the room list or head back home."}
         </p>
 
         <div id="tutorial-showdown-results" className="mt-8 flex-1 space-y-3">

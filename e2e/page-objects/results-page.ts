@@ -7,7 +7,9 @@ export class ResultsPage {
   readonly winnerName: Locator;
   readonly potAmount: Locator;
   readonly playAnotherButton: Locator;
+  readonly playAgainButton: Locator;
   readonly returnToRoomListButton: Locator;
+  readonly lobbyButton: Locator;
   readonly mainMenuButton: Locator;
   readonly playerResults: Locator;
 
@@ -17,9 +19,11 @@ export class ResultsPage {
     this.winnerName = page.locator('[data-testid="winner-name"]');
     this.potAmount = page.locator('[data-testid="pot-amount"]');
     this.playAnotherButton = page.getByRole("button", { name: /play another/i });
+    this.playAgainButton = page.locator('[data-testid="play-again-button"]');
     this.returnToRoomListButton = page.getByRole("button", {
       name: /return to room list/i,
     });
+    this.lobbyButton = page.locator('[data-testid="lobby-button"]');
     this.mainMenuButton = page.getByRole("button", { name: /main menu/i });
     this.playerResults = page.locator('[data-testid="player-result"]');
   }
@@ -68,12 +72,21 @@ export class ResultsPage {
 
   async clickPlayAnother() {
     await this.playAnotherButton.click();
-    // Should navigate to a new room
+    await this.page.waitForURL(/\/rooms\/[A-Z0-9]+/);
+  }
+
+  async clickPlayAgain() {
+    await this.playAgainButton.click();
     await this.page.waitForURL(/\/rooms\/[A-Z0-9]+/);
   }
 
   async clickReturnToRoomList() {
     await this.returnToRoomListButton.click();
+    await this.page.waitForURL(/\?view=online/);
+  }
+
+  async clickLobby() {
+    await this.lobbyButton.click();
     await this.page.waitForURL(/\?view=online/);
   }
 
