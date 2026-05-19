@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { authClient } from "@/lib/auth-client";
+import { showEmailVerificationToast } from "@/lib/email-verification-toast";
 
 export const Route = createFileRoute("/river-run/")({
   component: RiverRunLandingRoute,
@@ -34,6 +35,11 @@ function RiverRunLandingRoute() {
       setStatusMessage(
         "Convex auth is not ready. Please sign out and sign back in.",
       );
+      return;
+    }
+
+    if (!session.user.emailVerified) {
+      showEmailVerificationToast(session.user.email);
       return;
     }
 

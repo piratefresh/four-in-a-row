@@ -10,10 +10,16 @@ import {
   logTutorialDebug,
 } from "@/lib/tutorial-guest";
 import { dismissRoomRejoin } from "@/lib/room-rejoin-dismissal";
+import { showEmailVerificationToast } from "@/lib/email-verification-toast";
 import { HomeModeMenu } from "@/components/home/HomeModeMenu";
 import { ActivityTicker } from "@/components/home/ActivityTicker";
 import { OnboardingSetupScreen } from "@/components/home/OnboardingSetupScreen";
 import { SplashScreen } from "@/components/home/SplashScreen";
+import {
+  CreateRoomConfigDialog,
+  type BotDifficulty,
+  type CreateRoomConfigValues,
+} from "@/components/rooms/lobby/CreateRoomConfigDialog";
 import {
   LoadingOverlay,
   WORD_POKER_LOADING_TIPS,
@@ -22,8 +28,6 @@ import {
 type HomeSearch = {
   onboarding?: "bot";
 };
-
-type OfflineDifficulty = "easy" | "medium" | "hard";
 
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): HomeSearch => ({
@@ -65,7 +69,7 @@ function App() {
   const [joinMessage, setJoinMessage] = useState<string | null>(null);
   const [isStartingOffline, setIsStartingOffline] = useState(false);
   const [isStartingTutorial, setIsStartingTutorial] = useState(false);
-  const [offlineDifficulty, setOfflineDifficulty] = useState<OfflineDifficulty>("medium");
+  const [isOfflineConfigOpen, setIsOfflineConfigOpen] = useState(false);
   const [onboardingSetupStage, setOnboardingSetupStage] = useState<
     "auth" | "room" | "bots" | "deal" | null
   >(null);
@@ -105,13 +109,20 @@ function App() {
 
   const startOfflineGame = useEffectEvent(async (options?: {
     onboarding?: boolean;
-    difficulty?: OfflineDifficulty;
+    difficulty?: BotDifficulty;
+    roomTitle?: string;
+    config?: CreateRoomConfigValues["config"];
   }) => {
     const displayName = getDisplayName();
     if (!displayName) return;
 
+    if (!options?.onboarding && session?.user && !session.user.emailVerified) {
+      showEmailVerificationToast(session.user.email);
+      return;
+    }
+
     const onboarding = options?.onboarding ?? false;
-    const difficulty = options?.difficulty ?? offlineDifficulty;
+    const difficulty = options?.difficulty ?? "medium";
     setIsStartingOffline(true);
     setOnboardingSetupStage(onboarding ? "room" : null);
     setJoinMessage(onboarding ? "Setting up your starter bot table..." : null);
@@ -119,7 +130,13 @@ function App() {
     try {
       const room = onboarding
         ? await createTutorialBotRoom({ name: displayName })
-        : await createRoom({ name: displayName, difficulty, isBotGame: true });
+        : await createRoom({
+            name: displayName,
+            roomTitle: options?.roomTitle,
+            difficulty,
+            isBotGame: true,
+            config: options?.config,
+          });
 
       setOnboardingSetupStage(onboarding ? "bots" : null);
       if (!onboarding) {
@@ -211,6 +228,12 @@ function App() {
 
   const handlePlayTutorial = async () => {
     const displayName = getTutorialDisplayName();
+
+    if (session?.user && !session.user.emailVerified) {
+      showEmailVerificationToast(session.user.email);
+      return;
+    }
+
     const guestAuthUserId = session?.user
       ? undefined
       : (getTutorialGuestId() ?? undefined);
@@ -290,27 +313,45 @@ function App() {
       ) : (
         <>
           <HomeModeMenu
-          activeRoomCode={activeRoom?.code}
-          activeRoomTutorialId={activeRoom?.tutorialId ?? null}
-          isStartingOffline={isStartingOffline}
-          isStartingTutorial={isStartingTutorial}
-          offlineDifficulty={offlineDifficulty}
-          statusMessage={joinMessage}
-          onOfflineDifficultyChange={setOfflineDifficulty}
-          onSelectOnline={handleSelectOnline}
-          onSelectRiverRun={handleSelectRiverRun}
-          onStartOffline={(difficulty) => {
-            void startOfflineGame({ difficulty });
-          }}
-          onPlayTutorial={() => {
-            void handlePlayTutorial();
-          }}
-          onResumeRoom={() => {
-            void handleResumeRoom();
-          }}
-          onSelectLeaderboard={handleSelectLeaderboard}
-        />
-        <ActivityTicker />
+            activeRoomCode={activeRoom?.code}
+            activeRoomTutorialId={activeRoom?.tutorialId ?? null}
+            isStartingOffline={isStartingOffline}
+            isStartingTutorial={isStartingTutorial}
+            statusMessage={joinMessage}
+            onSelectOnline={handleSelectOnline}
+            onSelectRiverRun={handleSelectRiverRun}
+            onStartOffline={() => {
+              setIsOfflineConfigOpen(true);
+            }}
+            onPlayTutorial={() => {
+              void handlePlayTutorial();
+            }}
+            onResumeRoom={() => {
+              void handleResumeRoom();
+            }}
+            onSelectLeaderboard={handleSelectLeaderboard}
+          />
+          <CreateRoomConfigDialog
+            open={isOfflineConfigOpen}
+            isCreating={isStartingOffline}
+            onOpenChange={setIsOfflineConfigOpen}
+            title="Create offline room"
+            description="Set bot-table rules before the first hand is dealt."
+            submitLabel="Start offline room"
+            submittingLabel="Starting..."
+            showBotDifficulty
+            defaultBotDifficulty="medium"
+            showRoomName={false}
+            showTableRules={false}
+            onCreateRoom={(values) => {
+              setIsOfflineConfigOpen(false);
+              void startOfflineGame({
+                difficulty: values.botDifficulty,
+                config: values.config,
+              });
+            }}
+          />
+          <ActivityTicker />
         </>
       )}
     </>

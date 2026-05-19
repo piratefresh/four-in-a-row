@@ -68,7 +68,27 @@ describe("resolveConfig", () => {
     const resolved = resolveConfig({ showdownTimer: 45_000 });
 
     expect(resolved.showdownTimerMs).toBe(45_000);
+    expect(resolved.turnClockGraceMs).toBe(45_000);
+  });
+
+  it("allows arbitrary positive second-based timer overrides", () => {
+    const resolved = resolveConfig({ showdownTimer: 17_000 });
+
+    expect(resolved.showdownTimerMs).toBe(17_000);
+    expect(resolved.turnClockGraceMs).toBe(17_000);
+  });
+
+  it("ignores invalid timer overrides", () => {
+    const resolved = resolveConfig({ showdownTimer: -5_000 });
+
+    expect(resolved.showdownTimerMs).toBe(60_000);
     expect(resolved.turnClockGraceMs).toBe(30_000);
+  });
+
+  it("uses selected timing for the betting turn clock", () => {
+    const resolved = resolveConfig({ showdownTimer: 60_000 });
+
+    expect(resolved.turnClockGraceMs).toBe(60_000);
   });
 
   it("custom showdown timer takes precedence over speed default", () => {
@@ -78,7 +98,7 @@ describe("resolveConfig", () => {
     });
 
     expect(resolved.showdownTimerMs).toBe(45_000);
-    expect(resolved.turnClockGraceMs).toBe(30_000);
+    expect(resolved.turnClockGraceMs).toBe(45_000);
   });
 
   it("supports all game modes", () => {

@@ -5,10 +5,12 @@ import {
   CHOICE_TOTAL,
   DECK_SIZE,
   SINGLE_TOTAL,
+  createInitialGameDocument,
   createShuffledDeck,
   validateDeckConfig,
   type GameDeckTile,
 } from "./gameState";
+import { resolveConfig } from "./gameConfig";
 
 describe("Two-letter choice tile deck", () => {
   describe("validateDeckConfig", () => {
@@ -152,5 +154,14 @@ describe("Two-letter choice tile deck", () => {
       expect(middleThirdChoices).toBeGreaterThan(0);
       expect(lastThirdChoices).toBeGreaterThan(0);
     });
+  });
+});
+
+describe("createInitialGameDocument", () => {
+  it("preserves resolved room config on waiting games", () => {
+    const config = resolveConfig({ showdownTimer: 30_000 });
+    const game = createInitialGameDocument("room-id", [], config);
+
+    expect(game.config?.showdownTimerMs).toBe(30_000);
   });
 });

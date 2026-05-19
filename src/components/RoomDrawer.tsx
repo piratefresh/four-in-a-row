@@ -2,7 +2,7 @@ import { useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
-import { ANTE_AMOUNT } from "../../convex/gameState";
+import { ANTE_AMOUNT, SHOWDOWN_TIMER_MS } from "../../convex/gameState";
 import { INITIAL_CHIPS } from "../../convex/games/gamesShared";
 import { MATCH_JOIN_TIMEOUT_MS } from "../../convex/constants";
 import { isRoomRejoinDismissed } from "@/lib/room-rejoin-dismissal";
@@ -204,7 +204,7 @@ function formatRoomConfig(config?: {
   choiceTileFrequency?: string;
   bonusStructure?: string;
 }) {
-  const seconds = Math.round((config?.showdownTimer ?? 30_000) / 1000);
+  const seconds = Math.round((config?.showdownTimer ?? SHOWDOWN_TIMER_MS) / 1000);
   const betting =
     config?.bettingStructure === "potLimit"
       ? "Pot Limit"

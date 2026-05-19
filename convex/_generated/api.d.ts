@@ -69,6 +69,7 @@ import type * as rooms_helpers from "../rooms/helpers.js";
 import type * as rooms_lifecycle from "../rooms/lifecycle.js";
 import type * as rooms_players from "../rooms/players.js";
 import type * as rooms_tutorial from "../rooms/tutorial.js";
+import type * as schema_games from "../schema/games.js";
 import type * as showdownSolver from "../showdownSolver.js";
 import type * as simpleBots from "../simpleBots.js";
 import type * as stats from "../stats.js";
@@ -148,6 +149,7 @@ declare const fullApi: ApiFromModules<{
   "rooms/lifecycle": typeof rooms_lifecycle;
   "rooms/players": typeof rooms_players;
   "rooms/tutorial": typeof rooms_tutorial;
+  "schema/games": typeof schema_games;
   showdownSolver: typeof showdownSolver;
   simpleBots: typeof simpleBots;
   stats: typeof stats;

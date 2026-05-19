@@ -72,7 +72,7 @@ export function OnlineRooms({
             type="button"
             onClick={onCreateRoom}
             disabled={isCreatingRoom}
-            className="border-gold-bright bg-gold font-display font-bold text-felt-deep"
+            className="border-gold-bright bg-gold font-display font-bold text-black hover:bg-gold/70"
           >
             {isCreatingRoom ? "Creating..." : "Create new room"}
           </Button>

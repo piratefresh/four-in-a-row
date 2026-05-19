@@ -9,9 +9,7 @@ describe("HomeModeMenu", () => {
         activeRoomCode={null}
         isStartingOffline={true}
         isStartingTutorial={false}
-        offlineDifficulty="medium"
         statusMessage={null}
-        onOfflineDifficultyChange={vi.fn()}
         onSelectOnline={vi.fn()}
         onSelectRiverRun={vi.fn()}
         onStartOffline={vi.fn()}
@@ -25,7 +23,6 @@ describe("HomeModeMenu", () => {
     expect(markup).toContain("Leaderboard");
     expect(markup).toContain("Top players");
     expect(markup).toContain("Power-ups");
-    expect(markup).toContain("aria-haspopup=\"menu\"");
     expect(markup).toContain("disabled");
   });
 
@@ -36,9 +33,7 @@ describe("HomeModeMenu", () => {
         activeRoomTutorialId="first-bot-game"
         isStartingOffline={false}
         isStartingTutorial={false}
-        offlineDifficulty="medium"
         statusMessage={null}
-        onOfflineDifficultyChange={vi.fn()}
         onSelectOnline={vi.fn()}
         onSelectRiverRun={vi.fn()}
         onStartOffline={vi.fn()}

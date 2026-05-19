@@ -32,7 +32,9 @@ function getAvatarColor(name: string) {
     "bg-gradient-to-br from-pink-500 to-pink-700",
     "bg-gradient-to-br from-indigo-500 to-indigo-700",
   ];
-  const hash = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hash = name
+    .split("")
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
   return colors[hash % colors.length];
 }
 
@@ -43,6 +45,7 @@ type PhasePlayerBadgeProps = {
   bet?: number;
   actionLabel?: string;
   chatBubbleMessage?: string | null;
+  urgentBubbleMessage?: string | null;
   isActiveTurn?: boolean;
   isCurrentPlayer?: boolean;
   personality?: string | null;
@@ -64,6 +67,7 @@ export function PhasePlayerBadge({
   bet = 0,
   actionLabel,
   chatBubbleMessage = null,
+  urgentBubbleMessage = null,
   isActiveTurn = false,
   isCurrentPlayer = false,
   personality,
@@ -86,19 +90,20 @@ export function PhasePlayerBadge({
   };
 
   const badge = blindPosition ? blindBadgeConfig[blindPosition] : null;
+  const bubbleMessage = urgentBubbleMessage ?? chatBubbleMessage;
+  const isUrgentBubble = urgentBubbleMessage !== null;
   const mobileInfoPopupClassName =
-    mobileInfoPlacement === "top"
-      ? "bottom-full mb-2"
-      : "top-full mt-2";
-  const statusLabel = isCurrentPlayer && isActiveTurn
-    ? "Your Turn"
-    : isThinking
-      ? "Thinking..."
-      : actionLabel
-        ? actionLabel
-        : isActiveTurn
-          ? "Thinking..."
-          : "Waiting";
+    mobileInfoPlacement === "top" ? "bottom-full mb-2" : "top-full mt-2";
+  const statusLabel =
+    isCurrentPlayer && isActiveTurn
+      ? "Your Turn"
+      : isThinking
+        ? "Thinking..."
+        : actionLabel
+          ? actionLabel
+          : isActiveTurn
+            ? "Thinking..."
+            : "Waiting";
 
   useEffect(() => {
     if (infoLayout !== "card" || !mobileInfoOpen) return;
@@ -149,13 +154,28 @@ export function PhasePlayerBadge({
   );
 
   return (
-    <div ref={rootRef} className={`relative flex flex-col items-center ${className}`}>
+    <div
+      ref={rootRef}
+      className={`relative flex flex-col items-center ${className}`}
+    >
       <div className="relative">
-        {chatBubbleMessage ? (
+        {bubbleMessage ? (
           <div className="pointer-events-none absolute -top-4 left-1/2 z-30 w-max max-w-[180px] -translate-x-1/2 -translate-y-full sm:max-w-[220px]">
-            <div className="relative rounded-2xl border border-[#e8d8aa] bg-[#f7f1dd] px-3 py-2 text-center text-[11px] font-medium leading-snug text-[#2b1810] shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:text-[12px]">
-              <span className="block break-words">{chatBubbleMessage}</span>
-              <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-[#e8d8aa] bg-[#f7f1dd]" />
+            <div
+              className={`relative rounded-2xl border px-3 py-2 text-center text-[11px] font-bold leading-snug shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:text-[12px] ${
+                isUrgentBubble
+                  ? "border-white bg-white text-black"
+                  : "border-[#e8d8aa] bg-[#f7f1dd] text-[#2b1810]"
+              }`}
+            >
+              <span className="block break-words">{bubbleMessage}</span>
+              <span
+                className={`absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r ${
+                  isUrgentBubble
+                    ? "border-white bg-white"
+                    : "border-[#e8d8aa] bg-[#f7f1dd]"
+                }`}
+              />
             </div>
           </div>
         ) : null}
@@ -169,7 +189,9 @@ export function PhasePlayerBadge({
           }
           aria-expanded={infoLayout === "card" ? mobileInfoOpen : undefined}
           aria-label={
-            infoLayout === "card" ? `Show player info for ${name}` : `${name} avatar`
+            infoLayout === "card"
+              ? `Show player info for ${name}`
+              : `${name} avatar`
           }
         >
           <Avatar
@@ -226,7 +248,7 @@ export function PhasePlayerBadge({
         />
       )}
       {infoLayout === "compact" ? (
-        <div className="mt-1.5 flex max-w-[120px] flex-col items-center text-center sm:max-w-[160px]">
+        <div className="mt-1.5 flex max-w-30 flex-col items-center text-center sm:max-w-40">
           <div className="max-w-full truncate font-mono text-[11px] font-semibold uppercase leading-none text-[#f3f1ea] sm:text-[13px]">
             {name}
             {isCurrentPlayer ? (

@@ -95,15 +95,33 @@ export function ShowdownResultsScreen({
     playerId != null &&
     showdownResults.hasWinner &&
     showdownResults.winnerId === playerId;
+  const didWinByFold =
+    showdownResults.hasWinner &&
+    submissions.some((submission) => submission.status === "forfeited") &&
+    !submissions.some((submission) => submission.status === "submitted");
   const winnerName =
     showdownResults.winnerId && showdownResults.winnerId === playerId
       ? "You"
       : showdownResults.winnerId
         ? getPlayerName(showdownResults.winnerId)
         : null;
+  const winnerLabel =
+    didWinByFold && currentPlayerWon
+      ? "You win - everyone else folded"
+      : didWinByFold && winnerName
+        ? `${winnerName} wins by fold`
+        : showdownResults.hasWinner && winnerName
+          ? `${winnerName} wins the pot`
+          : "No winning submission";
 
   const [resultsStep, setResultsStep] = useState<ResultsStep>(() =>
-    scoringSubmission ? "scoring" : currentPlayerWon ? "win" : "results",
+    didWinByFold
+      ? "results"
+      : scoringSubmission
+        ? "scoring"
+        : currentPlayerWon
+          ? "win"
+          : "results",
   );
 
   const advanceFromScoring = () => {
@@ -147,10 +165,13 @@ export function ShowdownResultsScreen({
             data-testid="winner-name"
             className="mt-4 text-[14px] uppercase tracking-[0.2em] text-white/48"
           >
-            {showdownResults.hasWinner && winnerName
-              ? `${winnerName} wins the pot`
-              : "No winning submission"}
+            {winnerLabel}
           </p>
+          {didWinByFold ? (
+            <p className="mx-auto mt-3 max-w-[320px] text-sm leading-6 text-white/68">
+              The hand ended immediately because only one player remained.
+            </p>
+          ) : null}
         </header>
 
         <div className="mt-6 flex gap-3">

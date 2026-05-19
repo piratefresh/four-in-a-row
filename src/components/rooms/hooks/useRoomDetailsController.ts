@@ -162,6 +162,8 @@ export function useRoomDetailsController(
     isAuthPending,
     hasSessionUser: Boolean(session?.user),
     allowGuestTutorial: options.allowGuestTutorial === true,
+    isEmailVerified: session?.user?.emailVerified === true,
+    userEmail: session?.user?.email || "",
     roomData: roomData as {
       room: { _id: string; status: string; tutorialId?: string | null };
     } | null | undefined,
