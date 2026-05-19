@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  canCloseIdleLobbyRoom,
+  canListOpenRoom,
   canReuseLinkedNextRoom,
   getOfflineBotSourcePlayers,
   isRoomPastInactivityTimeout,
@@ -119,5 +121,55 @@ describe("room inactivity timeout", () => {
         300_000,
       ),
     ).toBe(true);
+  });
+
+  it("does not close an idle lobby while an active player is still seated", () => {
+    expect(
+      canCloseIdleLobbyRoom({
+        isTutorial: false,
+        isPastInactivityTimeout: true,
+        activePlayerCount: 1,
+        hasActiveGame: false,
+        hasCompletedGame: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("closes an idle lobby only after all players have left", () => {
+    expect(
+      canCloseIdleLobbyRoom({
+        isTutorial: false,
+        isPastInactivityTimeout: true,
+        activePlayerCount: 0,
+        hasActiveGame: false,
+        hasCompletedGame: false,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("room list visibility", () => {
+  it("keeps rematch rooms visible when completed history has a waiting hand", () => {
+    expect(
+      canListOpenRoom({
+        isTutorial: false,
+        isBotGame: false,
+        hasMode: false,
+        hasCompletedGame: true,
+        hasCurrentJoinableGame: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("hides completed-only rooms without a current joinable hand", () => {
+    expect(
+      canListOpenRoom({
+        isTutorial: false,
+        isBotGame: false,
+        hasMode: false,
+        hasCompletedGame: true,
+        hasCurrentJoinableGame: false,
+      }),
+    ).toBe(false);
   });
 });

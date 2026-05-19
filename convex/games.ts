@@ -10,7 +10,7 @@ import {
   raiseHandler,
 } from "./games/gamesBetting";
 import { createGameForRoomHandler, internalRedealGameForRoomHandler, internalStartGameHandler, redealGameForRoomHandler, startGameHandler } from "./games/gamesSetup";
-import { getGameByRoomHandler, getPlayerHandsHandler, internalGetGameRuntimeStateHandler } from "./games/gamesRuntime";
+import { getGameByIdHandler, getGameByRoomHandler, getPlayerHandsHandler, internalGetGameRuntimeStateHandler } from "./games/gamesRuntime";
 import { forfeitShowdownHandler, getShowdownResultsHandler, getWordSubmissionsHandler, internalProcessBotShowdownHandler, internalResolveExpiredShowdownHandler, resolveShowdownHandler, submitWordHandler, submitWordInternalHandler } from "./games/gamesShowdown";
 
 const submitWordTileValidator = v.object({
@@ -66,6 +66,11 @@ export const internalProcessBotTurn = internalAction({
 export const getGameByRoom = query({
   args: { roomId: v.string() },
   handler: getGameByRoomHandler,
+});
+
+export const getGameById = query({
+  args: { gameId: v.id("games") },
+  handler: getGameByIdHandler,
 });
 
 export const getPlayerHands = query({

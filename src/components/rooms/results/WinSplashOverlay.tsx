@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 
 type Particle = {
@@ -32,19 +32,28 @@ export function WinSplashOverlay({
   onDismiss,
 }: WinSplashOverlayProps) {
   const [canDismiss, setCanDismiss] = useState(false);
+  const onDismissRef = useRef(onDismiss);
+
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  const dismiss = useCallback(() => {
+    onDismissRef.current();
+  }, []);
 
   useEffect(() => {
     const minTimer = window.setTimeout(
       () => setCanDismiss(true),
       MIN_TAP_DELAY_MS,
     );
-    const autoTimer = window.setTimeout(onDismiss, AUTO_DISMISS_MS);
+    const autoTimer = window.setTimeout(dismiss, AUTO_DISMISS_MS);
 
     return () => {
       window.clearTimeout(minTimer);
       window.clearTimeout(autoTimer);
     };
-  }, [onDismiss]);
+  }, [dismiss]);
 
   const particles = useMemo<Particle[]>(() => {
     const colors = ["#f5c76a", "#d4a54a", "#f6efe0", "#f7da61", "#c9952e"];
@@ -69,7 +78,7 @@ export function WinSplashOverlay({
 
   return (
     <motion.div
-      className="relative flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center overflow-hidden"
+      className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden"
       style={{
         background:
           "radial-gradient(circle at 50% 30%, #f5c76a 0%, #d4a54a 30%, #072419 80%)",
@@ -79,7 +88,7 @@ export function WinSplashOverlay({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
       onClick={() => {
-        if (canDismiss) onDismiss();
+        if (canDismiss) dismiss();
       }}
     >
       {particles.map((particle) => (

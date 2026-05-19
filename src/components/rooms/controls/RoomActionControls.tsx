@@ -74,7 +74,7 @@ export function RoomActionControls({
           className="flex w-[92vw] flex-col items-center justify-center gap-2 sm:w-auto sm:gap-3"
         >
           {helperTip}
-          {ready.lobbyInactivityTimeRemainingMs !== undefined ? (
+          {ready.lobbyInactivityTimeRemainingMs != null ? (
             <CountdownTimer
               label="Room idle"
               size="large"

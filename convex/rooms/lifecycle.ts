@@ -2,6 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
   STALE_SCOREBOARD_ROOM_MS,
+  canCloseIdleLobbyRoom,
   isPlayerInactive,
   isRoomPastInactivityTimeout,
   getActivePlayersInRoom,
@@ -248,12 +249,18 @@ export async function closeIdleLobbyRooms(ctx: MutationCtx) {
   let closed = 0;
   let playersRemoved = 0;
   for (const room of openRooms) {
-    if (isTutorialRoom(room) || !isRoomPastInactivityTimeout(room, now)) {
-      continue;
-    }
+    const activePlayers = await getActivePlayersInRoom(ctx, room._id);
+    const activeGame = await getActiveGameForRoom(ctx, room._id);
+    const completedGame = await getCompletedGameForRoom(ctx, room._id);
+    const shouldClose = canCloseIdleLobbyRoom({
+      isTutorial: isTutorialRoom(room),
+      isPastInactivityTimeout: isRoomPastInactivityTimeout(room, now),
+      activePlayerCount: activePlayers.length,
+      hasActiveGame: Boolean(activeGame),
+      hasCompletedGame: Boolean(completedGame),
+    });
 
-    if (await getActiveGameForRoom(ctx, room._id)) continue;
-    if (await getCompletedGameForRoom(ctx, room._id)) continue;
+    if (!shouldClose) continue;
 
     const removed = await closeRoomAndRemoveActivePlayers(ctx, room, now);
     closed += 1;

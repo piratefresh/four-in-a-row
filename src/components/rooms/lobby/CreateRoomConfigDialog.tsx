@@ -302,7 +302,12 @@ function CreateRoomConfigForm({
       </div>
 
       <DialogFooter className="hidden bg-transparent border-0 mx-0 mb-0 font-sans sm:flex">
-        <Button type="submit" variant="primary" disabled={isCreating}>
+        <Button
+          className="rounded-xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-4 py-3 text-center text-base font-semibold text-[#1f1402] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+          type="submit"
+          variant="primary"
+          disabled={isCreating}
+        >
           {isCreating ? submittingLabel : submitLabel}
         </Button>
       </DialogFooter>

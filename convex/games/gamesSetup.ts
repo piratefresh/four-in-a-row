@@ -616,51 +616,22 @@ export async function internalRedealGameForRoomHandler(
     .withIndex("by_room_status", (q) =>
       q.eq("roomId", String(room._id)).eq("status", "completed"),
     )
-    .unique();
-  const game = completedGame;
-  if (!game) return { ok: false, reason: "No game found for room" };
-
-  const participantIds = await getParticipantIds(ctx, room._id);
-  if (!participantIds) return { ok: false, reason: "Not enough players" };
+    .order("desc")
+    .first();
+  if (!completedGame) return { ok: false, reason: "No completed game found for room" };
 
   const now = Date.now();
 
-  // Clear hands and submissions from previous round
-  await clearHands(ctx, game._id);
-  const existingSubmissions = await ctx.db
-    .query("wordSubmissions")
-    .withIndex("by_game", (q) => q.eq("gameId", game._id))
-    .collect();
-  for (const submission of existingSubmissions) await ctx.db.delete(submission._id);
+  const nextGameId = await ctx.db.insert(
+    "games",
+    createInitialGameDocument(
+      String(room._id),
+      [],
+      resolveConfig(room.config),
+    ),
+  );
 
-  // Rotate dealer button for next round
-  const previousDealerIndex = game.dealerButtonIndex ?? 0;
-  const dealerButtonIndex = (previousDealerIndex + 1) % participantIds.length;
-
-  // Reset game to waiting state so players can ready up
-  await ctx.db.patch(game._id, {
-    stage: "preflop",
-    status: "waiting",
-    communityTiles: [],
-    deck: [],
-    pot: 0,
-    currentBet: 0,
-    currentPlayerIndex: 0,
-    dealerButtonIndex,
-    smallBlindIndex: 0,
-    bigBlindIndex: 0,
-    raisesThisRound: 0,
-    winnerId: undefined,
-    winningWord: undefined,
-    winningScore: undefined,
-    winningScoreBreakdown: undefined,
-    showdownStartedAt: undefined,
-    turnStartedAt: undefined,
-    ...getClearedTurnClockFields(),
-    updatedAt: now,
-  });
-
-  // Reset all player ready status
+  // Reset all player ready status for the newly-created next hand.
   const players = await ctx.db
     .query("players")
     .withIndex("roomId_status", (q) =>
@@ -671,11 +642,12 @@ export async function internalRedealGameForRoomHandler(
     await ctx.db.patch(player._id, { readyStatus: false });
   }
 
-  await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
+  await ctx.db.patch(room._id, { lastActiveAt: now });
+  await setRoomUsersActiveGameId(ctx, room._id, String(nextGameId));
 
   return {
     ok: true,
-    gameId: game._id,
+    gameId: nextGameId,
     status: "waiting" as const,
   };
 }

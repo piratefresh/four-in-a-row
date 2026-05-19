@@ -5,6 +5,7 @@ import {
   normalizeRoomCode,
   isTutorialRoom,
   isPlayerInactive,
+  canListOpenRoom,
   getActivePlayersInRoom,
   getAuthenticatedUserId,
   normalizeGuestTutorialAuthUserId,
@@ -22,9 +23,7 @@ export const listRooms = query({
       .query("rooms")
       .withIndex("status_lastActiveAt", (q) => q.eq("status", "open"))
       .order("desc")
-      .take(100)).filter(
-        (room) => !isTutorialRoom(room) && !room.isBotGame && !room.mode,
-      );
+      .take(100));
 
     const result = [];
     for (const room of rooms) {
@@ -45,12 +44,23 @@ export const listRooms = query({
         continue;
       }
 
+      const waitingGame = await ctx.db
+        .query("games")
+        .withIndex("by_room_status", (q) => q.eq("roomId", String(room._id)).eq("status", "waiting"))
+        .first();
+
       const completedGame = await ctx.db
         .query("games")
         .withIndex("by_room_status", (q) => q.eq("roomId", String(room._id)).eq("status", "completed"))
         .first();
 
-      if (completedGame) {
+      if (!canListOpenRoom({
+        isTutorial: isTutorialRoom(room),
+        isBotGame: room.isBotGame === true,
+        hasMode: Boolean(room.mode),
+        hasCompletedGame: Boolean(completedGame),
+        hasCurrentJoinableGame: Boolean(waitingGame || currentGame),
+      })) {
         continue;
       }
 

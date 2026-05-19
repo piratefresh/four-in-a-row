@@ -1,5 +1,7 @@
 export {
   getOfflineBotSourcePlayers,
+  canListOpenRoom,
+  canCloseIdleLobbyRoom,
   canReuseLinkedNextRoom,
   normalizeName,
   normalizeRoomCode,

@@ -155,7 +155,9 @@ export function RoomDrawer({
             players={previewPlayers}
             maxPlayers={maxPlayers}
             onOpenSeatClick={() => onJoinSeat()}
-            isJoining={isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0}
+            isJoining={
+              isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0
+            }
             className="!h-[296px] !max-w-[216px] xs:!h-[320px] xs:!max-w-[236px] sm:!h-[460px] sm:!max-w-[340px]"
           />
 
@@ -171,27 +173,13 @@ export function RoomDrawer({
           <button
             type="button"
             onClick={onJoinSeat}
-            disabled={isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0}
+            disabled={
+              isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0
+            }
             className="mx-auto mt-5 block w-full max-w-[272px] rounded-xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-4 py-3 text-center text-base font-semibold text-[#1f1402] shadow-[0_10px_24px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 sm:mt-6 sm:max-w-[320px] sm:rounded-2xl sm:px-5 sm:py-4 sm:text-lg"
           >
             {joinButtonLabel}
           </button>
-
-          {shouldShowDevRejoin ? (
-            <div className="mx-auto mt-6 flex max-w-[320px] flex-col gap-3">
-              <button
-                type="button"
-                onClick={() => onDevRejoin?.()}
-                disabled={isDevRejoining}
-                className="rounded-md bg-cyan-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-600"
-              >
-                {isDevRejoining ? "Rejoining..." : "Rejoin room"}
-              </button>
-              <p className="text-center text-xs text-slate-400">
-                Development tool for reclaiming your seat quickly.
-              </p>
-            </div>
-          ) : null}
         </div>
       </DrawerContent>
     </Drawer>
@@ -204,7 +192,9 @@ function formatRoomConfig(config?: {
   choiceTileFrequency?: string;
   bonusStructure?: string;
 }) {
-  const seconds = Math.round((config?.showdownTimer ?? SHOWDOWN_TIMER_MS) / 1000);
+  const seconds = Math.round(
+    (config?.showdownTimer ?? SHOWDOWN_TIMER_MS) / 1000,
+  );
   const betting =
     config?.bettingStructure === "potLimit"
       ? "Pot Limit"

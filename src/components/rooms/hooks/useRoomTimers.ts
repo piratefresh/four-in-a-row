@@ -14,6 +14,7 @@ export function useRoomTimers(
   } | null | undefined,
   roomData: {
     room: { lastActiveAt?: number; tutorialId?: string | null };
+    members?: Array<unknown>;
   } | null | undefined,
   playerId: string | null,
   getPlayerName: (playerId: string) => string,
@@ -57,10 +58,12 @@ export function useRoomTimers(
   );
 
   const lobbyInactivityTimeRemainingMs = useMemo(() => {
+    const activeMemberCount = roomData?.members?.length ?? 0;
     if (
       !roomData?.room ||
       game?.status !== "waiting" ||
-      isTutorialRoom
+      isTutorialRoom ||
+      activeMemberCount > 0
     ) {
       return null;
     }
@@ -68,7 +71,7 @@ export function useRoomTimers(
       0,
       (roomData.room.lastActiveAt ?? 0) + ROOM_INACTIVITY_TIMEOUT_MS - liveNow,
     );
-  }, [game?.status, isTutorialRoom, liveNow, roomData?.room]);
+  }, [game?.status, isTutorialRoom, liveNow, roomData?.members?.length, roomData?.room]);
 
   const showdownTimerMs =
     game?.config?.showdownTimerMs ?? 60000;

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Id } from "../../convex/_generated/dataModel";
 import { useRoomPresence } from "@/components/rooms/hooks/useRoomPresence";
 import { ShowdownResultsScreen } from "@/components/rooms/results/ShowdownResultsScreen";
 import { TutorialSignupWall } from "@/components/rooms/results/TutorialSignupWall";
@@ -9,6 +10,9 @@ import { getTutorialGuestId } from "@/lib/tutorial-guest";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/results/$code")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    gameId: typeof search.gameId === "string" ? search.gameId : undefined,
+  }),
   head: ({ params }) => {
     const roomCode = params.code.toUpperCase();
     const title = `Results for Room ${roomCode} | Word Poker`;
@@ -30,17 +34,26 @@ export const Route = createFileRoute("/results/$code")({
 
 function ResultsPage() {
   const { code } = Route.useParams();
+  const search = Route.useSearch();
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
   const leaveRoom = useMutation(api.rooms.leaveRoom);
+  const leaveRoomByCode = useMutation(api.rooms.leaveRoomByCode);
+  const rejoinRoomByCode = useMutation(api.rooms.rejoinRoomByCode);
   const createRoom = useMutation(api.rooms.createRoom);
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const redealGameForRoom = useMutation(api.games.redealGameForRoom);
+  const toggleReady = useMutation(api.rooms.toggleReady);
   const [isStartingNewGame, setIsStartingNewGame] = useState(false);
   const [isStartingPlayAgain, setIsStartingPlayAgain] = useState(false);
   const [showTutorialSignupWall, setShowTutorialSignupWall] = useState(false);
   const [tutorialGuestAuthUserId] = useState(() => getTutorialGuestId());
+  const [resultMembersById, setResultMembersById] = useState<
+    Map<string, { name: string; image: string | null }>
+  >(() => new Map());
+  const [resultPlayerId, setResultPlayerId] = useState<string | null>(null);
+  const autoLeftResultKeyRef = useRef<string | null>(null);
 
   const COUNTDOWN_SECONDS = 60;
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
@@ -78,9 +91,16 @@ function ResultsPage() {
   const game = useQuery(api.games.getGameByRoom, {
     roomId: roomData?.room._id ?? "",
   });
+  const anchoredGame = useQuery(
+    api.games.getGameById,
+    search.gameId
+      ? { gameId: search.gameId as Id<"games"> }
+      : "skip",
+  );
+  const resultsGame = search.gameId ? anchoredGame : game;
   const showdownResults = useQuery(
     api.games.getShowdownResults,
-    game ? { gameId: game._id } : "skip",
+    resultsGame ? { gameId: resultsGame._id } : "skip",
   );
 
   const memberById = useMemo(
@@ -90,6 +110,20 @@ function ResultsPage() {
       ),
     [roomData?.members],
   );
+
+  useEffect(() => {
+    if (!roomData?.members?.length) return;
+    setResultMembersById((current) => {
+      const next = new Map(current);
+      for (const member of roomData.members) {
+        next.set(String(member._id), {
+          name: member.name,
+          image: member.image ?? null,
+        });
+      }
+      return next;
+    });
+  }, [roomData?.members]);
 
   const myPlayer = useMemo(() => {
     if (!roomData?.members) return null;
@@ -110,6 +144,12 @@ function ResultsPage() {
 
     return null;
   }, [roomData, session?.user]);
+
+  useEffect(() => {
+    if (myPlayer?._id) {
+      setResultPlayerId(String(myPlayer._id));
+    }
+  }, [myPlayer?._id]);
 
   // Detect if this is an offline game (all other players are bots)
   const isOfflineGame = useMemo(() => {
@@ -154,11 +194,21 @@ function ResultsPage() {
     setIsStartingPlayAgain(true);
 
     try {
+      const displayName =
+        session?.user?.name?.trim() || session?.user?.email || "Player";
+      await rejoinRoomByCode({ code, name: displayName });
       const result = await redealGameForRoom({ roomId: roomData?.room._id ?? "" });
       if (!result.ok) {
         console.error("Failed to redeal:", result.reason);
         return;
       }
+      await toggleReady({
+        code,
+        guestAuthUserId:
+          isGuestTutorialGame && !session?.user
+            ? (tutorialGuestAuthUserId ?? undefined)
+            : undefined,
+      });
       await navigate({ to: "/rooms/$code", params: { code } });
     } catch (error) {
       console.error("Error playing again:", error);
@@ -196,9 +246,24 @@ function ResultsPage() {
     void navigate({ to: "/" });
   };
 
-  useRoomPresence(code, Boolean(session?.user && roomData?.room && myPlayer));
+  useEffect(() => {
+    if (!search.gameId || !roomData?.room || !myPlayer || showdownResults === undefined) {
+      return;
+    }
+
+    const resultKey = `${code}:${search.gameId}`;
+    if (autoLeftResultKeyRef.current === resultKey) return;
+    autoLeftResultKeyRef.current = resultKey;
+
+    void leaveRoomByCode({ code }).catch((error) => {
+      console.error("Error leaving room on results page:", error);
+    });
+  }, [code, leaveRoomByCode, myPlayer, roomData?.room, search.gameId, showdownResults]);
+
+  useRoomPresence(code, false);
 
   const shouldReturnToRoom =
+    !search.gameId &&
     Boolean(roomData) &&
     (game?.status === "active" || game?.status === "waiting") &&
     showdownResults === null;
@@ -219,7 +284,7 @@ function ResultsPage() {
     );
   }
 
-  if (!roomData || !game || showdownResults === undefined) {
+  if (!roomData || !resultsGame || showdownResults === undefined) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#2d2d2d]">
         <p className="text-2xl text-white">Loading results...</p>
@@ -235,9 +300,11 @@ function ResultsPage() {
     );
   }
 
-  const currentPlayerId = myPlayer ? String(myPlayer._id) : null;
-  const getPlayerName = (id: string) => memberById.get(id)?.name ?? "Player";
-  const getPlayerAvatar = (id: string) => memberById.get(id)?.image ?? null;
+  const currentPlayerId = resultPlayerId ?? (myPlayer ? String(myPlayer._id) : null);
+  const getPlayerName = (id: string) =>
+    resultMembersById.get(id)?.name ?? memberById.get(id)?.name ?? "Player";
+  const getPlayerAvatar = (id: string) =>
+    resultMembersById.get(id)?.image ?? memberById.get(id)?.image ?? null;
 
   if (showTutorialSignupWall) {
     return (
@@ -254,7 +321,7 @@ function ResultsPage() {
 
   return (
     <ShowdownResultsScreen
-      pot={game.pot}
+      pot={resultsGame.pot}
       playerId={currentPlayerId}
       showdownResults={showdownResults}
       getPlayerName={getPlayerName}

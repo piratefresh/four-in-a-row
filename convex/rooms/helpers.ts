@@ -167,6 +167,45 @@ export function isRoomPastInactivityTimeout(
   return now - room.lastActiveAt >= timeoutMs;
 }
 
+export function canCloseIdleLobbyRoom({
+  isTutorial,
+  isPastInactivityTimeout,
+  activePlayerCount,
+  hasActiveGame,
+  hasCompletedGame,
+}: {
+  isTutorial: boolean;
+  isPastInactivityTimeout: boolean;
+  activePlayerCount: number;
+  hasActiveGame: boolean;
+  hasCompletedGame: boolean;
+}) {
+  return (
+    !isTutorial &&
+    isPastInactivityTimeout &&
+    activePlayerCount === 0 &&
+    !hasActiveGame &&
+    !hasCompletedGame
+  );
+}
+
+export function canListOpenRoom({
+  isTutorial,
+  isBotGame,
+  hasMode,
+  hasCompletedGame,
+  hasCurrentJoinableGame,
+}: {
+  isTutorial: boolean;
+  isBotGame: boolean;
+  hasMode: boolean;
+  hasCompletedGame: boolean;
+  hasCurrentJoinableGame: boolean;
+}) {
+  if (isTutorial || isBotGame || hasMode) return false;
+  return !hasCompletedGame || hasCurrentJoinableGame;
+}
+
 // ==================== Player Queries ====================
 
 export async function getActivePlayersInRoom(

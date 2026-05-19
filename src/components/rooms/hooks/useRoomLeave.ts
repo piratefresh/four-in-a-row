@@ -60,7 +60,11 @@ export function useRoomLeave(code: string) {
   }, [code, isLeavingRoom, leaveCurrentRoom, navigate]);
 
   const handleViewResults = useCallback(async () => {
-    await navigate({ to: "/results/$code", params: { code } });
+    await navigate({
+      to: "/results/$code",
+      params: { code },
+      search: { gameId: undefined },
+    });
   }, [code, navigate]);
 
   return {

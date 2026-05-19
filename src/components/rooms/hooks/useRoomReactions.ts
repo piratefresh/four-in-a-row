@@ -166,8 +166,12 @@ export function useRoomReactions(input: RoomReactionsInput) {
   // Auto-navigate to results when game completes
   useEffect(() => {
     if (game?.status !== "completed") return;
-    void navigate({ to: "/results/$code", params: { code } });
-  }, [code, game?.status, navigate]);
+    void navigate({
+      to: "/results/$code",
+      params: { code },
+      search: { gameId: String(game._id) },
+    });
+  }, [code, game?._id, game?.status, navigate]);
 
   // Showdown expiry: auto-forfeit
   useEffect(() => {

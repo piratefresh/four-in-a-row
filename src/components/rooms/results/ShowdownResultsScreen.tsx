@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getLetterValue } from "@/lib/letterValues";
 import { cn } from "@/lib/utils";
@@ -124,9 +124,13 @@ export function ShowdownResultsScreen({
           : "results",
   );
 
-  const advanceFromScoring = () => {
+  const advanceFromScoring = useCallback(() => {
     setResultsStep(currentPlayerWon ? "win" : "results");
-  };
+  }, [currentPlayerWon]);
+
+  const dismissWinSplash = useCallback(() => {
+    setResultsStep("results");
+  }, []);
 
   if (resultsStep === "scoring" && scoringSubmission) {
     return (
@@ -143,7 +147,7 @@ export function ShowdownResultsScreen({
         pot={pot}
         winningWord={showdownResults.winningWord}
         winningScore={showdownResults.winningScore}
-        onDismiss={() => setResultsStep("results")}
+        onDismiss={dismissWinSplash}
       />
     );
   }

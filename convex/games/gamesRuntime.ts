@@ -1,6 +1,13 @@
 import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 
+export async function getGameByIdHandler(
+  ctx: QueryCtx,
+  args: { gameId: Doc<"games">["_id"] },
+) {
+  return await ctx.db.get(args.gameId);
+}
+
 export async function getGameByRoomHandler(
   ctx: QueryCtx,
   args: { roomId: string },

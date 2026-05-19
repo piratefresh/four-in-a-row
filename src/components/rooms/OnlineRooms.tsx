@@ -72,7 +72,7 @@ export function OnlineRooms({
             type="button"
             onClick={onCreateRoom}
             disabled={isCreatingRoom}
-            className="border-gold-bright bg-gold font-display font-bold text-black hover:bg-gold/70"
+            className="rounded-xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-4 py-3 text-center text-base font-semibold text-[#1f1402] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isCreatingRoom ? "Creating..." : "Create new room"}
           </Button>
