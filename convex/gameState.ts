@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { ResolvedGameConfig } from "./gameConfig";
 
 export const GAME_STAGES = [
   "preflop",
@@ -152,6 +153,7 @@ export const gameDeckTileValidator = v.union(
 export function createInitialGameDocument(
   roomId: string,
   deck: GameDeckTile[] = [],
+  config?: ResolvedGameConfig,
 ) {
   const now = Date.now();
   return {
@@ -172,6 +174,7 @@ export function createInitialGameDocument(
     turnClockExpiresAt: undefined,
     turnClockCallerPlayerId: undefined,
     turnClockTargetPlayerId: undefined,
+    config,
     createdAt: now,
     updatedAt: now,
   };

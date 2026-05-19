@@ -17,11 +17,34 @@ type ChatMessage = {
   isCurrentPlayer?: boolean;
 };
 
-const BOT_PERSONALITY_STYLES: Record<string, { color: string; border: string; bg: string; label: string }> = {
-  cautious: { color: "text-sky-400", border: "border-sky-500/30", bg: "bg-sky-600/20", label: "🛡️" },
-  balanced: { color: "text-emerald-400", border: "border-emerald-500/30", bg: "bg-emerald-600/20", label: "📊" },
-  aggressive: { color: "text-red-400", border: "border-red-500/30", bg: "bg-red-600/20", label: "⚔️" },
-  creative: { color: "text-violet-400", border: "border-violet-500/30", bg: "bg-violet-600/20", label: "✨" },
+const BOT_PERSONALITY_STYLES: Record<
+  string,
+  { color: string; border: string; bg: string; label: string }
+> = {
+  cautious: {
+    color: "text-sky-400",
+    border: "border-sky-500/30",
+    bg: "bg-sky-600/20",
+    label: "🛡️",
+  },
+  balanced: {
+    color: "text-emerald-400",
+    border: "border-emerald-500/30",
+    bg: "bg-emerald-600/20",
+    label: "📊",
+  },
+  aggressive: {
+    color: "text-red-400",
+    border: "border-red-500/30",
+    bg: "bg-red-600/20",
+    label: "⚔️",
+  },
+  creative: {
+    color: "text-violet-400",
+    border: "border-violet-500/30",
+    bg: "bg-violet-600/20",
+    label: "✨",
+  },
 };
 
 function getBotMessageStyle(senderId: string) {
@@ -29,7 +52,12 @@ function getBotMessageStyle(senderId: string) {
   const parts = senderId.split(":");
   if (parts.length < 2) return null;
   const characterId = parts[1];
-  const personalityMap: Record<string, string> = { nora: "cautious", ellis: "balanced", jax: "aggressive", mira: "creative" };
+  const personalityMap: Record<string, string> = {
+    nora: "cautious",
+    ellis: "balanced",
+    jax: "aggressive",
+    mira: "creative",
+  };
   const personality = personalityMap[characterId];
   if (!personality) return null;
   return BOT_PERSONALITY_STYLES[personality] ?? null;
@@ -93,55 +121,58 @@ function ChatPanelContent({
           </div>
         ) : (
           messages.map((msg) => {
-            const botStyle = msg.type === "ai" ? getBotMessageStyle(msg.senderId) : null;
+            const botStyle =
+              msg.type === "ai" ? getBotMessageStyle(msg.senderId) : null;
             if (hidePlayerBubbles && msg.isCurrentPlayer) return null;
             return (
-            <div key={msg.id} className="space-y-1">
-              {msg.type === "system" ? (
-                <div className="rounded-lg bg-blue-500/10 px-3 py-2 text-center">
-                  <p className="text-xs text-blue-300">{msg.message}</p>
-                </div>
-              ) : (
-                <div
-                  className={`rounded-lg border px-3 py-2 ${
-                    msg.isCurrentPlayer
-                      ? "ml-8 border-amber-500/30 bg-amber-600/20"
-                      : botStyle
-                        ? `mr-8 ${botStyle.border} ${botStyle.bg}`
-                        : "mr-8 border-white/10 bg-slate-800/50"
-                  }`}
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span
-                      className={`text-xs font-semibold ${
-                        msg.isCurrentPlayer
-                          ? "text-amber-400"
-                          : botStyle
-                            ? botStyle.color
-                            : msg.type === "ai"
-                              ? "text-purple-400"
-                              : "text-slate-300"
-                      }`}
-                    >
-                      {msg.senderName}
-                      {botStyle && (
-                        <span className="ml-1 opacity-60">{botStyle.label}</span>
-                      )}
-                      {msg.type === "ai" && !botStyle && (
-                        <span className="ml-1 text-purple-300/60">(AI)</span>
-                      )}
-                      {msg.isCurrentPlayer && (
-                        <span className="ml-1 text-amber-300/60">(you)</span>
-                      )}
-                    </span>
-                    <span className="text-[10px] text-white/40">
-                      {formatTime(msg.timestamp)}
-                    </span>
+              <div key={msg.id} className="space-y-1">
+                {msg.type === "system" ? (
+                  <div className="rounded-lg bg-blue-500/10 px-3 py-2 text-center">
+                    <p className="text-xs text-blue-300">{msg.message}</p>
                   </div>
-                  <p className="mt-1 text-sm text-white/90">{msg.message}</p>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <div
+                    className={`rounded-lg border px-3 py-2 ${
+                      msg.isCurrentPlayer
+                        ? "ml-8 border-amber-500/30 bg-amber-600/20"
+                        : botStyle
+                          ? `mr-8 ${botStyle.border} ${botStyle.bg}`
+                          : "mr-8 border-white/10 bg-slate-800/50"
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span
+                        className={`text-xs font-semibold ${
+                          msg.isCurrentPlayer
+                            ? "text-amber-400"
+                            : botStyle
+                              ? botStyle.color
+                              : msg.type === "ai"
+                                ? "text-purple-400"
+                                : "text-slate-300"
+                        }`}
+                      >
+                        {msg.senderName}
+                        {botStyle && (
+                          <span className="ml-1 opacity-60">
+                            {botStyle.label}
+                          </span>
+                        )}
+                        {msg.type === "ai" && !botStyle && (
+                          <span className="ml-1 text-purple-300/60">(AI)</span>
+                        )}
+                        {msg.isCurrentPlayer && (
+                          <span className="ml-1 text-amber-300/60">(you)</span>
+                        )}
+                      </span>
+                      <span className="text-[10px] text-white/40">
+                        {formatTime(msg.timestamp)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-white/90">{msg.message}</p>
+                  </div>
+                )}
+              </div>
             );
           })
         )}
@@ -184,7 +215,7 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   return (
     <>
-      <div className="hidden [@media(min-width:1441px)]:fixed [@media(min-width:1441px)]:right-0 [@media(min-width:1441px)]:top-16 [@media(min-width:1441px)]:bottom-0 [@media(min-width:1441px)]:z-30 [@media(min-width:1441px)]:flex [@media(min-width:1441px)]:w-[400px] [@media(min-width:1441px)]:min-w-[400px]">
+      <div className="hidden [@media(min-width:1441px)]:fixed [@media(min-width:1441px)]:right-0 [@media(min-width:1441px)]:top-12 [@media(min-width:1441px)]:bottom-0 [@media(min-width:1441px)]:z-30 [@media(min-width:1441px)]:flex [@media(min-width:1441px)]:w-[400px] [@media(min-width:1441px)]:min-w-[400px]">
         <ChatPanelContent
           messages={messages}
           draftMessage={draftMessage}

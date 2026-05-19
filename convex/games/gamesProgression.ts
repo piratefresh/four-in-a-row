@@ -428,7 +428,7 @@ export async function scheduleBotTurnIfNeeded(
         gameId,
         playerId: currentTurnHand.playerId,
         turnStartedAt: game.turnStartedAt,
-        timeoutMs: room?.isBotGame ? 60_000 : config.turnClockGraceMs,
+        timeoutMs: config.turnClockGraceMs,
       });
     }
     console.log("scheduleBotTurnIfNeeded: Current player is not a bot, skipping bot action");
@@ -510,11 +510,12 @@ export async function handlePostActionProgression(
 
     await ctx.db.patch(game._id, {
       stage: "showdown",
-      status: "active",
+      status: "completed",
+      winnerId: winner.playerId,
       communityTiles: updatedCommunityTiles,
       currentBet: 0,
       raisesThisRound: 0,
-      showdownStartedAt: now,
+      showdownStartedAt: undefined,
       turnStartedAt: undefined,
       ...getClearedTurnClockFields(),
       updatedAt: now,
@@ -523,7 +524,7 @@ export async function handlePostActionProgression(
     await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
       gameId: game._id,
       roomId: game.roomId as Id<"rooms">,
-      category: "stage_change",
+      category: "game_complete",
       previousStage: game.stage,
       stage: "showdown",
       tilesRevealed: describeRevealedTiles(updatedCommunityTiles),
@@ -535,7 +536,7 @@ export async function handlePostActionProgression(
       },
     });
 
-    await scheduleBotTurnIfNeeded(ctx, game._id);
+    await recordGameCompletion(ctx, game._id);
     return;
   }
 

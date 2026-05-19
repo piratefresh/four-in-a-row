@@ -354,7 +354,26 @@ export async function createGameForRoomHandler(
     .unique();
   if (waitingGame) return waitingGame._id;
 
-  return await ctx.db.insert("games", createInitialGameDocument(roomId, args.deck ?? []));
+  const normalizedRoomId = ctx.db.normalizeId("rooms", roomId);
+  if (!normalizedRoomId) {
+    throw new ConvexError({
+      code: "INVALID_ROOM_ID",
+      message: "Room ID is invalid.",
+    });
+  }
+
+  const room = await ctx.db.get(normalizedRoomId);
+  if (!room) {
+    throw new ConvexError({
+      code: "ROOM_NOT_FOUND",
+      message: "Room does not exist.",
+    });
+  }
+
+  return await ctx.db.insert(
+    "games",
+    createInitialGameDocument(roomId, args.deck ?? [], resolveConfig(room.config)),
+  );
 }
 
 export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"games"> }) {

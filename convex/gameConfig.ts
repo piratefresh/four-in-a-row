@@ -195,6 +195,13 @@ function normalizeBonusStructure(
   return structure ?? DEFAULTS.bonusStructure;
 }
 
+function normalizeTimerMs(timerMs: RoomConfig["showdownTimer"]) {
+  if (typeof timerMs !== "number" || !Number.isFinite(timerMs) || timerMs <= 0) {
+    return undefined;
+  }
+  return Math.round(timerMs);
+}
+
 // ============================================================================
 // resolveConfig
 // ============================================================================
@@ -208,6 +215,7 @@ export function resolveConfig(config?: RoomConfig): ResolvedGameConfig {
   const isSpeed = bettingStructure === "speed";
   const isFixedLimit = bettingStructure === "fixedLimit";
   const isPotLimit = bettingStructure === "potLimit";
+  const customTimerMs = normalizeTimerMs(config?.showdownTimer);
 
   return {
     gameMode: config?.gameMode ?? DEFAULTS.gameMode,
@@ -225,11 +233,13 @@ export function resolveConfig(config?: RoomConfig): ResolvedGameConfig {
           ? [20, 40, 60, 80, 100, 120, 160]
           : DEFAULTS.raiseLadder,
     maxRaisesPerRound: isSpeed || isFixedLimit ? 3 : DEFAULTS.maxRaisesPerRound,
-    turnClockGraceMs: isSpeed ? SPEED_OVERRIDES.turnClockGraceMs : DEFAULTS.turnClockGraceMs,
+    turnClockGraceMs: customTimerMs ?? (isSpeed
+      ? SPEED_OVERRIDES.turnClockGraceMs
+      : DEFAULTS.turnClockGraceMs),
     turnClockCalledDurationMs: isSpeed
       ? SPEED_OVERRIDES.turnClockCalledDurationMs
       : DEFAULTS.turnClockCalledDurationMs,
-    showdownTimerMs: config?.showdownTimer ?? (isSpeed
+    showdownTimerMs: customTimerMs ?? (isSpeed
       ? SPEED_OVERRIDES.showdownTimerMs
       : DEFAULTS.showdownTimerMs),
     fullRackBonus:

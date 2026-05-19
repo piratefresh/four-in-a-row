@@ -7,12 +7,15 @@ import {
   clearDismissedRoomRejoin,
   isRoomRejoinDismissed,
 } from "@/lib/room-rejoin-dismissal";
+import { showEmailVerificationToast } from "@/lib/email-verification-toast";
 
 interface RoomReactionsInput {
   code: string;
   isAuthPending: boolean;
   hasSessionUser: boolean;
   allowGuestTutorial: boolean;
+  isEmailVerified: boolean;
+  userEmail: string;
   roomData: {
     room: { _id: string; status: string; tutorialId?: string | null };
   } | null | undefined;
@@ -34,6 +37,8 @@ export function useRoomReactions(input: RoomReactionsInput) {
     isAuthPending,
     hasSessionUser,
     allowGuestTutorial,
+    isEmailVerified,
+    userEmail,
     roomData,
     game,
     myPlayer,
@@ -77,6 +82,11 @@ export function useRoomReactions(input: RoomReactionsInput) {
       return;
     }
 
+    if (!isEmailVerified) {
+      showEmailVerificationToast(userEmail);
+      return;
+    }
+
     autoRejoinAttemptedCodeRef.current = code;
     void (async () => {
       try {
@@ -92,6 +102,8 @@ export function useRoomReactions(input: RoomReactionsInput) {
     code,
     isAuthPending,
     hasSessionUser,
+    isEmailVerified,
+    userEmail,
     myPlayer,
     rejoinRoomByCode,
     roomData,

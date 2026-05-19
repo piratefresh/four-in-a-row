@@ -8,6 +8,7 @@ import {
 } from "@/components/rooms/lobby/CreateRoomConfigDialog";
 import { RoomDrawer } from "@/components/RoomDrawer";
 import { authClient } from "@/lib/auth-client";
+import { showEmailVerificationToast } from "@/lib/email-verification-toast";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/rooms/")({
@@ -65,6 +66,12 @@ function OnlineRoomsRoute() {
 
     const displayName = getDisplayName();
     if (!displayName) return;
+
+    if (session?.user && !session.user.emailVerified) {
+      showEmailVerificationToast(session.user.email);
+      return;
+    }
+
     setJoiningRoomCode(selectedRoomCode);
     setJoinMessage(null);
 
@@ -109,6 +116,11 @@ function OnlineRoomsRoute() {
   const handleCreateRoom = async (values: CreateRoomConfigValues) => {
     const displayName = getDisplayName();
     if (!displayName) return;
+
+    if (session?.user && !session.user.emailVerified) {
+      showEmailVerificationToast(session.user.email);
+      return;
+    }
 
     setIsCreatingRoom(true);
     setJoinMessage(null);

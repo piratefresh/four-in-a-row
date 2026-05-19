@@ -85,7 +85,7 @@ export function RoomHeader({
 
       {timerMs !== null ? (
         <div
-          className={`text-center text-4xl tabular-nums ${getTimerColor(timerMs, isActionTimer)}`}
+          className={`text-center text-4xl tabular-nums ${getTimerColor(timerMs, isActionTimer)} [@media(min-width:1441px)]:mr-[400px]`}
         >
           {formatCountdown(timerMs)}
         </div>

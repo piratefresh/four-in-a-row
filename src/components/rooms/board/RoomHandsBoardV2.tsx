@@ -192,6 +192,7 @@ export function RoomHandsBoardV2({
     raiseLabel,
     raiseAmount,
     raiseOptions,
+    turnClockTimeRemaining,
     isShowdownSubmissionOpen,
   } = useRoomGameContext();
 
@@ -225,6 +226,12 @@ export function RoomHandsBoardV2({
     const trimmedDraft = chatDraft?.trim();
     return trimmedDraft ? trimmedDraft.slice(0, 120) : null;
   }, [chatDraft]);
+  const showTurnUrgencyBubble =
+    showBettingControls &&
+    isMyTurn &&
+    turnClockTimeRemaining !== null &&
+    turnClockTimeRemaining > 0 &&
+    turnClockTimeRemaining <= 10_000;
 
   const opponents = useMemo(
     () =>
@@ -448,6 +455,11 @@ export function RoomHandsBoardV2({
                         bottomHand.lastAction,
                       )}
                       chatBubbleMessage={activeChatDraft}
+                      urgentBubbleMessage={
+                        showTurnUrgencyBubble
+                          ? "Time is running out. Make a move."
+                          : null
+                      }
                       isActiveTurn={currentTurnPlayerId === bottomHand.playerId}
                       isCurrentPlayer
                       blindPosition={getBlindPosition(bottomHand.playerId)}

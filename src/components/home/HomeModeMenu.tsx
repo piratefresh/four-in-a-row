@@ -1,41 +1,16 @@
-import { Brain, Globe2, Trophy, Waves, WifiOff } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Brain, Globe2, Trophy, WifiOff } from "lucide-react";
 import { Tips } from "./Tips";
 import { ModeCard } from "./components/ModeCard";
-
-type OfflineDifficulty = "easy" | "medium" | "hard";
-
-const OFFLINE_DIFFICULTY_OPTIONS: Array<{
-  value: OfflineDifficulty;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "easy",
-    label: "Easy",
-    description: "More mistakes, folds more often",
-  },
-  { value: "medium", label: "Medium", description: "Balanced" },
-  { value: "hard", label: "Hard", description: "Sharper and more aggressive" },
-];
 
 type HomeModeMenuProps = {
   activeRoomCode?: string | null;
   activeRoomTutorialId?: string | null;
   isStartingOffline: boolean;
   isStartingTutorial: boolean;
-  offlineDifficulty: OfflineDifficulty;
   statusMessage: string | null;
-  onOfflineDifficultyChange: (difficulty: OfflineDifficulty) => void;
   onSelectOnline: () => void;
   onSelectRiverRun: () => void;
-  onStartOffline: (difficulty: OfflineDifficulty) => void;
+  onStartOffline: () => void;
   onPlayTutorial: () => void;
   onResumeRoom?: () => void;
   onSelectLeaderboard?: () => void;
@@ -46,11 +21,8 @@ export function HomeModeMenu({
   activeRoomTutorialId,
   isStartingOffline,
   isStartingTutorial,
-  offlineDifficulty,
   statusMessage,
-  onOfflineDifficultyChange,
   onSelectOnline,
-  onSelectRiverRun,
   onStartOffline,
   onPlayTutorial,
   onResumeRoom,
@@ -101,51 +73,14 @@ export function HomeModeMenu({
             onSelect={onSelectOnline}
           />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <ModeCard
-                icon={<WifiOff className="size-5" strokeWidth={2.25} />}
-                label="Offline Mode"
-                description="Play vs. bots, no signup"
-                tone="warm"
-                disabled={isStartingOffline || isStartingTutorial}
-                interactive
-              />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="w-72 rounded-xl border-gold/25 bg-ink/95 p-2 text-cream/75 shadow-2xl shadow-black/45 backdrop-blur"
-            >
-              <DropdownMenuLabel className="px-3 py-2 text-[10px] uppercase tracking-[0.24em] text-gold/80">
-                Choose bot difficulty
-              </DropdownMenuLabel>
-              {OFFLINE_DIFFICULTY_OPTIONS.map((option) => {
-                const selected = offlineDifficulty === option.value;
-
-                return (
-                  <DropdownMenuItem
-                    key={option.value}
-                    onSelect={() => {
-                      onOfflineDifficultyChange(option.value);
-                      onStartOffline(option.value);
-                    }}
-                    className={`block rounded-lg px-3 py-2 text-left transition-colors ${
-                      selected
-                        ? "bg-felt-deep/80 text-cream"
-                        : "text-cream/75 hover:bg-white/5 hover:text-cream data-highlighted:bg-white/5 data-highlighted:text-cream"
-                    }`}
-                  >
-                    <span className="block text-sm font-medium">
-                      {option.label}
-                    </span>
-                    <span className="mt-1 block text-xs leading-4 text-current opacity-75">
-                      {option.description}
-                    </span>
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ModeCard
+            icon={<WifiOff className="size-5" strokeWidth={2.25} />}
+            label="Offline Mode"
+            description="Play vs. bots, no signup"
+            tone="warm"
+            disabled={isStartingOffline || isStartingTutorial}
+            onSelect={onStartOffline}
+          />
 
           {/* <ModeCard
             icon={<Waves className="size-5" strokeWidth={2.25} />}
