@@ -3,7 +3,7 @@ import type { RoomGameContextValue } from "@/components/rooms/context/RoomGameCo
 import type {
   PlayerHand,
   Tile,
-} from "@/components/rooms/board/RoomHandsBoard.types";
+} from "@/components/rooms/board/RoomGameTable.types";
 import { IN_GAME_HELPER_STEPS } from "./wordPokerTours";
 
 type GameStage = "preflop" | "flop" | "turn" | "river" | "final" | "showdown";

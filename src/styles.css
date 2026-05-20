@@ -13,16 +13,16 @@
 
 body {
   @apply m-0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+    "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
-    monospace;
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
 @theme {
@@ -30,13 +30,14 @@ code {
 }
 
 @theme inline {
-  --font-serif: "Noto Serif", ui-serif, Georgia, Cambria, "Times New Roman",
-    Times, serif;
-  --font-display: "Fraunces", ui-serif, Georgia, Cambria, "Times New Roman",
-    Times, serif;
+  --font-serif:
+    "Noto Serif", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-display:
+    "Fraunces", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-body: "Bricolage Grotesque", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, monospace;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -61,9 +62,22 @@ code {
   --color-chip-green: #2c7a4f;
   --color-chip-red: #c23d3d;
   --color-chip-blue: #2b4f8a;
-  --gradient-felt-table: radial-gradient(ellipse at 50% 40%, var(--color-felt-light), var(--color-felt-deep));
-  --gradient-felt-splash: radial-gradient(ellipse at center, var(--color-felt-light), var(--color-felt-deep));
-  --gradient-felt-glow: radial-gradient(circle at 50% 40%, rgba(212,165,74,0.08), transparent 60%);
+  --gradient-felt-table: radial-gradient(
+    ellipse at 50% 40%,
+    var(--color-felt-light),
+    var(--color-felt-deep)
+  );
+  --gradient-felt-splash: radial-gradient(
+    ellipse at center,
+    var(--color-felt-light),
+    var(--color-felt-deep)
+  );
+  --gradient-felt-glow: radial-gradient(
+    circle at 50% 40%,
+    rgba(212, 165, 74, 0.08),
+    transparent 60%
+  );
+  --color-bg-gradient: linear-gradient(rgb(10, 29, 23) 0%, rgb(5, 20, 16) 100%);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -94,9 +108,63 @@ code {
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-community: #1a2332;
+  --color-brass: #d4af37;
+  --color-wire: #0a1d17;
+  --color-wire-deep: #051410;
+  --gradient-wire: linear-gradient(
+    to bottom,
+    var(--color-wire) 0%,
+    var(--color-wire-deep) 100%
+  );
 
   --animate-border: border 4s linear infinite;
   --animate-marquee: marquee 30s linear infinite;
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+  --animate-ticker: ticker 40s linear infinite;
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  --text-xxs: 10px;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--accordion-panel-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--accordion-panel-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.4;
+      transform: scale(1.3);
+    }
+  }
+
+  @keyframes ticker {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
 
   @keyframes border {
     to {
@@ -110,6 +178,75 @@ code {
     }
     to {
       transform: translateX(-50%);
+    }
+  }
+
+  @keyframes felt-sweep {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes pot-pop {
+    0% {
+      opacity: 0;
+      transform: scale(0.78) translateY(4px);
+    }
+    70% {
+      opacity: 1;
+      transform: scale(1.08) translateY(-1px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  @keyframes phase-slide {
+    0% {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes timer-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.72;
+    }
+  }
+
+  @keyframes seat-breathe {
+    0%,
+    100% {
+      filter: brightness(1);
+      transform: scale(1);
+    }
+    50% {
+      filter: brightness(1.08);
+      transform: scale(1.04);
+    }
+  }
+
+  @keyframes winner-burst {
+    0% {
+      filter: brightness(1);
+      transform: scale(0.82);
+    }
+    65% {
+      filter: brightness(1.2);
+      transform: scale(1.12);
+    }
+    100% {
+      filter: brightness(1);
+      transform: scale(1);
     }
   }
 }
@@ -186,7 +323,7 @@ code {
 @property --border-angle {
   inherits: false;
   initial-value: 0deg;
-  syntax: '<angle>';
+  syntax: "<angle>";
 }
 
 @layer base {

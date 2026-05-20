@@ -7,9 +7,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { PokerChip } from "../table/PokerChip";
-import type { PokerChipTone } from "../table/PokerChip";
-import { PokerTable } from "../table/PokerTable";
 
 type TableTile =
   | {
@@ -144,14 +141,6 @@ function formatWagerOwnerLabel(ownerName: string) {
     : `${trimmedName}'s wager`;
 }
 
-function getWagerChipTone(amount: number): PokerChipTone {
-  if (amount >= 500) return "purple";
-  if (amount >= 100) return "blue";
-  if (amount >= 50) return "black";
-  if (amount >= 25) return "green";
-  return "red";
-}
-
 type WagerChipProps = {
   amount: number;
   ownerName: string;
@@ -160,7 +149,6 @@ type WagerChipProps = {
 function WagerChip({ amount, ownerName }: WagerChipProps) {
   const [isTooltipOpen, setIsTooltipOpen] = useState(false);
   const tooltipLabel = formatWagerOwnerLabel(ownerName);
-  const tone = getWagerChipTone(amount);
 
   return (
     <Tooltip open={isTooltipOpen} onOpenChange={setIsTooltipOpen}>
@@ -175,7 +163,9 @@ function WagerChip({ amount, ownerName }: WagerChipProps) {
           }
         }}
       >
-        <PokerChip amount={amount} label="BET" size="sm" tone={tone} />
+        <span className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#f4e4c1] bg-[radial-gradient(circle_at_30%_30%,#ed4747_0%,#c41a1a_60%,#8b0e0e_100%)] font-sans text-[9px] font-extrabold text-[#fff8dc] shadow-[0_2px_4px_rgba(0,0,0,0.5),inset_0_0_0_2px_rgba(255,255,255,0.06)] [text-shadow:0_1px_1px_rgba(0,0,0,0.5)]">
+          {amount}
+        </span>
       </TooltipTrigger>
       <TooltipContent
         side="top"
@@ -189,7 +179,7 @@ function WagerChip({ amount, ownerName }: WagerChipProps) {
 }
 
 export function RoomTable({
-  isPhase1,
+  isPhase1: _isPhase1,
   pot,
   communityTiles: _communityTiles,
   opponentBets,
@@ -206,27 +196,30 @@ export function RoomTable({
     : BET_THROW_TRANSITION;
   const potDisplay = (
     <div className="flex flex-col items-center gap-1 text-center leading-none">
-      <div className="font-semibold uppercase tracking-[0.2em] text-[#d7c48e]/75 xs:text-[9px] sm:text-xs">
+      <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[#e8dcc0]/55">
         Pot
       </div>
       <div
         id="pot-amount"
-        className="text-[18px] font-semibold text-[#f4d37a] xs:text-[22px] sm:text-[38px]"
+        className="mt-1 font-serif text-[36px] font-semibold leading-none text-[#d4af37] motion-safe:animate-[pot-pop_0.8s_cubic-bezier(0.34,1.56,0.64,1)_both]"
       >
         ${pot}
+      </div>
+      <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[#e8dcc0]/50">
+        Worth {(pot / 20).toFixed(1)}x BB
       </div>
     </div>
   );
 
   return (
-    <PokerTable
-      maxPlayers={4}
-      players={[]}
-      showSeats={false}
-      centerLabel=""
-      size="responsive"
-      shellInsetClassName="inset-0"
+    <div
+      className="relative h-[min(400px,52vw)] w-[min(760px,calc(100vw-2rem))] max-w-[760px] rounded-[50%] border-4 border-[#3a2815] bg-[radial-gradient(ellipse_at_center,#1a4a35_0%,#0e3422_60%,#08291b_100%)] shadow-[inset_0_0_60px_rgba(0,0,0,0.6),0_12px_40px_rgba(0,0,0,0.5)] sm:h-[min(400px,48vw)]"
     >
+      <div className="absolute inset-[14px] rounded-[50%] border border-[#d4af37]/25" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 font-serif text-[13px] uppercase tracking-[0.31em] text-[#d4af37]/20">
+        Word Poker
+      </div>
+      <div className="pointer-events-none absolute inset-2 rounded-[50%] bg-[conic-gradient(from_0deg,transparent_0deg,rgba(212,175,55,0.25)_30deg,transparent_60deg,transparent_360deg)] [mask:radial-gradient(circle,transparent_65%,#000_67%,#000_71%,transparent_73%)] motion-safe:animate-[felt-sweep_9s_linear_infinite]" />
       <TooltipProvider delay={0}>
         <AnimatePresence initial={false}>
           {opponentBets.map((bet) => (
@@ -258,16 +251,10 @@ export function RoomTable({
       </TooltipProvider>
 
       {!showCenterPot ? null : (
-        <div
-          className={`absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center ${
-            isPhase1
-              ? "gap-2"
-              : "w-full max-w-[96%] gap-1 sm:max-w-[70%] sm:gap-5"
-          }`}
-        >
+        <div className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
           {potDisplay}
         </div>
       )}
-    </PokerTable>
+    </div>
   );
 }

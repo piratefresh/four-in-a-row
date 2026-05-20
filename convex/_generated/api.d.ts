@@ -49,6 +49,7 @@ import type * as inspectGame from "../inspectGame.js";
 import type * as messages from "../messages.js";
 import type * as openRouterClient from "../openRouterClient.js";
 import type * as playerStats from "../playerStats.js";
+import type * as records from "../records.js";
 import type * as riverRun from "../riverRun.js";
 import type * as riverRunState from "../riverRunState.js";
 import type * as riverRun_access from "../riverRun/access.js";
@@ -129,6 +130,7 @@ declare const fullApi: ApiFromModules<{
   messages: typeof messages;
   openRouterClient: typeof openRouterClient;
   playerStats: typeof playerStats;
+  records: typeof records;
   riverRun: typeof riverRun;
   riverRunState: typeof riverRunState;
   "riverRun/access": typeof riverRun_access;

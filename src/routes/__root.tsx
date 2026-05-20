@@ -141,7 +141,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     matchRoute({ to: "/rooms/$code" }) || matchRoute({ to: "/results/$code" });
   const isLoginOrRegisterView =
     matchRoute({ to: "/login" }) || matchRoute({ to: "/register" });
-  const showHeader = !isRoomOrResultsView && !isLoginOrRegisterView;
+  const isLeaderboardView = matchRoute({ to: "/leaderboard" });
+  const showHeader =
+    !isRoomOrResultsView && !isLoginOrRegisterView && !isLeaderboardView;
 
   return (
     <html lang="en">

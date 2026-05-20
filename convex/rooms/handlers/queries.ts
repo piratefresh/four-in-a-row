@@ -64,6 +64,12 @@ export const listRooms = query({
         continue;
       }
 
+      const playerInitials = activePlayers
+        .slice(0, 4)
+        .map((p) => p.name?.[0]?.toUpperCase() ?? "?");
+      const activeGame = currentGame ?? waitingGame;
+      const pot = activeGame?.pot ?? 0;
+
       result.push({
         _id: room._id,
         code: room.code,
@@ -74,6 +80,8 @@ export const listRooms = query({
         lastActiveAt: room.lastActiveAt,
         createdAt: room.createdAt,
         activePlayers: activePlayers.length,
+        playerInitials,
+        pot,
       });
     }
     return result.slice(0, 50);

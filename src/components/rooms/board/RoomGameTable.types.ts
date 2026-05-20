@@ -30,7 +30,17 @@ export type PlayerHand = {
   lastAction?: "check" | "call" | "raise" | "fold";
 };
 
-export type RoomHandsBoardProps = {
+export type RoomGameChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  message: string;
+  timestamp: number;
+  type: "player" | "ai" | "system";
+  isCurrentPlayer?: boolean;
+};
+
+export type RoomGameTableProps = {
   gameId: Id<"games">;
   activePlayerId?: string;
   helperTipsEnabled?: boolean;
@@ -48,6 +58,9 @@ export type RoomHandsBoardProps = {
   bigBlindIndex?: number;
   pot?: number;
   chatDraft?: string;
+  chatMessages?: RoomGameChatMessage[];
+  onChatDraftChange?: (message: string) => void;
+  onSendChatMessage?: (message: string) => void | Promise<void>;
   tutorialReplayControl?: ReactNode;
 };
 

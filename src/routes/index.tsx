@@ -1,5 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useNextStep } from "nextstepjs";
 import { api } from "../../convex/_generated/api";
@@ -12,7 +18,7 @@ import {
 import { dismissRoomRejoin } from "@/lib/room-rejoin-dismissal";
 import { showEmailVerificationToast } from "@/lib/email-verification-toast";
 import { HomeModeMenu } from "@/components/home/HomeModeMenu";
-import { ActivityTicker } from "@/components/home/ActivityTicker";
+import { ActivityMarqueeTicker } from "@/components/home/ActivityMarqueeTicker";
 import { OnboardingSetupScreen } from "@/components/home/OnboardingSetupScreen";
 import { SplashScreen } from "@/components/home/SplashScreen";
 import {
@@ -60,9 +66,7 @@ function App() {
   }, [activeRoom, closeNextStep, leaveRoom]);
 
   const createRoom = useMutation(api.rooms.createRoom);
-  const createTutorialBotRoom = useMutation(
-    api.rooms.createTutorialBotRoom,
-  );
+  const createTutorialBotRoom = useMutation(api.rooms.createTutorialBotRoom);
   const createGameForRoom = useMutation(api.games.createGameForRoom);
   const debugFillRoomWithBots = useMutation(api.rooms.debugFillRoomWithBots);
   const onboardingBotGameStartedRef = useRef(false);
@@ -107,70 +111,82 @@ function App() {
     return session?.user?.name?.trim() || session?.user?.email || "Guest";
   };
 
-  const startOfflineGame = useEffectEvent(async (options?: {
-    onboarding?: boolean;
-    difficulty?: BotDifficulty;
-    roomTitle?: string;
-    config?: CreateRoomConfigValues["config"];
-  }) => {
-    const displayName = getDisplayName();
-    if (!displayName) return;
+  const startOfflineGame = useEffectEvent(
+    async (options?: {
+      onboarding?: boolean;
+      difficulty?: BotDifficulty;
+      roomTitle?: string;
+      config?: CreateRoomConfigValues["config"];
+    }) => {
+      const displayName = getDisplayName();
+      if (!displayName) return;
 
-    if (!options?.onboarding && session?.user && !session.user.emailVerified) {
-      showEmailVerificationToast(session.user.email);
-      return;
-    }
-
-    const onboarding = options?.onboarding ?? false;
-    const difficulty = options?.difficulty ?? "medium";
-    setIsStartingOffline(true);
-    setOnboardingSetupStage(onboarding ? "room" : null);
-    setJoinMessage(onboarding ? "Setting up your starter bot table..." : null);
-
-    try {
-      const room = onboarding
-        ? await createTutorialBotRoom({ name: displayName })
-        : await createRoom({
-            name: displayName,
-            roomTitle: options?.roomTitle,
-            difficulty,
-            isBotGame: true,
-            config: options?.config,
-          });
-
-      setOnboardingSetupStage(onboarding ? "bots" : null);
-      if (!onboarding) {
-        await debugFillRoomWithBots({ code: room.code, count: 3 });
+      if (
+        !options?.onboarding &&
+        session?.user &&
+        !session.user.emailVerified
+      ) {
+        showEmailVerificationToast(session.user.email);
+        return;
       }
 
-      setOnboardingSetupStage(onboarding ? "deal" : null);
-      await createGameForRoom({ roomId: room.roomId });
-      await navigate(
-        onboarding
-          ? {
-              to: "/rooms/$code",
-              params: { code: room.code },
-            }
-          : { to: "/rooms/$code", params: { code: room.code } },
+      const onboarding = options?.onboarding ?? false;
+      const difficulty = options?.difficulty ?? "medium";
+      setIsStartingOffline(true);
+      setOnboardingSetupStage(onboarding ? "room" : null);
+      setJoinMessage(
+        onboarding ? "Setting up your starter bot table..." : null,
       );
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to start an offline table.";
-      setJoinMessage(message);
-      setOnboardingSetupStage(null);
-    } finally {
-      setIsStartingOffline(false);
-    }
-  });
+
+      try {
+        const room = onboarding
+          ? await createTutorialBotRoom({ name: displayName })
+          : await createRoom({
+              name: displayName,
+              roomTitle: options?.roomTitle,
+              difficulty,
+              isBotGame: true,
+              config: options?.config,
+            });
+
+        setOnboardingSetupStage(onboarding ? "bots" : null);
+        if (!onboarding) {
+          await debugFillRoomWithBots({ code: room.code, count: 3 });
+        }
+
+        setOnboardingSetupStage(onboarding ? "deal" : null);
+        await createGameForRoom({ roomId: room.roomId });
+        await navigate(
+          onboarding
+            ? {
+                to: "/rooms/$code",
+                params: { code: room.code },
+              }
+            : { to: "/rooms/$code", params: { code: room.code } },
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to start an offline table.";
+        setJoinMessage(message);
+        setOnboardingSetupStage(null);
+      } finally {
+        setIsStartingOffline(false);
+      }
+    },
+  );
 
   useEffect(() => {
     if (search.onboarding !== "bot") return;
     if (onboardingBotGameStartedRef.current) return;
     if (!session?.user) return;
 
-    if (activeRoom === undefined || convexAuthUser === undefined || !convexAuthUser) {
+    if (
+      activeRoom === undefined ||
+      convexAuthUser === undefined ||
+      !convexAuthUser
+    ) {
       setOnboardingSetupStage("auth");
       setJoinMessage("Finishing account setup...");
       return;
@@ -262,7 +278,10 @@ function App() {
       logTutorialDebug("home:start-tutorial:mutation:start", {
         guest: describeTutorialGuestIdForDebug(guestAuthUserId),
       });
-      const room = await createTutorialBotRoom({ name: displayName, guestAuthUserId });
+      const room = await createTutorialBotRoom({
+        name: displayName,
+        guestAuthUserId,
+      });
       logTutorialDebug("home:start-tutorial:mutation:success", {
         code: room.code,
         tutorialId: room.tutorialId,
@@ -311,7 +330,7 @@ function App() {
       ) : showOnboardingSetupScreen ? (
         <OnboardingSetupScreen stage={onboardingSetupStage} />
       ) : (
-        <>
+        <div className="relative flex flex-1 flex-col min-h-0 bg-linear-to-b from-wire to-wire-deep">
           <HomeModeMenu
             activeRoomCode={activeRoom?.code}
             activeRoomTutorialId={activeRoom?.tutorialId ?? null}
@@ -351,8 +370,9 @@ function App() {
               });
             }}
           />
-          <ActivityTicker />
-        </>
+
+          <ActivityMarqueeTicker />
+        </div>
       )}
     </>
   );

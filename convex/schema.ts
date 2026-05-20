@@ -385,9 +385,27 @@ export const appTables = {
     .index("by_userB", ["userB"]),
   activityFeed: defineTable({
     displayText: v.string(),
-    type: v.union(v.literal("game_started"), v.literal("game_completed")),
+    type: v.union(
+      v.literal("game_started"),
+      v.literal("game_completed"),
+      v.literal("room_created"),
+      v.literal("big_play"),
+      v.literal("regular_play"),
+      v.literal("raise"),
+      v.literal("call"),
+      v.literal("fold"),
+    ),
+    roomId: v.optional(v.id("rooms")),
+    roomCode: v.optional(v.string()),
+    roomTitle: v.optional(v.string()),
+    playerName: v.optional(v.string()),
+    word: v.optional(v.string()),
+    score: v.optional(v.number()),
+    amount: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_createdAt", ["createdAt"]),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_roomId_createdAt", ["roomId", "createdAt"]),
 };
 
 export const tables = {

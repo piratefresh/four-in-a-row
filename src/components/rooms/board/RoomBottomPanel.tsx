@@ -11,7 +11,7 @@ import {
   type WordTileSize,
   type WordTileVariant,
 } from "../table/word-tile-v2";
-import type { BuilderTile } from "./RoomHandsBoard.types";
+import type { BuilderTile } from "./RoomGameTable.types";
 import { getLetterValue } from "../../../lib/letterValues";
 import type { ShowdownPreviewScore } from "../../../lib/showdownScore";
 

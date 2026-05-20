@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { OnlineRooms } from "@/components/rooms/OnlineRooms";
+import { LobbyV2 } from "@/components/rooms/LobbyV2";
 import {
   CreateRoomConfigDialog,
   type CreateRoomConfigValues,
@@ -149,7 +149,7 @@ function OnlineRoomsRoute() {
 
   return (
     <>
-      <OnlineRooms
+      <LobbyV2
         activeRoomCode={activeRoom?.code}
         activeRoomTutorialId={activeRoom?.tutorialId}
         joinMessage={joinMessage}

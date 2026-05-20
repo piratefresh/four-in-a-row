@@ -1,4 +1,4 @@
-import { PhasePlayerBadge } from "./PhasePlayerBadge";
+import { Seat } from "./Seat";
 import {
   ROOM_BOTTOM_BADGE_POSITION_CLASS,
   ROOM_OPPONENT_POSITION_CLASS,
@@ -53,7 +53,7 @@ export function BlankRoomPhase({
             key={opponent.id}
             className={`absolute ${ROOM_OPPONENT_POSITION_CLASS[opponent.position]} z-20`}
           >
-            <PhasePlayerBadge
+            <Seat
               name={opponent.name}
               avatarUrl={opponent.avatarUrl}
               chips={opponent.chips}
@@ -67,7 +67,7 @@ export function BlankRoomPhase({
         ))}
 
         <div className={ROOM_BOTTOM_BADGE_POSITION_CLASS}>
-          <PhasePlayerBadge
+          <Seat
             name={bottomPlayer.name}
             avatarUrl={bottomPlayer.avatarUrl}
             chips={bottomPlayer.chips}

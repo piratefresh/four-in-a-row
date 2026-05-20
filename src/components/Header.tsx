@@ -28,6 +28,7 @@ export default function Header() {
   });
   const { data: session } = authClient.useSession();
   const [isLeavingRoom, setIsLeavingRoom] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const displayName =
     session?.user?.name?.trim() || session?.user?.email || "User";
   const roomMatch = pathname.match(/^\/rooms\/([^/]+)$/);
@@ -38,7 +39,10 @@ export default function Header() {
       ? decodeURIComponent(resultsMatch[1]).toUpperCase()
       : null;
   const leaveRoom = useMutation(api.rooms.leaveRoomByCode);
-  const pendingNotifications = useQuery(api["friendships/notifications"].pendingNotificationCount);
+  const leaveCurrentRoom = useMutation(api.rooms.leaveRoom);
+  const pendingNotifications = useQuery(
+    api["friendships/notifications"].pendingNotificationCount,
+  );
   const roomData = useQuery(
     api.rooms.getRoomMembers,
     roomCode ? { code: roomCode } : "skip",
@@ -97,13 +101,23 @@ export default function Header() {
     }
   };
 
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+
+    setIsLoggingOut(true);
+    try {
+      await leaveCurrentRoom({});
+    } catch {
+      // Logout should still succeed if the room was already cleaned up.
+    } finally {
+      await authClient.signOut();
+      setIsLoggingOut(false);
+    }
+  };
+
   return (
     <header
-      className={`flex h-16 items-center justify-between px-4 text-white shadow-lg ${
-        isRoomView || isResultsView || isOnlineRoomsView
-          ? "border-b border-white/5 bg-felt-deep"
-          : ""
-      }`}
+      className={`flex h-16 items-center justify-between px-4 text-white shadow-lg border-b border-brass/18 bg-linear-to-b from-wire to-wire-deep`}
     >
       <div className="flex min-w-0 items-center gap-3">
         {isRoomView || isResultsView || isOnlineRoomsView ? (
@@ -118,7 +132,7 @@ export default function Header() {
                 ? "Return to home menu"
                 : "Leave room and return home"
             }
-            className="grid h-8 w-8 flex-none place-items-center rounded-full bg-white/6 text-white transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-40"
+            className="grid h-8 w-8 flex-none place-items-center rounded-full bg-black/30 text-[#e8dcc0] transition-colors border border-brass/25 hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -129,27 +143,27 @@ export default function Header() {
             id="tutorial-phase-step"
             className={
               isRoomView || isResultsView || isOnlineRoomsView
-                ? "truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]"
+                ? "truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32] font-mono"
                 : "font-serif text-xl font-semibold tracking-tight"
             }
           >
             {isRoomView || isResultsView ? (
               eyebrow
             ) : isOnlineRoomsView ? (
-              "HOME . ONLINE ROOMS"
+              <>
+                <span className="text-brass/55">HOME</span>
+                <span className="text-brass/55">·</span>
+                <span className="text-brass/80">ROOMS</span>
+              </>
             ) : (
               <Link to="/">Word Poker</Link>
             )}
           </h1>
-          <p
-            className={
-              isRoomView || isResultsView || isOnlineRoomsView
-                ? "truncate text-[18px] font-medium leading-none text-white sm:text-[20px]"
-                : "text-sm text-slate-100"
-            }
-          >
-            {isRoomView || isResultsView ? `Room ${roomCode}` : null}
-          </p>
+          {isRoomView || isResultsView ? (
+            <p className="truncate text-[18px] font-medium leading-none text-white sm:text-[20px]">
+              Room {roomCode}
+            </p>
+          ) : null}
         </div>
       </div>
       <div className="flex items-center gap-3">
@@ -166,13 +180,17 @@ export default function Header() {
                       src={session.user.image ?? undefined}
                       alt={`${displayName} avatar`}
                     />
-                    <AvatarFallback className="bg-neutral-200 text-xs font-semibold text-neutral-700">
+                    <AvatarFallback className="bg-brass text-xs font-bold text-black">
                       {getInitials(session.user.name)}
                     </AvatarFallback>
                   </Avatar>
-                  {pendingNotifications && (pendingNotifications.friendRequests + pendingNotifications.gameInvites) > 0 ? (
+                  {pendingNotifications &&
+                  pendingNotifications.friendRequests +
+                    pendingNotifications.gameInvites >
+                    0 ? (
                     <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-felt-deep">
-                      {pendingNotifications.friendRequests + pendingNotifications.gameInvites}
+                      {pendingNotifications.friendRequests +
+                        pendingNotifications.gameInvites}
                     </span>
                   ) : null}
                 </div>
@@ -196,20 +214,26 @@ export default function Header() {
                 <Link to="/friends" className="flex items-center gap-2">
                   <Users className="h-4 w-4" />
                   Friends
-                  {pendingNotifications && (pendingNotifications.friendRequests + pendingNotifications.gameInvites) > 0 ? (
+                  {pendingNotifications &&
+                  pendingNotifications.friendRequests +
+                    pendingNotifications.gameInvites >
+                    0 ? (
                     <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                      {pendingNotifications.friendRequests + pendingNotifications.gameInvites}
+                      {pendingNotifications.friendRequests +
+                        pendingNotifications.gameInvites}
                     </span>
                   ) : null}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onSelect={() => {
-                  void authClient.signOut();
+                disabled={isLoggingOut}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  void handleLogout();
                 }}
               >
-                Logout
+                {isLoggingOut ? "Logging out..." : "Logout"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useNextStep } from "nextstepjs";
 import {
   RoomGameProvider,
-  RoomHandsBoardV2,
+  RoomGameTable,
   RoomHeader,
   RoomPageProvider,
   useRoomDetailsController,
@@ -84,10 +84,6 @@ function RoomDetailsPage() {
     getPlayerPersonality,
     roomGameContextValue,
     roomPageContextValue,
-    isDevRejoining,
-    isDevFillingBots,
-    onDevRejoinRoom,
-    onDevFillRoomWithBots,
   } = useRoomDetailsController(code, {
     allowGuestTutorial: forcedTutorialReplay,
     paused: search.pause !== undefined,
@@ -98,7 +94,7 @@ function RoomDetailsPage() {
   );
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 1441px)");
+    const mediaQuery = window.matchMedia("(min-width: 1280px)");
     const syncDesktopChatVisibility = () => {
       setIsDesktopChatVisible(mediaQuery.matches);
     };
@@ -285,52 +281,55 @@ function RoomDetailsPage() {
               gameStage={game?.stage}
             />
             <div
-              className="relative flex flex-1 [@media(min-width:1441px)]:pr-[400px]"
+              className="relative flex min-h-0 flex-1"
               data-testid="room-content"
             >
-              <RoomHandsBoardV2
-              gameId={game._id}
-              activePlayerId={activePlayerId}
-              helperTipsEnabled={helperTipsEnabled}
-              roomCode={code}
-              currentTurnPlayerId={currentTurnPlayerId}
-              gameStage={game.stage}
-              communityTiles={game.communityTiles}
-              hands={displayHands}
-              bottomPlayerId={bottomPlayerId}
-              pot={game.pot}
-              dealerButtonIndex={game.dealerButtonIndex}
-              smallBlindIndex={game.smallBlindIndex}
-              bigBlindIndex={game.bigBlindIndex}
-              getPlayerName={getPlayerName}
-              getPlayerAvatar={getPlayerAvatar}
-              getPlayerPersonality={getPlayerPersonality}
-              chatDraft={chat.draftMessage}
-              tutorialReplayControl={tutorialAdapter.replayButton}
-            />
+              <RoomGameTable
+                gameId={game._id}
+                activePlayerId={activePlayerId}
+                helperTipsEnabled={helperTipsEnabled}
+                roomCode={code}
+                currentTurnPlayerId={currentTurnPlayerId}
+                gameStage={game.stage}
+                communityTiles={game.communityTiles}
+                hands={displayHands}
+                bottomPlayerId={bottomPlayerId}
+                pot={game.pot}
+                dealerButtonIndex={game.dealerButtonIndex}
+                smallBlindIndex={game.smallBlindIndex}
+                bigBlindIndex={game.bigBlindIndex}
+                getPlayerName={getPlayerName}
+                getPlayerAvatar={getPlayerAvatar}
+                getPlayerPersonality={getPlayerPersonality}
+                chatDraft={chat.draftMessage}
+                chatMessages={chat.messages}
+                onChatDraftChange={chat.setDraftMessage}
+                onSendChatMessage={chat.sendMessage}
+                tutorialReplayControl={tutorialAdapter.replayButton}
+              />
             </div>
           </div>
-          </RoomGameProvider>
+        </RoomGameProvider>
 
-          {!tutorialAdapter.isTutorialRoom && (
-            <>
-              <div className="fixed bottom-6 right-6 z-30">
-                <ChatToggleButton
-                  onClick={chat.toggleChat}
-                  unreadCount={chat.unreadCount}
-                />
-              </div>
-
-              <ChatSidebar
-                isOpen={chat.isOpen}
-                onClose={chat.closeChat}
-                messages={chat.messages}
-                draftMessage={chat.draftMessage}
-                onDraftMessageChange={chat.setDraftMessage}
-                onSendMessage={chat.sendMessage}
+        {!tutorialAdapter.isTutorialRoom && !isDesktopChatVisible && (
+          <>
+            <div className="fixed bottom-6 right-6 z-30">
+              <ChatToggleButton
+                onClick={chat.toggleChat}
+                unreadCount={chat.unreadCount}
               />
-            </>
-          )}
+            </div>
+
+            <ChatSidebar
+              isOpen={chat.isOpen}
+              onClose={chat.closeChat}
+              messages={chat.messages}
+              draftMessage={chat.draftMessage}
+              onDraftMessageChange={chat.setDraftMessage}
+              onSendMessage={chat.sendMessage}
+            />
+          </>
+        )}
       </TutorialAdapterProvider>
     </RoomPageProvider>
   );

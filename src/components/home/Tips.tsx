@@ -22,7 +22,7 @@ export const MAIN_MENU_TIPS: TipItem[] = [
   },
   {
     label: "Showdown",
-    detail: "Long words win more often, but high-value tiles can steal pots.",
+    detail: "Showdowns favor length, but a 5\u00D7 tile in the rack can steal any pot.",
   },
 ];
 

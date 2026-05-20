@@ -9,24 +9,24 @@ type RoomHeaderProps = {
   gameStage?: string;
 };
 
-function getEyebrow(gameStatus?: string, gameStage?: string) {
-  if (!gameStatus) return "JOINED ROOM";
-  if (gameStatus === "waiting") return "PHASE 0/ROOM SETUP";
+function getPhaseInfo(gameStatus?: string, gameStage?: string) {
+  if (!gameStatus) return { phaseNo: "-", name: "Joined Room" };
+  if (gameStatus === "waiting") return { phaseNo: "0", name: "Room Setup" };
   switch (gameStage) {
     case "preflop":
-      return "PRE-FLOP";
+      return { phaseNo: "1", name: "Pre-Flop" };
     case "flop":
-      return "FLOP";
+      return { phaseNo: "2", name: "Flop" };
     case "turn":
-      return "TURN";
+      return { phaseNo: "3", name: "Turn" };
     case "river":
-      return "RIVER";
+      return { phaseNo: "4", name: "River" };
     case "final":
-      return "FINAL";
+      return { phaseNo: "5", name: "Final" };
     case "showdown":
-      return "SHOWDOWN";
+      return { phaseNo: "6", name: "Showdown" };
     default:
-      return "JOINED ROOM";
+      return { phaseNo: "-", name: "Joined Room" };
   }
 }
 
@@ -57,7 +57,8 @@ export function RoomHeader({
 
   const timerMs = showdownTimeRemaining ?? turnTimeRemaining;
   const isActionTimer = turnTimeRemaining !== null;
-  const eyebrow = getEyebrow(gameStatus, gameStage);
+  const phase = getPhaseInfo(gameStatus, gameStage);
+  const phaseKey = `${phase.phaseNo}-${phase.name}`;
 
   const handleBack = async () => {
     if (isLeaving) return;
@@ -83,21 +84,40 @@ export function RoomHeader({
         </button>
       </div>
 
-      {timerMs !== null ? (
+      <div
+        className="flex items-center justify-center gap-3 sm:gap-3.5"
+        id="phase-title"
+      >
         <div
-          className={`text-center text-4xl tabular-nums ${getTimerColor(timerMs, isActionTimer)} [@media(min-width:1441px)]:mr-[400px]`}
+          key={phaseKey}
+          className="animate-[phase-slide_0.5s_cubic-bezier(0.34,1.56,0.64,1)_both] text-center"
         >
-          {formatCountdown(timerMs)}
+          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-brass">
+            PHASE {phase.phaseNo}
+          </div>
+          <div className="mt-0.5 font-serif text-base italic leading-none text-[#f4e4c1]">
+            {phase.name}
+          </div>
         </div>
-      ) : (
-        <div />
-      )}
+        <div className="h-7 w-px bg-brass/25" />
+        <div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#e8dcc0]/50">
+            TURN TIMER
+          </div>
+          <div
+            className={`animate-[timer-pulse_1s_ease-in-out_infinite] font-mono text-[22px] font-semibold leading-none tracking-[0.06em] tabular-nums ${
+              timerMs !== null
+                ? getTimerColor(timerMs, isActionTimer)
+                : "text-[#e8dcc0]/30"
+            }`}
+          >
+            {timerMs !== null ? formatCountdown(timerMs) : "--:--"}
+          </div>
+        </div>
+      </div>
 
-      <div className="min-w-0 text-right" id="phase-title">
-        <h1 className="truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]">
-          {eyebrow}
-        </h1>
-        <p className="truncate text-[8px] font-medium leading-tight text-white">
+      <div className="min-w-0 text-right">
+        <p className="truncate text-[8px] font-medium uppercase leading-tight tracking-[0.18em] text-white/70">
           Room {roomCode}
         </p>
       </div>
