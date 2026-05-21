@@ -54,6 +54,7 @@ interface PickASeatFeltProps {
   playerName?: string;
   compact?: boolean;
   onSelectOpenSeat: (openSeatIndex: number) => void;
+  onConfirmSeat?: () => void;
 }
 
 function getInitials(name: string | undefined): string | null {
@@ -141,6 +142,7 @@ export function PickASeatFelt({
   playerName,
   compact = false,
   onSelectOpenSeat,
+  onConfirmSeat,
 }: PickASeatFeltProps) {
   const initials = getInitials(playerName);
   const selectedColor =
@@ -231,19 +233,32 @@ export function PickASeatFelt({
 
         const openSeatIndex = (OPEN_SEAT_INDICES as readonly number[]).indexOf(i);
         const isPicked = openSeatIndex === selectedOpenSeat;
+        const handleSeatAction = () => {
+          if (isPicked && onConfirmSeat) {
+            onConfirmSeat();
+            return;
+          }
+
+          onSelectOpenSeat(openSeatIndex);
+        };
 
         return (
           <div
             key={i}
             role="button"
             tabIndex={0}
+            aria-label={
+              isPicked
+                ? "Start tutorial with this seat"
+                : `Pick open seat ${openSeatIndex + 1}`
+            }
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                onSelectOpenSeat(openSeatIndex);
+                handleSeatAction();
               }
             }}
-            onClick={() => onSelectOpenSeat(openSeatIndex)}
+            onClick={handleSeatAction}
             className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer text-center${compact && !isPicked ? " hidden" : ""}`}
             style={{ left: `${seat.x * 100}%`, top: `${seat.y * 100}%` }}
           >

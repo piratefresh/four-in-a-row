@@ -52,6 +52,8 @@ function RegisterPage() {
   }
 
   const handleGuestStart = async () => {
+    if (loading) return;
+
     setLoading(true);
     setError(null);
     try {
@@ -162,6 +164,7 @@ function RegisterPage() {
               playerName={name}
               compact={compact}
               onSelectOpenSeat={setSelectedOpenSeat}
+              onConfirmSeat={handleGuestStart}
             />
           </div>
 

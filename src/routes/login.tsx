@@ -81,6 +81,14 @@ function LoginPage() {
         }}
       />
 
+      <Link
+        to="/"
+        aria-label="Return to main menu"
+        className="absolute left-4 top-4 z-[2] font-serif text-[22px] font-bold tracking-tighter text-[#f4e4c1] transition-colors hover:text-[#d4af37] sm:left-6 sm:top-5"
+      >
+        Word Poker
+      </Link>
+
       <div className="relative z-[1] flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-6 py-0 sm:py-6">
         <div className="flex w-full max-w-[1080px] flex-col gap-2">
           <div className="hidden md:block">

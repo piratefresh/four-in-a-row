@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export type Tile =
@@ -68,7 +67,6 @@ export type RoomGameTableProps = {
   onChatDraftChange?: (message: string) => void;
   onSendChatMessage?: (message: string) => void | Promise<void>;
   onHandLogEntriesChange?: (entries: RoomHandLogEntry[]) => void;
-  tutorialReplayControl?: ReactNode;
 };
 
 export type BuilderTile = {

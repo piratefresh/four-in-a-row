@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useRoomPageContext } from "./context/RoomPageContext";
 import { useRoomGameContext } from "./context/RoomGameContext";
@@ -8,6 +8,7 @@ type RoomHeaderProps = {
   roomCode: string;
   gameStatus?: string;
   gameStage?: string;
+  tutorialReplayControl?: ReactNode;
 };
 
 function getPhaseInfo(gameStatus?: string, gameStage?: string) {
@@ -51,6 +52,7 @@ export function RoomHeader({
   roomCode,
   gameStatus,
   gameStage,
+  tutorialReplayControl,
 }: RoomHeaderProps) {
   const { actions } = useRoomPageContext();
   const { turnTimeRemaining, showdownTimeRemaining } = useRoomGameContext();
@@ -121,11 +123,13 @@ export function RoomHeader({
           </div>
         </div>
 
-        <div className="flex min-w-0 items-center justify-end xl:hidden">
+        <div className="flex min-w-0 items-center justify-end gap-2 xl:hidden">
+          {tutorialReplayControl}
           <RoomHelpMenu />
         </div>
       </div>
-      <div className="hidden min-w-0 items-center justify-end border-l border-white/5 px-5 xl:flex">
+      <div className="hidden min-w-0 items-center justify-end gap-3 border-l border-white/5 px-5 xl:flex">
+        {tutorialReplayControl}
         <p className="truncate font-mono font-bold uppercase leading-none tracking-[0.08em] text-brass">
           Room {roomCode}
         </p>

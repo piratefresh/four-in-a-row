@@ -51,6 +51,7 @@ type ShowdownResultsScreenProps = {
   onReturnToMainMenu: () => void;
   isOfflineGame?: boolean;
   isGuestTutorialGame?: boolean;
+  onRegisterFromTutorial?: () => void;
   onPlayAnotherOffline?: () => void;
   isStartingNewGame?: boolean;
   onPlayAgainOnline?: () => void;
@@ -77,6 +78,7 @@ export function ShowdownResultsScreen({
   onReturnToMainMenu,
   isOfflineGame,
   isGuestTutorialGame,
+  onRegisterFromTutorial,
   onPlayAnotherOffline,
   isStartingNewGame,
   onPlayAgainOnline,
@@ -177,16 +179,15 @@ export function ShowdownResultsScreen({
         ? `${winnerName} wins by fold`
         : "Hand complete";
 
+  const foldCount = submissions.filter((s) => s.status === "forfeited").length;
+  const wordCount = submissions.filter((s) => s.status === "submitted").length;
+  const playerCount = submissions.length;
   const narrative = generateNarrative(
     submissions,
     showdownResults,
     getPlayerName,
     didWinByFold,
   );
-
-  const foldCount = submissions.filter((s) => s.status === "forfeited").length;
-  const wordCount = submissions.filter((s) => s.status === "submitted").length;
-  const playerCount = submissions.length;
 
   return (
     <div
@@ -216,7 +217,7 @@ export function ShowdownResultsScreen({
             </h1>
 
             <p className="text-center mt-3 max-w-[420px] text-sm leading-relaxed text-[rgba(232,220,192,0.6)]  sm:text-left lg:mt-3.5">
-              Winning word: {winnerWord}
+              {narrative}
             </p>
 
             {didWinByFold && (
@@ -284,13 +285,24 @@ export function ShowdownResultsScreen({
             {/* CTA Buttons */}
             <div className="mt-4 flex gap-2.5">
               {isGuestTutorialGame ? (
-                <button
-                  type="button"
-                  onClick={onReturnToMainMenu}
-                  className="flex flex-1 items-center justify-center gap-2.5 rounded-lg border border-[#806316] bg-[linear-gradient(180deg,#f4d35e_0%,#d4af37_60%,#a8801f_100%)] px-4 py-3.5 font-body text-[13px] font-bold uppercase tracking-[1px] text-[#1a1208] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.4)]"
-                >
-                  Main Menu
-                </button>
+                <div className="flex flex-1 flex-col gap-2.5">
+                  {onRegisterFromTutorial ? (
+                    <button
+                      type="button"
+                      onClick={onRegisterFromTutorial}
+                      className="flex items-center justify-center gap-2.5 rounded-lg border border-[#806316] bg-[linear-gradient(180deg,#f4d35e_0%,#d4af37_60%,#a8801f_100%)] px-4 py-3.5 font-body text-[13px] font-bold uppercase tracking-[1px] text-[#1a1208] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.4)]"
+                    >
+                      Register here
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={onReturnToMainMenu}
+                    className="flex items-center justify-center gap-2.5 rounded-lg border border-[rgba(212,175,55,0.3)] bg-transparent px-4 py-3.5 font-body text-[13px] font-semibold text-cream"
+                  >
+                    Back to main menu
+                  </button>
+                </div>
               ) : isOfflineGame ? (
                 <>
                   <button
@@ -516,6 +528,7 @@ function ScoringScreen({
   );
 }
 
+
 function generateNarrative(
   submissions: Submission[],
   results: ShowdownResults,
@@ -536,28 +549,9 @@ function generateNarrative(
   }
 
   const word = winnerSub.word.toUpperCase();
-  const score = winnerSub.score;
+  const winnerName = getPlayerName(results.winnerId);
 
-  const multiplierTiles = winnerSub.tiles?.filter((t) => t.multiplier) ?? [];
-  const multiplierNote =
-    multiplierTiles.length > 0
-      ? multiplierTiles
-          .map((t) => `a doubled ${t.letter.toUpperCase()}`)
-          .join(" on ")
-      : null;
-
-  const otherSubmissions = submissions.filter(
-    (s) => s.playerId !== results.winnerId && s.status === "submitted",
-  );
-  const runnerUp = otherSubmissions[0];
-  const comparison =
-    runnerUp && runnerUp.word
-      ? `, ${score - runnerUp.score} above ${getPlayerName(runnerUp.playerId)}'s ${runnerUp.word.toUpperCase()}`
-      : "";
-
-  const multiplierPrefix = multiplierNote ? ` — ${multiplierNote}` : "";
-
-  return `${word} clears the field at ${score}${multiplierPrefix}${comparison}.`;
+  return `${winnerName} won the showdown with ${word}. Check the scoreboard for the full word and scoring breakdown.`;
 }
 
 function getInitials(name: string): string {

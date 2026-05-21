@@ -159,9 +159,9 @@ export function useTutorialAdapter(
         })();
       }}
       disabled={isRestartingTutorial}
-      className="rounded-full border border-[#d7b45e]/30 bg-[#120f07]/90 px-4 py-2 text-sm font-medium text-[#f4d99d] shadow-[0_10px_30px_rgba(0,0,0,0.35)] backdrop-blur transition-colors hover:border-[#d7b45e]/55 hover:text-[#fff0cb]"
+      className="rounded-full border border-[#d7b45e]/25 bg-black/25 px-2.5 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-[#f4d99d] transition-colors hover:border-[#d7b45e]/55 hover:bg-black/40 hover:text-[#fff0cb] disabled:cursor-not-allowed disabled:opacity-60 sm:px-3"
     >
-      {isRestartingTutorial ? "Resetting tutorial..." : "Replay tutorial"}
+      {isRestartingTutorial ? "Resetting..." : "Replay tutorial"}
     </button>
   );
 

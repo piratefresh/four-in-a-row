@@ -31,6 +31,7 @@ export function ShowdownBreadcrumb({
         <div className="hidden font-mono text-[10px] tracking-[2px] text-[rgba(212,175,55,0.65)] lg:block">
           RESULTS
           {" · "}
+          {handNumber ? <>HAND {handNumber} · </> : null}
           <span className="text-gold">{roomName.toUpperCase()}</span>
         </div>
 

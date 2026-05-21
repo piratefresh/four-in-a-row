@@ -298,6 +298,7 @@ function RoomDetailsPage() {
               roomCode={code}
               gameStatus={game?.status}
               gameStage={game?.stage}
+              tutorialReplayControl={tutorialAdapter.replayButton}
             />
             <div
               className="relative flex min-h-0 flex-1"
@@ -325,7 +326,6 @@ function RoomDetailsPage() {
                 onChatDraftChange={chat.setDraftMessage}
                 onSendChatMessage={chat.sendMessage}
                 onHandLogEntriesChange={updateHandLogEntries}
-                tutorialReplayControl={tutorialAdapter.replayButton}
               />
             </div>
           </div>

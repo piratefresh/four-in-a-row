@@ -216,7 +216,6 @@ function getMoreTilesLabel(
 }
 
 type RoomMobileGameTableProps = {
-  tutorialReplayControl?: ReactNode;
   gameStage: RoomGameTableProps["gameStage"];
   isMyTurn: boolean;
   turnClockTimeRemaining: number | null;
@@ -236,7 +235,6 @@ type RoomMobileGameTableProps = {
 };
 
 function RoomMobileGameTable({
-  tutorialReplayControl,
   gameStage,
   isMyTurn,
   turnClockTimeRemaining,
@@ -261,10 +259,6 @@ function RoomMobileGameTable({
 
   return (
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(ellipse_at_50%_38%,rgba(20,82,63,0.42),transparent_48%),linear-gradient(180deg,#0a1d17_0%,#051410_100%)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-      {tutorialReplayControl ? (
-        <div className="px-4 pb-2 pt-3">{tutorialReplayControl}</div>
-      ) : null}
-
       <div className="border-b border-[#d4af37]/20 px-4 pb-3 pt-4 text-center hidden sm:block">
         <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.38em] text-[#d4af37]">
           Phase{" "}
@@ -353,7 +347,6 @@ export function RoomGameTable({
   onChatDraftChange,
   onSendChatMessage,
   onHandLogEntriesChange,
-  tutorialReplayControl,
 }: RoomGameTableProps) {
   const tutorial = useTutorialAdapterContext();
   const getBlindPosition = (
@@ -863,11 +856,6 @@ export function RoomGameTable({
                   <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-[#d4af37]">
                     Community letters / {communityProgressLabel}
                   </div>
-                  {tutorialReplayControl ? (
-                    <div className="px-4 pb-2 pt-3">
-                      {tutorialReplayControl}
-                    </div>
-                  ) : null}
                 </div>
                 <RoomCommunityStrip
                   tiles={communityTiles}
@@ -947,7 +935,6 @@ export function RoomGameTable({
           </main>
         ) : (
           <RoomMobileGameTable
-            tutorialReplayControl={tutorialReplayControl}
             gameStage={gameStage}
             isMyTurn={isMyTurn}
             turnClockTimeRemaining={turnClockTimeRemaining}

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useRoomPresence } from "@/components/rooms/hooks/useRoomPresence";
 import { ShowdownResultsScreen } from "@/components/rooms/results/ShowdownResultsScreen";
-import { TutorialSignupWall } from "@/components/rooms/results/TutorialSignupWall";
 import { authClient } from "@/lib/auth-client";
 import { getTutorialGuestId } from "@/lib/tutorial-guest";
 import { api } from "../../convex/_generated/api";
@@ -47,7 +46,6 @@ function ResultsPage() {
   const toggleReady = useMutation(api.rooms.toggleReady);
   const [isStartingNewGame, setIsStartingNewGame] = useState(false);
   const [isStartingPlayAgain, setIsStartingPlayAgain] = useState(false);
-  const [showTutorialSignupWall, setShowTutorialSignupWall] = useState(false);
   const [tutorialGuestAuthUserId] = useState(() => getTutorialGuestId());
   const [resultMembersById, setResultMembersById] = useState<
     Map<string, { name: string; image: string | null }>
@@ -198,11 +196,6 @@ function ResultsPage() {
   };
 
   const handleReturnToMainMenu = async () => {
-    if (isGuestTutorialGame && !showTutorialSignupWall) {
-      setShowTutorialSignupWall(true);
-      return;
-    }
-
     if (!session?.user) {
       void navigate({ to: "/" });
       return;
@@ -274,30 +267,20 @@ function ResultsPage() {
   const getPlayerName = (id: string) =>
     resultMembersById.get(id)?.name ?? memberById.get(id)?.name ?? "Player";
 
-  if (showTutorialSignupWall) {
-    return (
-      <TutorialSignupWall
-        onCreateAccount={() => {
-          void navigate({ to: "/register" });
-        }}
-        onContinueGuest={() => {
-          void handleReturnToMainMenu();
-        }}
-      />
-    );
-  }
-
   return (
     <ShowdownResultsScreen
       pot={resultsGame.pot}
       playerId={currentPlayerId}
       showdownResults={showdownResults}
       getPlayerName={getPlayerName}
-      roomName={roomData?.room.name ?? code}
+      roomName={roomData?.room.title ?? code}
       onReturnToOnlineRooms={handleReturnToOnlineRooms}
       onReturnToMainMenu={handleReturnToMainMenu}
       isOfflineGame={isOfflineGame}
       isGuestTutorialGame={isGuestTutorialGame}
+      onRegisterFromTutorial={() => {
+        void navigate({ to: "/register" });
+      }}
       onPlayAnotherOffline={handlePlayAnotherOffline}
       isStartingNewGame={isStartingNewGame}
       onPlayAgainOnline={handlePlayAgainOnline}

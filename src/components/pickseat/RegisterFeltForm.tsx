@@ -167,8 +167,9 @@ export function RegisterFeltForm({
 
         <div className="mt-[22px]">
           <button
-            type="submit"
+            type="button"
             disabled={loading}
+            onClick={onGuestStart}
             className="flex w-full cursor-pointer flex-col items-center gap-[1px] rounded-[6px] border-none px-[22px] pt-[11px] pb-[13px] leading-none disabled:opacity-60"
             style={{ background: "#d4af37", color: "#1a1208" }}
           >
@@ -176,7 +177,7 @@ export function RegisterFeltForm({
               ↳ SIT DOWN
             </span>
             <span className="font-sans text-[14px] font-bold tracking-[0.5px]">
-              Take seat {seatNumber} at The Rookie Room
+              Take seat {seatNumber} at The Rookie Room (No registration needed)
             </span>
           </button>
         </div>
