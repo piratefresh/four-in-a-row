@@ -1,4 +1,5 @@
 import { Send, MessageCircle } from "lucide-react";
+import type { RoomHandLogEntry } from "../board/RoomGameTable.types";
 import {
   Sheet,
   SheetContent,
@@ -63,10 +64,27 @@ function getBotMessageStyle(senderId: string) {
   return BOT_PERSONALITY_STYLES[personality] ?? null;
 }
 
+function getLogDotClass(tone: RoomHandLogEntry["tone"]) {
+  if (tone === "raise") return "bg-[#e6b450]";
+  if (tone === "fold") return "bg-[#ff5d4e]";
+  if (tone === "pot" || tone === "showdown") return "bg-[#d4af37]";
+  if (tone === "turn") return "bg-[#7ec4cf]";
+  return "bg-[#9ec27a]";
+}
+
+function formatTableLogChatTime(timestamp: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
 type ChatSidebarProps = {
   isOpen: boolean;
   onClose: () => void;
   messages: ChatMessage[];
+  handLogEntries?: RoomHandLogEntry[];
+  roomCode?: string;
   draftMessage: string;
   onDraftMessageChange: (value: string) => void;
   onSendMessage: (message: string) => void;
@@ -205,10 +223,126 @@ function ChatPanelContent({
   );
 }
 
+function TableLogPanelContent({
+  messages,
+  handLogEntries = [],
+  roomCode,
+  draftMessage,
+  onDraftMessageChange,
+  onSendMessage,
+}: Pick<
+  ChatSidebarProps,
+  | "messages"
+  | "handLogEntries"
+  | "roomCode"
+  | "draftMessage"
+  | "onDraftMessageChange"
+  | "onSendMessage"
+>) {
+  const recentChatMessages = messages.slice(-3);
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedDraft = draftMessage.trim();
+    if (!trimmedDraft) return;
+    onSendMessage(trimmedDraft);
+  };
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col border-l border-[#d4af37]/15 bg-[#071610]">
+      <div className="border-b border-[#d4af37]/15 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-[#ff5d4e] shadow-[0_0_14px_rgba(255,93,78,0.6)]" />
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#e8dcc0]/60">
+            Table log / Live
+          </div>
+        </div>
+        <div className="mt-1 font-serif text-[19px] font-semibold italic text-[#f4e4c1]">
+          This hand
+        </div>
+        <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4af37]/75">
+          Room {roomCode ?? "table"}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
+        <div className="py-1">
+          {handLogEntries.map((entry, index) => (
+            <div
+              key={entry.id}
+              className="flex items-baseline gap-3 border-b border-[#d4af37]/[0.06] py-2.5"
+            >
+              <span
+                className={`mt-1 h-1.5 w-1.5 flex-none rounded-full ${getLogDotClass(entry.tone)}`}
+              />
+              <span className="w-9 flex-none font-mono text-[10px] text-[#e8dcc0]/35">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-medium leading-snug text-[#f4e4c1]">
+                  {entry.message}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-[#d4af37]/15 px-5 py-4">
+        <div className="mb-3 font-mono text-[9px] uppercase tracking-[0.18em] text-[#e8dcc0]/45">
+          Chat
+        </div>
+        {recentChatMessages.length === 0 ? (
+          <div className="mb-3 text-[12px] text-[#e8dcc0]/45">
+            No messages yet.
+          </div>
+        ) : (
+          <div className="mb-3 space-y-3">
+            {recentChatMessages.map((message) => (
+              <div key={message.id} className="text-[12px]">
+                <div className="flex items-baseline gap-2">
+                  <span className="truncate font-semibold text-[#d4af37]">
+                    {message.senderName}
+                  </span>
+                  <span className="font-mono text-[9px] text-[#e8dcc0]/40">
+                    {formatTableLogChatTime(message.timestamp)}
+                  </span>
+                </div>
+                <div className="mt-0.5 break-words text-[#e8dcc0]">
+                  {message.message}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <form
+          onSubmit={handleSubmit}
+          className="flex items-center gap-2 rounded-md border border-[#d4af37]/15 bg-black/30 px-3 py-2"
+        >
+          <input
+            value={draftMessage}
+            onChange={(event) => onDraftMessageChange(event.target.value)}
+            placeholder="Type a message..."
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-[#e8dcc0] placeholder:text-[#e8dcc0]/35 focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="flex h-7 w-7 flex-none items-center justify-center rounded-md border border-[#806316] bg-[linear-gradient(180deg,#f4d35e_0%,#d4af37_60%,#a8801f_100%)] font-mono text-[11px] font-bold text-[#1a1208]"
+            aria-label="Send chat message"
+          >
+            &gt;
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function ChatSidebar({
   isOpen,
   onClose,
   messages,
+  handLogEntries,
+  roomCode,
   draftMessage,
   onDraftMessageChange,
   onSendMessage,
@@ -235,18 +369,19 @@ export function ChatSidebar({
         >
           <SheetContent
             side="right"
-            className="w-80 max-w-[90vw] border-l border-white/10 p-0 sm:w-96"
+            className="w-80 max-w-[90vw] border-l border-[#d4af37]/15 bg-[#071610] p-0 sm:w-96"
           >
             <SheetHeader className="sr-only">
               <SheetTitle>Table Chat</SheetTitle>
               <SheetDescription>Chat with players</SheetDescription>
             </SheetHeader>
-            <ChatPanelContent
+            <TableLogPanelContent
               messages={messages}
+              handLogEntries={handLogEntries}
+              roomCode={roomCode}
               draftMessage={draftMessage}
               onDraftMessageChange={onDraftMessageChange}
               onSendMessage={onSendMessage}
-              hidePlayerBubbles
             />
           </SheetContent>
         </Sheet>
@@ -263,15 +398,26 @@ export function ChatToggleButton({
   onClick: () => void;
   unreadCount?: number;
 }) {
+  const hasUnreadMessages = unreadCount > 0;
+  const unreadLabel =
+    unreadCount === 1 ? "1 new message" : `${unreadCount} new messages`;
+
   return (
     <button
       onClick={onClick}
-      className="relative rounded-full bg-linear-to-br from-amber-600 to-amber-700 p-3 text-white shadow-lg transition-all hover:scale-105 hover:from-amber-500 hover:to-amber-600 [@media(min-width:1441px)]:hidden"
+      className={`relative flex h-[46px] w-[46px] items-center justify-center rounded-full border border-[#806316] bg-linear-to-br from-[#f4d35e] via-[#d4af37] to-[#a8801f] text-[#1a1208] shadow-[0_10px_26px_rgba(0,0,0,0.48),inset_0_1px_0_rgba(255,255,255,0.42)] transition-all hover:scale-105 [@media(min-width:1441px)]:hidden ${
+        hasUnreadMessages ? "ring-2 ring-[#ff5d4e]/55 ring-offset-2 ring-offset-[#071610]" : ""
+      }`}
+      aria-label={
+        hasUnreadMessages ? `Open table chat, ${unreadLabel}` : "Open table chat"
+      }
+      title={hasUnreadMessages ? unreadLabel : "Open table chat"}
     >
-      <MessageCircle className="h-5 w-5" />
-      {unreadCount > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-          {unreadCount > 9 ? "9+" : unreadCount}
+      <MessageCircle className="h-[18px] w-[18px]" />
+      {hasUnreadMessages && (
+        <span className="absolute -right-2 -top-2 flex min-h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#071610] bg-[#ff5d4e] px-1.5 font-mono text-[11px] font-black leading-none text-[#1a1208] shadow-[0_0_0_2px_rgba(255,93,78,0.16),0_8px_18px_rgba(0,0,0,0.38)]">
+          <span className="absolute inset-0 rounded-full bg-[#ff5d4e] opacity-45 motion-safe:animate-ping" />
+          <span className="relative">{unreadCount > 9 ? "9+" : unreadCount}</span>
         </span>
       )}
     </button>

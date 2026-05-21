@@ -12,7 +12,20 @@ function hand(playerId: string, hasFolded: boolean): PlayerHand {
 }
 
 describe("getVisibleOpponents", () => {
-  it("removes folded opponents from the table", () => {
+  it("keeps folded opponents visible when requested", () => {
+    const visible = getVisibleOpponents(
+      [hand("player-a", false), hand("player-b", true), hand("player-c", false)],
+      { includeFolded: true },
+    );
+
+    expect(visible.map((opponent) => opponent.playerId)).toEqual([
+      "player-a",
+      "player-b",
+      "player-c",
+    ]);
+  });
+
+  it("removes folded opponents by default", () => {
     const visible = getVisibleOpponents([
       hand("player-a", false),
       hand("player-b", true),

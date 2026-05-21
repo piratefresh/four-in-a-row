@@ -139,11 +139,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   const matchRoute = useMatchRoute();
   const isRoomOrResultsView =
     matchRoute({ to: "/rooms/$code" }) || matchRoute({ to: "/results/$code" });
-  const isLoginOrRegisterView =
-    matchRoute({ to: "/login" }) || matchRoute({ to: "/register" });
-  const isLeaderboardView = matchRoute({ to: "/leaderboard" });
-  const showHeader =
-    !isRoomOrResultsView && !isLoginOrRegisterView && !isLeaderboardView;
+  const isLoginView = matchRoute({ to: "/login" });
+  const showHeader = !isRoomOrResultsView && !isLoginView;
 
   return (
     <html lang="en">
@@ -154,7 +151,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <AppTourProvider>
           <div className="flex min-h-dvh flex-col">
             {showHeader && <Header />}
-            <VerifyEmailBanner />
+            <VerifyEmailBanner hasHeader={Boolean(showHeader)} />
             <div className="flex flex-1 flex-col min-h-0">{children}</div>
           </div>
         </AppTourProvider>

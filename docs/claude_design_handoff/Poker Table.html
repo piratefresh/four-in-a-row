@@ -1,0 +1,247 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Poker Table · Component</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#111; font-family: Inter, system-ui, sans-serif; color:#fff; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="game-engine.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+
+<script type="text/babel">
+/*
+  PokerTable — a self-contained, pure component version of the table scene.
+
+  Props:
+    players:    Array<{ id, seed, name, chips, hole:Tile[], bet, folded, lastAction }>
+    community:  Tile[]  (up to 5)
+    pot:        number
+    phase:      1|3|4|5  (preflop | flop | turn | river) — controls how many community tiles show
+    dealer:     number  seat index (0-3)
+    currentPlayer: number  seat index
+    handOver:   boolean
+    tileTheme:  'scrabble' | 'chip' | 'neon'
+    width, height: outer box size
+*/
+
+const PHASE_LABEL = { 1:'PRE-FLOP', 3:'THE FLOP', 4:'THE TURN', 5:'THE RIVER' };
+
+function PokerTable({
+  players, community = [], pot = 0, phase = 3,
+  dealer = 0, currentPlayer = 0, handOver = false,
+  tileTheme = 'scrabble',
+  width = 393, height = 520,
+}) {
+  const communityCount = phase < 3 ? 0 : phase === 3 ? 3 : phase === 4 ? 4 : 5;
+
+  // seat positions for up to 4 seats (you at bottom)
+  const seatPositions = [
+    { top: '78%', left: '50%', align: 'bottom' },
+    { top: '50%', left: '10%', align: 'left' },
+    { top: '12%', left: '50%', align: 'top' },
+    { top: '50%', left: '90%', align: 'right' },
+  ];
+
+  return (
+    <div style={{
+      width, height, position: 'relative',
+      background: '#0a0a0a', borderRadius: 18, overflow: 'hidden',
+      padding: 14,
+    }}>
+      {/* phase badge */}
+      <div style={{
+        position: 'absolute', top: 14, left: 16, zIndex: 2,
+        fontSize: 10, letterSpacing: 1.5, color: 'rgba(255,255,255,0.55)',
+      }}>PHASE · {PHASE_LABEL[phase] || '—'}</div>
+
+      {/* felt */}
+      <div style={{
+        position: 'absolute', inset: 30,
+        background: 'radial-gradient(ellipse at center, #2d5016 0%, #1a3010 72%, #0f1d08 100%)',
+        borderRadius: '50%/40%',
+        border: '3px solid #3a2815',
+        boxShadow: 'inset 0 0 40px rgba(0,0,0,0.55), 0 10px 30px rgba(0,0,0,0.5)',
+      }}>
+        {/* inner gold rail */}
+        <div style={{
+          position: 'absolute', inset: 10, borderRadius: '50%/40%',
+          border: '1px solid rgba(212,175,55,0.25)',
+        }} />
+
+        {/* pot + community at center */}
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%',
+          transform: 'translate(-50%,-50%)', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', letterSpacing: 1.5, marginBottom: 4 }}>POT</div>
+          <div style={{
+            fontFamily: '"Noto Serif", serif', fontSize: 28, fontWeight: 600,
+            color: '#d4af37', marginBottom: 14,
+            textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+          }}>${pot}</div>
+          <div style={{ display: 'flex', gap: 5, justifyContent: 'center' }}>
+            {Array.from({ length: 5 }).map((_, i) => {
+              const t = community[i];
+              const shown = i < communityCount && t;
+              return (
+                <div key={i} style={{
+                  opacity: shown ? 1 : 0.15,
+                  transform: shown ? 'scale(1)' : 'scale(0.85)',
+                  transition: `opacity 400ms ease ${i * 100}ms, transform 400ms ease ${i * 100}ms`,
+                }}>
+                  {shown ? (
+                    <Tile tile={t} size={32} theme={tileTheme} />
+                  ) : (
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 6,
+                      background: 'rgba(0,0,0,0.35)',
+                      border: '1px dashed rgba(255,255,255,0.1)',
+                    }} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* seats */}
+        {players.slice(0, 4).map((p, i) => {
+          const pos = seatPositions[i];
+          const isCurrent = currentPlayer === i && !p.folded && !handOver;
+          const isYou = i === 0;
+          const labelTop = pos.align === 'bottom' ? 62 : pos.align === 'top' ? -54 : 60;
+          const betOffset = (() => {
+            if (pos.align === 'bottom') return { top: -30, left: 44 };
+            if (pos.align === 'top') return { top: 58, left: 44 };
+            if (pos.align === 'left') return { top: 14, left: 58 };
+            return { top: 14, left: -50 };
+          })();
+
+          return (
+            <div key={p.id} style={{
+              position: 'absolute', top: pos.top, left: pos.left,
+              transform: 'translate(-50%,-50%)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+            }}>
+              <Avatar seed={p.seed ?? i} size={isYou ? 58 : 48} name={p.name} active={isCurrent} folded={p.folded} />
+
+              {/* name/chips pill */}
+              <div style={{
+                position: 'absolute', top: labelTop, left: '50%', transform: 'translateX(-50%)',
+                minWidth: 84, background: 'rgba(0,0,0,0.78)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 6, padding: '5px 8px', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', color: p.folded ? 'rgba(255,255,255,0.4)' : '#fff' }}>
+                  {p.name}{isYou && ' (You)'}
+                </div>
+                <div style={{ fontSize: 10, color: '#d4af37', marginTop: 1 }}>${p.chips}</div>
+                {p.lastAction && !handOver && (
+                  <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', marginTop: 1, letterSpacing: 0.6 }}>
+                    {String(p.lastAction).toUpperCase()}
+                  </div>
+                )}
+              </div>
+
+              {/* bet chip */}
+              {p.bet > 0 && (
+                <div style={{ position: 'absolute', ...betOffset, transition: 'all 400ms ease' }}>
+                  <BetChip amount={p.bet} size={36} />
+                </div>
+              )}
+
+              {/* dealer button */}
+              {dealer === i && (
+                <div style={{
+                  position: 'absolute',
+                  top: pos.align === 'bottom' ? -12 : pos.align === 'top' ? 46 : 36,
+                  left: pos.align === 'left' ? 46 : pos.align === 'right' ? -14 : -22,
+                  width: 20, height: 20, borderRadius: '50%',
+                  background: '#f4e4c1', color: '#2b1810',
+                  fontSize: 11, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                }}>D</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Demo ────────────────────────────────────────────────
+function Demo() {
+  const [phase, setPhase] = React.useState(3);
+  const [current, setCurrent] = React.useState(1);
+
+  // deterministic sample hand
+  const players = React.useMemo(() => [
+    { id: 0, seed: 0, name: 'You',   chips: 1500, hole: drawTiles(2), bet: 0,  folded: false, lastAction: null },
+    { id: 1, seed: 1, name: 'Jamie', chips: 1820, hole: drawTiles(2), bet: 40, folded: false, lastAction: 'raise' },
+    { id: 2, seed: 2, name: 'Raja',  chips: 940,  hole: drawTiles(2), bet: 40, folded: false, lastAction: 'call' },
+    { id: 3, seed: 3, name: 'Ellis', chips: 1120, hole: drawTiles(2), bet: 0,  folded: true,  lastAction: 'fold' },
+  ], []);
+  const community = React.useMemo(() => drawTiles(5, { choiceCount: 2 }), []);
+
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 18, padding: 20,
+    }}>
+      <PokerTable
+        players={players}
+        community={community}
+        pot={120}
+        phase={phase}
+        dealer={0}
+        currentPlayer={current}
+        tileTheme="scrabble"
+      />
+
+      {/* controls */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {[
+          { label: 'Pre-flop', p: 1 },
+          { label: 'Flop', p: 3 },
+          { label: 'Turn', p: 4 },
+          { label: 'River', p: 5 },
+        ].map(x => (
+          <button key={x.p} onClick={() => setPhase(x.p)} style={{
+            padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            background: phase === x.p ? '#d4af37' : 'rgba(255,255,255,0.08)',
+            color: phase === x.p ? '#000' : '#fff',
+            border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer',
+          }}>{x.label}</button>
+        ))}
+        <button onClick={() => setCurrent((current + 1) % 4)} style={{
+          padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+          background: 'rgba(255,255,255,0.08)', color: '#fff',
+          border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer',
+        }}>Next turn →</button>
+      </div>
+
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', maxWidth: 420, textAlign: 'center' }}>
+        Standalone <code>&lt;PokerTable /&gt;</code> — props: players, community, pot, phase, dealer, currentPlayer, handOver, tileTheme.
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Demo />);
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import {
   type WordTileSize,
   type WordTileVariant,
 } from "../table/word-tile-v2";
+import { cn } from "../../../lib/utils";
 import type { BuilderTile } from "./RoomGameTable.types";
 import { getLetterValue } from "../../../lib/letterValues";
 import type { ShowdownPreviewScore } from "../../../lib/showdownScore";
@@ -38,6 +39,9 @@ type RoomBottomPanelProps = {
   disableShuffle?: boolean;
   tileSize?: WordTileSize;
   helperTip?: ReactNode;
+  className?: string;
+  showWordPreview?: boolean;
+  variant?: "default" | "mobile";
 };
 
 type AnimatedBuilderTileProps = {
@@ -94,6 +98,10 @@ function AnimatedBuilderTile({
     !tile.disabled && tile.isChoice && choiceLetters.length > 0;
   const hasSelectedChoice = Boolean(choiceSelections[tile.id]);
   const tileVariant = getTileVariant(tile);
+  const isHandTile = tile.source === "hand";
+  const tileEntranceStyle = isHandTile
+    ? ({ animationDelay: `${index * 0.12}s` } as React.CSSProperties)
+    : undefined;
 
   useEffect(() => {
     if (shuffleTick === 0) return;
@@ -114,13 +122,14 @@ function AnimatedBuilderTile({
     <motion.div
       initial={false}
       animate={controls}
-      className={`relative flex flex-col items-center overflow-visible transition-opacity duration-300 ${
-        isValidating && tile.disabled ? "opacity-30" : "opacity-100"
-      }`}
+      className={cn(
+        "relative flex flex-col items-center overflow-visible transition-opacity duration-300",
+        isValidating && tile.disabled ? "opacity-30" : "opacity-100",
+      )}
     >
       {showChoicePicker && (
         <div
-          className={`absolute bottom-full left-1/2 z-20 mb-1.5 flex -translate-x-1/2 flex-col items-center gap-1 rounded-[7px] border border-gold/45 bg-felt-deep/80 p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.38)] backdrop-blur-sm sm:mb-2 ${
+          className={`absolute bottom-full left-1/2 z-[200] mb-1.5 flex -translate-x-1/2 flex-col items-center gap-1 rounded-[7px] border border-gold/45 bg-felt-deep/80 p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.38)] backdrop-blur-sm sm:mb-2 ${
             hasSelectedChoice ? "pointer-events-none opacity-0" : "opacity-100"
           }`}
         >
@@ -152,7 +161,12 @@ function AnimatedBuilderTile({
           </div>
         </div>
       )}
-      {renderBuilderTile(tile)}
+      <div
+        className={cn(isHandTile && "gf-tile animate-hole-slide-in")}
+        style={tileEntranceStyle}
+      >
+        {renderBuilderTile(tile)}
+      </div>
     </motion.div>
   );
 }
@@ -205,10 +219,14 @@ export function RoomBottomPanel({
   disableShuffle,
   tileSize = "md",
   helperTip,
+  className,
+  showWordPreview = true,
+  variant = "default",
 }: RoomBottomPanelProps) {
   const hiddenTileCount = getHiddenCommunityTileCount(gameStage);
   const showSubmitAction = shouldShowSubmitWordAction(gameStage);
-  const showActionRow = showSubmitAction || !!onShuffleTiles;
+  const showActionRow = showSubmitAction;
+  const showRackShuffle = Boolean(onShuffleTiles && !hasFolded && !mySubmission);
   const isSubmitWordDisabled =
     !isShowdownSubmissionOpen ||
     isValidating ||
@@ -218,13 +236,12 @@ export function RoomBottomPanel({
   return (
     <div
       id="tutorial-player-hand"
-      className="relative z-30 w-[95vw] text-center sm:w-[min(56vw,980px)]"
+      className={cn(
+        "relative z-[80] text-center",
+        variant === "mobile" ? "w-full" : "w-[95vw] sm:w-[min(56vw,980px)]",
+        className,
+      )}
     >
-      {helperTip ? (
-        <div className="absolute right-0 top-0 z-40 -translate-y-1/2">
-          {helperTip}
-        </div>
-      ) : null}
       <>
         {/* {!mySubmission && !isPhase1 && (
           <div className="mb-3 text-[12px] leading-none text-[#e4dece] sm:mb-4 sm:text-[34px] [@media(max-height:460px)]:hidden">
@@ -237,7 +254,21 @@ export function RoomBottomPanel({
             items={builderTiles.map((tile) => tile.id)}
             strategy={horizontalListSortingStrategy}
           >
-            <div className="flex flex-wrap items-end justify-center gap-1 [@media(max-height:460px)]:gap-1.5">
+            <div
+              className={cn(
+                "flex flex-wrap items-end justify-center gap-1 [@media(max-height:460px)]:gap-1.5",
+                variant === "mobile" && "flex-nowrap gap-1.5 overflow-visible",
+              )}
+            >
+              {showRackShuffle ? (
+                <div className="shrink-0 self-end pb-1.5">
+                  <ShuffleTilesButton
+                    id="tutorial-shuffle-button"
+                    onClick={onShuffleTiles!}
+                    disabled={disableShuffle}
+                  />
+                </div>
+              ) : null}
               {builderTiles.map((tile, index) => (
                 <AnimatedBuilderTile
                   key={tile.id}
@@ -257,6 +288,9 @@ export function RoomBottomPanel({
                   tileSize={tileSize}
                 />
               ))}
+              {helperTip ? (
+                <div className="shrink-0 self-end pb-3">{helperTip}</div>
+              ) : null}
             </div>
           </SortableContext>
         ) : hasFolded ? (
@@ -350,35 +384,64 @@ export function RoomBottomPanel({
           </div>
         ) : (
           <>
-            <div className="flex flex-col items-center gap-1 sm:gap-1.5">
-              <div className="text-center font-bold text-white sm:text-xl">
-                {wordPreview ? (
-                  <span className="tracking-[0.2em]">{wordPreview}</span>
-                ) : (
-                  <span className="text-sm font-normal text-white/40 sm:text-base">
-                    Select letters to preview
+            {showWordPreview ? (
+              <div className="flex flex-col items-center gap-1 sm:gap-1.5">
+                <div className="text-center font-bold text-white sm:hidden">
+                  {wordPreview ? (
+                    <span
+                      key={wordPreview}
+                      className="animate-word-morph inline-block tracking-[0.2em]"
+                    >
+                      {wordPreview}
+                    </span>
+                  ) : (
+                    <span className="text-sm font-normal text-white/40 sm:text-base">
+                      Select letters to preview
+                    </span>
+                  )}{" "}
+                  <span
+                    key={wordScorePreview?.total ?? 0}
+                    className="animate-word-morph inline-block text-[#f4d98b]"
+                  >
+                    {wordScorePreview
+                      ? `${wordScorePreview.total}pts`
+                      : hasUnresolvedChoices
+                        ? "Select letters"
+                        : "0pts"}
                   </span>
-                )}{" "}
-                <span className="text-[#f4d98b]">
-                  {wordScorePreview
-                    ? `${wordScorePreview.total}pts`
-                    : hasUnresolvedChoices
-                      ? "Select letters"
-                      : "0pts"}
-                </span>
-              </div>
-              {validationError && (
-                <div className="text-xs font-medium text-[#ef4444] sm:text-sm">
-                  {validationError}
                 </div>
-              )}
-            </div>
+                {validationError && (
+                  <div className="text-xs font-medium text-[#ef4444] sm:text-sm">
+                    {validationError}
+                  </div>
+                )}
+              </div>
+            ) : validationError ? (
+              <div className="mb-1 text-xs font-medium text-[#ef4444]">
+                {validationError}
+              </div>
+            ) : null}
 
             <SortableContext
               items={builderTiles.map((tile) => tile.id)}
               strategy={horizontalListSortingStrategy}
             >
-              <div className="flex flex-wrap items-end justify-center gap-1 [@media(max-height:460px)]:gap-1.5">
+              <div
+                className={cn(
+                  "flex flex-wrap items-end justify-center gap-1 [@media(max-height:460px)]:gap-1.5",
+                  variant === "mobile" &&
+                    "flex-nowrap gap-1.5 overflow-visible",
+                )}
+              >
+                {showRackShuffle ? (
+                  <div className="shrink-0 self-end pb-1.5">
+                    <ShuffleTilesButton
+                      id="tutorial-shuffle-button"
+                      onClick={onShuffleTiles!}
+                      disabled={disableShuffle}
+                    />
+                  </div>
+                ) : null}
                 {builderTiles.map((tile, index) => (
                   <AnimatedBuilderTile
                     key={tile.id}
@@ -398,18 +461,15 @@ export function RoomBottomPanel({
                     tileSize={tileSize}
                   />
                 ))}
+                {helperTip ? (
+                  <div className="shrink-0 self-end pb-3">{helperTip}</div>
+                ) : null}
               </div>
             </SortableContext>
 
             <div className="mt-2 flex flex-col items-center gap-1.5 sm:mt-4 sm:gap-2">
               {showActionRow && (
                 <div className="flex flex-nowrap items-center justify-center gap-2">
-                  {onShuffleTiles ? (
-                    <ShuffleTilesButton
-                      onClick={onShuffleTiles}
-                      disabled={disableShuffle}
-                    />
-                  ) : null}
                   {showSubmitAction ? (
                     <ActionButton
                       id="tutorial-submit-word"

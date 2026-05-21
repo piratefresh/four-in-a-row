@@ -29,11 +29,13 @@ type BlankRoomPhaseProps = {
     chips: number;
     bet?: number;
   };
+  variant?: "desktop" | "mobile";
 };
 
 export function BlankRoomPhase({
   opponents,
   bottomPlayer,
+  variant = "desktop",
 }: BlankRoomPhaseProps) {
   return (
     <div className="relative z-10 flex items-center justify-center px-2 xs:px-4">
@@ -46,6 +48,7 @@ export function BlankRoomPhase({
           bottomBet={0}
           betPositionClass={HIDDEN_BET_POSITION_CLASS}
           showCenterPot={false}
+          variant={variant}
         />
 
         {opponents.map((opponent) => (

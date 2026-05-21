@@ -25,21 +25,6 @@ export function getOpponentPosition(
   return positions[index % 3]!;
 }
 
-export function getPhase1OpponentPosition(
-  index: number,
-  totalOpponents: number,
-): "top" | "left" | "right" {
-  if (totalOpponents === 1) return "top";
-  if (totalOpponents === 2) return index === 0 ? "left" : "right";
-  if (totalOpponents === 3) {
-    if (index === 0) return "left";
-    if (index === 1) return "top";
-    return "right";
-  }
-  const positions: Array<"top" | "left" | "right"> = ["left", "top", "right"];
-  return positions[index % 3]!;
-}
-
 type RoomOpponentLayerProps = {
   opponents: PlayerHand[];
   currentTurnPlayerId?: string | null;
@@ -52,7 +37,15 @@ type RoomOpponentLayerProps = {
   gameStage?: string;
   currentPlayerHasSubmitted?: boolean;
   canRevealSubmittedWords?: boolean;
+  variant?: "desktop" | "mobile";
 };
+
+const MOBILE_OPPONENT_POSITION_CLASS: Record<"top" | "left" | "right", string> =
+  {
+    top: "left-1/2 top-[-50px] -translate-x-1/2",
+    left: "left-[2px] top-1/2 -translate-y-1/2",
+    right: "right-[2px] top-1/2 -translate-y-1/2",
+  };
 
 export function RoomOpponentLayer({
   opponents,
@@ -66,6 +59,7 @@ export function RoomOpponentLayer({
   gameStage,
   currentPlayerHasSubmitted,
   canRevealSubmittedWords,
+  variant = "desktop",
 }: RoomOpponentLayerProps) {
   return opponents.map((hand, opponentIndex) => {
     const position = getOpponentPosition(opponentIndex, opponents.length);
@@ -77,7 +71,11 @@ export function RoomOpponentLayer({
     return (
       <div
         key={`opponent-${hand._id}`}
-        className={`absolute ${ROOM_OPPONENT_POSITION_CLASS[position]} z-20`}
+        className={`absolute ${
+          variant === "mobile"
+            ? MOBILE_OPPONENT_POSITION_CLASS[position]
+            : ROOM_OPPONENT_POSITION_CLASS[position]
+        } z-20`}
       >
         <Seat
           name={opponentName}
@@ -89,6 +87,7 @@ export function RoomOpponentLayer({
           blindPosition={getBlindPosition?.(hand.playerId)}
           avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
           initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"
+          variant={variant === "mobile" ? "mobile" : "default"}
           infoCardClassName="min-w-[82px] px-1.5 py-1 xs:min-w-[92px] xs:px-2 sm:min-w-[118px] sm:px-3 sm:py-1.5"
           infoLayout="compact"
         />

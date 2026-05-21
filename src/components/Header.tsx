@@ -156,7 +156,12 @@ export default function Header() {
                 <span className="text-brass/80">ROOMS</span>
               </>
             ) : (
-              <Link to="/">Word Poker</Link>
+              <Link
+                to="/"
+                className="font-serif text-[22px] font-bold tracking-tighter"
+              >
+                Word Poker
+              </Link>
             )}
           </h1>
           {isRoomView || isResultsView ? (
@@ -172,10 +177,15 @@ export default function Header() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-white/5"
+                className="flex items-center gap-2.5 rounded-full border border-brass/18 bg-black/30 px-3.5 py-1 transition-colors hover:bg-black/40"
               >
+                <div className="hidden items-center gap-1 sm:flex">
+                  <p className="max-w-40 truncate text-xs sm:max-w-xs text-cream">
+                    {displayName}
+                  </p>
+                </div>
                 <div className="relative">
-                  <Avatar className="h-8 w-8 border border-white/15">
+                  <Avatar className="h-[26px] w-[26px] border border-white/15">
                     <AvatarImage
                       src={session.user.image ?? undefined}
                       alt={`${displayName} avatar`}
@@ -193,12 +203,6 @@ export default function Header() {
                         pendingNotifications.gameInvites}
                     </span>
                   ) : null}
-                </div>
-                <div className="hidden items-center gap-1 sm:flex">
-                  <p className="max-w-40 truncate text-sm sm:max-w-xs">
-                    {displayName}
-                  </p>
-                  <ChevronDown className="h-4 w-4 text-white/60" />
                 </div>
               </button>
             </DropdownMenuTrigger>

@@ -71,11 +71,11 @@ export function HomeModeMenu({
   const isDisabled = isStartingOffline || isStartingTutorial;
 
   return (
-    <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
+    <main className="flex h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 lg:hidden flex-col">
         {/* <MobileHeadlineCard /> */}
 
-        <div className="flex-1 overflow-auto px-4 pt-2 pb-[70px]">
+        <div className="flex-1 overflow-auto overscroll-contain px-4 pt-2 pb-[70px]">
           <h1 className="font-serif text-[32px] font-semibold leading-[0.95] tracking-[-0.02em] text-cream">
             Choose how{" "}
             <em className="font-serif not-italic italic text-brass">to play</em>
@@ -171,10 +171,10 @@ export function HomeModeMenu({
       </div>
 
       <div
-        className="hidden min-h-0 flex-1 lg:grid"
+        className="hidden min-h-0 flex-1 overflow-hidden lg:grid"
         style={{ gridTemplateColumns: "1.4fr 1fr" }}
       >
-        <div className="flex flex-col gap-2.5 overflow-auto px-12 py-10">
+        <div className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-y-auto overflow-x-hidden overscroll-contain px-12 py-10">
           <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.3em] text-brass">
             WHAT'LL IT BE TONIGHT?
           </div>
@@ -257,7 +257,7 @@ export function HomeModeMenu({
           <Tips className="mt-7" />
         </div>
 
-        <div className="overflow-auto border-l border-brass/12 bg-black/18 px-10 py-10 pb-20">
+        <div className="min-h-0 min-w-0 overflow-hidden border-l border-brass/12 bg-black/18 lg:h-full lg:max-h-full">
           <LiveFeed className="border-l-0" />
         </div>
       </div>

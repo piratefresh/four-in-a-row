@@ -1,0 +1,155 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Online Rooms — redesign</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #050505; font-family: Inter, system-ui, sans-serif; }
+  button { font-family: inherit; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(0.92); }
+  }
+
+  /* — Game flow animations — */
+
+  /* Community tile flip-in from above (with overshoot) */
+  @keyframes tile-deal-in {
+    0%   { opacity: 0; transform: translateY(-72px) rotateX(140deg) scale(0.6); }
+    55%  { opacity: 1; transform: translateY(6px)  rotateX(0deg)   scale(1.08); }
+    78%  {              transform: translateY(-2px) rotateX(0deg)  scale(0.98); }
+    100% { opacity: 1; transform: translateY(0)    rotateX(0deg)   scale(1); }
+  }
+
+  /* Subtle glint sweeping across a freshly-dealt tile */
+  @keyframes tile-glint {
+    0%   { transform: translateX(-110%) skewX(-22deg); opacity: 0; }
+    30%  { opacity: 0.55; }
+    100% { transform: translateX(220%) skewX(-22deg); opacity: 0; }
+  }
+
+  /* Hole tile slide in from the deck (bottom corner) */
+  @keyframes hole-slide-in {
+    0%   { opacity: 0; transform: translate(60px, 80px) rotate(15deg) scale(0.6); }
+    100% { opacity: 1; transform: translate(0, 0) rotate(0) scale(1); }
+  }
+
+  /* Chip flying from seat → pot. Reads --from-x / --from-y (offset from pot). */
+  @keyframes chip-to-pot {
+    0%   { opacity: 0; transform: translate(var(--from-x), var(--from-y)) scale(0.55); }
+    18%  { opacity: 1; }
+    65%  { opacity: 1; transform: translate(calc(var(--from-x) * 0.05), calc(var(--from-y) * 0.05)) scale(1.05); }
+    85%  { opacity: 0.9; transform: translate(0, 0) scale(0.9); }
+    100% { opacity: 0;  transform: translate(0, 0) scale(0.7); }
+  }
+
+  /* Chip flying from pot → winner (payout). Reads --to-x / --to-y. */
+  @keyframes chip-to-winner {
+    0%   { opacity: 0; transform: translate(0, 0) scale(0.7); }
+    10%  { opacity: 1; transform: translate(0, 0) scale(1.1); }
+    100% { opacity: 0; transform: translate(var(--to-x), var(--to-y)) scale(0.85); }
+  }
+
+  /* Pot value pop on update */
+  @keyframes pot-pop {
+    0%   { transform: scale(1);    color: #d4af37; text-shadow: 0 0 0 rgba(212,175,55,0); }
+    35%  { transform: scale(1.18); color: #f7df7a; text-shadow: 0 0 22px rgba(244,211,94,0.55); }
+    100% { transform: scale(1);    color: #d4af37; text-shadow: 0 0 0 rgba(212,175,55,0); }
+  }
+
+  /* Active seat — gold breathing ring */
+  @keyframes seat-breathe {
+    0%, 100% { box-shadow: 0 0 0 3px #0c2620, 0 0 0 5px #d4af37, 0 0 22px rgba(212,175,55,0.35); }
+    50%      { box-shadow: 0 0 0 3px #0c2620, 0 0 0 6px #f7df7a, 0 0 36px rgba(244,211,94,0.75); }
+  }
+
+  /* Winner burst (showdown) */
+  @keyframes winner-burst {
+    0%   { transform: scale(1);    box-shadow: 0 0 0 3px #0c2620, 0 0 0 5px #d4af37, 0 0 22px rgba(212,175,55,0.35); }
+    30%  { transform: scale(1.18); box-shadow: 0 0 0 3px #0c2620, 0 0 0 7px #f7df7a, 0 0 56px rgba(244,211,94,0.9); }
+    60%  { transform: scale(0.96); }
+    100% { transform: scale(1.06); box-shadow: 0 0 0 3px #0c2620, 0 0 0 6px #f7df7a, 0 0 44px rgba(244,211,94,0.7); }
+  }
+
+  /* Phase label slide-in */
+  @keyframes phase-slide {
+    0%   { opacity: 0; transform: translateY(8px); filter: blur(2px); }
+    100% { opacity: 1; transform: translateY(0);   filter: blur(0); }
+  }
+
+  /* Word morph (rack best-word) */
+  @keyframes word-morph {
+    0%   { opacity: 0; transform: translateY(6px); letter-spacing: 6px; filter: blur(3px); }
+    100% { opacity: 1; transform: translateY(0);   letter-spacing: normal; filter: blur(0); }
+  }
+
+  /* Floating +pts callout on showdown */
+  @keyframes payout-float {
+    0%   { opacity: 0; transform: translate(-50%, 6px) scale(0.9); }
+    20%  { opacity: 1; transform: translate(-50%, -2px) scale(1.05); }
+    80%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, -28px) scale(1); }
+  }
+
+  /* Timer pulse — gentle */
+  @keyframes timer-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+  }
+
+  /* Felt edge sweep — a slow gold scan circling the table */
+  @keyframes felt-sweep {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .gf-tile {
+    animation: tile-deal-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    transform-origin: 50% 100%;
+    position: relative;
+  }
+  .gf-tile::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 6px;
+    background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%);
+    animation: tile-glint 0.9s ease-out both;
+    animation-delay: inherit;
+    pointer-events: none;
+    mix-blend-mode: screen;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(212,175,55,0.4); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="online-rooms/design-canvas.jsx"></script>
+<script type="text/babel" src="online-rooms/data.jsx"></script>
+<script type="text/babel" src="online-rooms/v1-parlor.jsx"></script>
+<script type="text/babel" src="online-rooms/v2-floor.jsx"></script>
+<script type="text/babel" src="online-rooms/v3-ticker.jsx"></script>
+<script type="text/babel" src="online-rooms/v3-desktop-mobile.jsx"></script>
+<script type="text/babel" src="online-rooms/v4-createroom.jsx"></script>
+<script type="text/babel" src="online-rooms/v4-createroom-desktop.jsx"></script>
+<script type="text/babel" src="online-rooms/v4-createroom-mobile.jsx"></script>
+<script type="text/babel" src="online-rooms/v5-home.jsx"></script>
+<script type="text/babel" src="online-rooms/v6-game-shared.jsx"></script>
+<script type="text/babel" src="online-rooms/v6-game-desktop.jsx"></script>
+<script type="text/babel" src="online-rooms/v6-game-mobile.jsx"></script>
+<script type="text/babel" src="online-rooms/v7-showdown.jsx"></script>
+<script type="text/babel" src="online-rooms/app.jsx"></script>
+</body>
+</html>

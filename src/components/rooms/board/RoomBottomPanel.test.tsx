@@ -38,4 +38,44 @@ describe("RoomBottomPanel", () => {
     expect(shouldShowSubmitWordAction("final")).toBe(false);
     expect(shouldShowSubmitWordAction("showdown")).toBe(true);
   });
+
+  it("puts hand tile entrance animation on a child wrapper", () => {
+    const markup = renderToStaticMarkup(
+      <RoomBottomPanel
+        isPhase1={false}
+        mySubmission={null}
+        canRevealSubmittedWords={false}
+        showReveal={false}
+        builderTiles={[
+          {
+            id: "hand-a",
+            letter: "A",
+            baseValue: 1,
+            source: "hand",
+            cardIndex: 0,
+          },
+        ]}
+        choiceSelections={{}}
+        handleChoiceSelect={vi.fn()}
+        isValidating={false}
+        hasUnresolvedChoices={false}
+        validationError={null}
+        wordPreview="A"
+        wordScorePreview={{
+          basePoints: 1,
+          multiplierBonus: 0,
+          fullRackBonus: 0,
+          total: 1,
+        }}
+        shuffleTick={0}
+        gameStage="showdown"
+        isShowdownSubmissionOpen={true}
+        handleSubmitWord={vi.fn()}
+        renderBuilderTile={(tile) => <div data-tile-id={tile.id} />}
+      />,
+    );
+
+    expect(markup).toContain("gf-tile animate-hole-slide-in");
+    expect(markup).toContain("animation-delay:0s");
+  });
 });

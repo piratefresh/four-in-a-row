@@ -330,20 +330,20 @@ export function RoomActionControls({
               </div>
 
               <div className="flex w-full items-end justify-center sm:hidden">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5 xs:gap-2">
-                  {helperTip ? (
-                    <div className="mr-1.5 shrink-0 xs:mr-2">{helperTip}</div>
-                  ) : null}
+                <div className="relative grid min-w-0 flex-1 grid-cols-[minmax(0,0.92fr)_minmax(0,0.98fr)_minmax(0,1.14fr)_auto] items-stretch gap-1.5">
                   {utility?.onShuffleTiles ? (
-                    <ShuffleTilesButton
-                      onClick={() => utility.onShuffleTiles?.()}
-                      disabled={utility.disableShuffle}
-                    />
+                    <div className="absolute left-3 top-0 z-20 -translate-y-full">
+                      <ShuffleTilesButton
+                        onClick={() => utility.onShuffleTiles?.()}
+                        disabled={utility.disableShuffle}
+                      />
+                    </div>
                   ) : null}
                   {isConfirmingFold ? (
                     <>
                       <ActionButton
                         variant="fold"
+                        className="min-h-9 min-w-0 rounded-lg px-1.5 py-2.5 text-[10px] tracking-[0.14em] xs:min-w-0 xs:px-2"
                         onClick={confirmFold}
                         disabled={betting.isBetting}
                       >
@@ -351,16 +351,23 @@ export function RoomActionControls({
                       </ActionButton>
                       <ActionButton
                         variant="call"
+                        className="min-h-9 min-w-0 rounded-lg px-1.5 py-2.5 text-[10px] tracking-[0.14em] xs:min-w-0 xs:px-2"
                         onClick={cancelFoldConfirmation}
                         disabled={betting.isBetting}
                       >
                         {foldActionState.secondaryLabel}
                       </ActionButton>
+                      {helperTip ? (
+                        <div className="col-start-4 flex items-center justify-center pl-0.5">
+                          {helperTip}
+                        </div>
+                      ) : null}
                     </>
                   ) : (
                     <>
                       <ActionButton
                         variant="fold"
+                        className="min-h-9 min-w-0 rounded-lg px-1.5 py-2.5 text-[10px] tracking-[0.14em] xs:min-w-0 xs:px-2"
                         onClick={requestFoldConfirmation}
                         disabled={betting.isBetting || !betting.canFold}
                       >
@@ -368,6 +375,7 @@ export function RoomActionControls({
                       </ActionButton>
                       <ActionButton
                         variant={betting.canCheck ? "check" : "call"}
+                        className="min-h-9 min-w-0 rounded-lg px-1.5 py-2.5 text-[10px] tracking-[0.14em] xs:min-w-0 xs:px-2"
                         onClick={() => {
                           if (betting.canCheck) {
                             betting.onCheck?.();
@@ -395,6 +403,7 @@ export function RoomActionControls({
                       </ActionButton>
                       <ActionButton
                         variant="raise"
+                        className="min-h-9 min-w-0 rounded-lg px-1.5 py-2.5 text-[10px] tracking-[0.12em] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] xs:min-w-0 xs:px-2"
                         onClick={() => {
                           betting.onRaise?.();
                           tutorial.onBettingAction();
@@ -412,6 +421,11 @@ export function RoomActionControls({
                           betting.raiseLabel
                         )}
                       </ActionButton>
+                      {helperTip ? (
+                        <div className="flex items-center justify-center pl-0.5">
+                          {helperTip}
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </div>

@@ -23,7 +23,7 @@ export function RaiseAmountSlider({
 
   const selectedIndex = Math.max(0, options.indexOf(value));
   const maxIndex = options.length - 1;
-  const label = callAmount > 0 ? `To call $${callAmount}` : "Raise amount";
+  const label = callAmount > 0 ? "Raise" : "Raise";
 
   if (orientation === "vertical") {
     return (
@@ -69,10 +69,9 @@ export function RaiseAmountSlider({
   }
 
   return (
-    <div className="flex w-full items-center gap-2 xs:gap-3 sm:px-4 sm:py-3">
-      <div className="flex shrink-0 items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[#b8b19a] xs:gap-3 xs:text-[11px] xs:tracking-[0.18em]">
+    <div className="flex w-full items-center gap-2 sm:px-4 sm:py-3">
+      <div className="flex shrink-0 items-center gap-2 text-[9px] font-medium uppercase tracking-[0.24em] text-[#b8b19a] xs:gap-3 xs:text-[10px]">
         <span>{label}</span>
-        <span className="text-[#f0cf5a]">${value}</span>
       </div>
 
       <div className="min-w-0 flex-1 px-0.5 xs:px-1">
@@ -94,12 +93,10 @@ export function RaiseAmountSlider({
           className="w-full"
           aria-label="Raise amount"
         />
-
-        <div className="mt-1.5 flex items-center justify-between text-[10px] font-medium text-[#8f8876] xs:mt-2 xs:text-[11px]">
-          <span>${options[0]}</span>
-          <span>${options[maxIndex]}</span>
-        </div>
       </div>
+      <span className="shrink-0 font-mono text-[11px] font-semibold text-[#f0cf5a]">
+        ${value}
+      </span>
     </div>
   );
 }

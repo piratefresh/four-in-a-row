@@ -55,33 +55,6 @@ function ResultsPage() {
   const [resultPlayerId, setResultPlayerId] = useState<string | null>(null);
   const autoLeftResultKeyRef = useRef<string | null>(null);
 
-  const COUNTDOWN_SECONDS = 60;
-  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (countdown === 0) {
-      void handleReturnToOnlineRooms();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countdown]);
-
   const roomData = useQuery(api.rooms.getRoomMembers, {
     code,
     guestAuthUserId: session?.user
@@ -189,8 +162,6 @@ function ResultsPage() {
   };
 
   const handlePlayAgainOnline = async () => {
-    if (countdownRef.current) clearInterval(countdownRef.current);
-
     setIsStartingPlayAgain(true);
 
     try {
@@ -218,7 +189,6 @@ function ResultsPage() {
   };
 
   const handleReturnToOnlineRooms = async () => {
-    if (countdownRef.current) clearInterval(countdownRef.current);
     try {
       await leaveRoom({});
     } catch (error) {
@@ -303,8 +273,6 @@ function ResultsPage() {
   const currentPlayerId = resultPlayerId ?? (myPlayer ? String(myPlayer._id) : null);
   const getPlayerName = (id: string) =>
     resultMembersById.get(id)?.name ?? memberById.get(id)?.name ?? "Player";
-  const getPlayerAvatar = (id: string) =>
-    resultMembersById.get(id)?.image ?? memberById.get(id)?.image ?? null;
 
   if (showTutorialSignupWall) {
     return (
@@ -325,7 +293,7 @@ function ResultsPage() {
       playerId={currentPlayerId}
       showdownResults={showdownResults}
       getPlayerName={getPlayerName}
-      getPlayerAvatar={getPlayerAvatar}
+      roomName={roomData?.room.name ?? code}
       onReturnToOnlineRooms={handleReturnToOnlineRooms}
       onReturnToMainMenu={handleReturnToMainMenu}
       isOfflineGame={isOfflineGame}
@@ -334,7 +302,6 @@ function ResultsPage() {
       isStartingNewGame={isStartingNewGame}
       onPlayAgainOnline={handlePlayAgainOnline}
       isStartingPlayAgain={isStartingPlayAgain}
-      countdown={countdown}
     />
   );
 }

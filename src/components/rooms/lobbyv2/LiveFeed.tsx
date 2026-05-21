@@ -173,10 +173,7 @@ export function LiveFeed({ className }: { className?: string }) {
         </p>
       </div>
 
-      <div
-        ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-4"
-      >
+      <div className="min-h-0 flex-1 flex flex-col overflow-hidden pb-4">
         {activity.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="text-cream/15 font-mono text-xs">
@@ -188,8 +185,15 @@ export function LiveFeed({ className }: { className?: string }) {
           </div>
         ) : (
           <>
-            {headlinePlay ? <HeadlinePlayCard entry={headlinePlay} /> : null}
-            <div className="space-y-0 px-7">
+            {headlinePlay ? (
+              <div className="shrink-0">
+                <HeadlinePlayCard entry={headlinePlay} />
+              </div>
+            ) : null}
+            <div
+              ref={scrollRef}
+              className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain space-y-0 px-7"
+            >
               {otherEvents.map((entry) => (
                 <EventRow key={entry._id} entry={entry} />
               ))}

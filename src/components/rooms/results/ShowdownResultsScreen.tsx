@@ -1,9 +1,9 @@
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getLetterValue } from "@/lib/letterValues";
-import { cn } from "@/lib/utils";
 import { WinSplashOverlay } from "./WinSplashOverlay";
+import { ShowdownResultCard } from "./ShowdownResultCard";
+import { ShowdownBreadcrumb } from "./ShowdownBreadcrumb";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 type SubmissionTile = {
   letter: string;
@@ -32,6 +32,11 @@ type ShowdownResults = {
   winnerId?: string | null;
   winningWord?: string | null;
   winningScore?: number;
+  winningScoreBreakdown?: {
+    basePoints: number;
+    multiplierBonus: number;
+    fullRackBonus: number;
+  } | null;
   allSubmissions?: Submission[];
 };
 
@@ -40,7 +45,8 @@ type ShowdownResultsScreenProps = {
   playerId: string | null;
   showdownResults: ShowdownResults;
   getPlayerName: (id: string) => string;
-  getPlayerAvatar: (id: string) => string | null;
+  roomName: string;
+  handNumber?: number;
   onReturnToOnlineRooms?: () => void;
   onReturnToMainMenu: () => void;
   isOfflineGame?: boolean;
@@ -49,14 +55,13 @@ type ShowdownResultsScreenProps = {
   isStartingNewGame?: boolean;
   onPlayAgainOnline?: () => void;
   isStartingPlayAgain?: boolean;
-  countdown?: number;
 };
 
-const PLAYER_GRADIENTS = [
-  "from-[#8b5cf6] to-[#6d28d9]",
-  "from-[#67d4ff] to-[#1d8fd1]",
-  "from-[#5fe08a] to-[#1fb96d]",
-  "from-[#ff9b54] to-[#ef5f3c]",
+const PLAYER_COLORS = [
+  "rgb(167, 139, 250)",
+  "rgb(126, 196, 207)",
+  "rgb(250, 179, 135)",
+  "rgb(224, 122, 95)",
 ] as const;
 
 type ResultsStep = "scoring" | "win" | "results";
@@ -66,7 +71,8 @@ export function ShowdownResultsScreen({
   playerId,
   showdownResults,
   getPlayerName,
-  getPlayerAvatar,
+  roomName,
+  handNumber,
   onReturnToOnlineRooms,
   onReturnToMainMenu,
   isOfflineGame,
@@ -75,7 +81,6 @@ export function ShowdownResultsScreen({
   isStartingNewGame,
   onPlayAgainOnline,
   isStartingPlayAgain,
-  countdown,
 }: ShowdownResultsScreenProps) {
   const submissions = showdownResults.allSubmissions ?? [];
   const currentPlayerSubmission = useMemo(() => {
@@ -99,20 +104,6 @@ export function ShowdownResultsScreen({
     showdownResults.hasWinner &&
     submissions.some((submission) => submission.status === "forfeited") &&
     !submissions.some((submission) => submission.status === "submitted");
-  const winnerName =
-    showdownResults.winnerId && showdownResults.winnerId === playerId
-      ? "You"
-      : showdownResults.winnerId
-        ? getPlayerName(showdownResults.winnerId)
-        : null;
-  const winnerLabel =
-    didWinByFold && currentPlayerWon
-      ? "You win - everyone else folded"
-      : didWinByFold && winnerName
-        ? `${winnerName} wins by fold`
-        : showdownResults.hasWinner && winnerName
-          ? `${winnerName} wins the pot`
-          : "No winning submission";
 
   const [resultsStep, setResultsStep] = useState<ResultsStep>(() =>
     didWinByFold
@@ -131,6 +122,24 @@ export function ShowdownResultsScreen({
   const dismissWinSplash = useCallback(() => {
     setResultsStep("results");
   }, []);
+
+  const handleBack = useCallback(() => {
+    if (onReturnToOnlineRooms) {
+      onReturnToOnlineRooms();
+    } else {
+      onReturnToMainMenu();
+    }
+  }, [onReturnToOnlineRooms, onReturnToMainMenu]);
+
+  const submissionColors = useMemo(() => {
+    const map = new Map<string, string>();
+    submissions.forEach((submission, index) => {
+      map.set(submission.playerId, PLAYER_COLORS[index % PLAYER_COLORS.length]);
+    });
+    return map;
+  }, [submissions]);
+
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   if (resultsStep === "scoring" && scoringSubmission) {
     return (
@@ -152,277 +161,263 @@ export function ShowdownResultsScreen({
     );
   }
 
+  const winnerName =
+    showdownResults.winnerId && showdownResults.winnerId === playerId
+      ? "You"
+      : showdownResults.winnerId
+        ? getPlayerName(showdownResults.winnerId)
+        : null;
+  const winnerWord = showdownResults.winningWord;
+  const winnerScore = showdownResults.winningScore;
+
+  const headline =
+    winnerName && !didWinByFold
+      ? `${winnerName} takes the pot`
+      : winnerName && didWinByFold
+        ? `${winnerName} wins by fold`
+        : "Hand complete";
+
+  const narrative = generateNarrative(
+    submissions,
+    showdownResults,
+    getPlayerName,
+    didWinByFold,
+  );
+
+  const foldCount = submissions.filter((s) => s.status === "forfeited").length;
+  const wordCount = submissions.filter((s) => s.status === "submitted").length;
+  const playerCount = submissions.length;
+
   return (
     <div
       data-testid="results-content"
-      className="min-h-[calc(100vh-4rem)] bg-felt text-white"
+      className="flex min-h-dvh flex-col bg-linear-to-b from-wire to-wire-deep font-body text-cream"
     >
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[430px] flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]">
-        <header className="pt-6 text-center">
-          <div
-            data-testid="pot-amount"
-            className="text-5xl font-semibold tracking-tight text-[#e2bd46]"
-          >
-            ${pot}
-          </div>
-          <p
-            data-testid="winner-name"
-            className="mt-4 text-[14px] uppercase tracking-[0.2em] text-white/48"
-          >
-            {winnerLabel}
-          </p>
-          {didWinByFold ? (
-            <p className="mx-auto mt-3 max-w-[320px] text-sm leading-6 text-white/68">
-              The hand ended immediately because only one player remained.
-            </p>
-          ) : null}
-        </header>
+      <ShowdownBreadcrumb
+        roomName={roomName}
+        handNumber={handNumber}
+        onBack={handleBack}
+      />
 
-        <div className="mt-6 flex gap-3">
-          {isGuestTutorialGame ? (
-            <button
-              type="button"
-              onClick={onReturnToMainMenu}
-              className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01]"
+      {/* Main content */}
+      <div className="flex flex-1 flex-col overflow-auto lg:grid lg:grid-cols-[1fr_1.2fr] lg:overflow-hidden">
+        {/* ── LEFT PANEL — Winner Spotlight ── */}
+        <div className="flex flex-col justify-center border-r border-[rgba(212,175,55,0.12)] px-4 pb-8 pt-4 lg:px-12 lg:py-10">
+          <div className="mx-auto w-full max-w-[420px]">
+            <div className="font-mono text-[10px] tracking-[3px] text-gold lg:mb-3.5 text-center sm:text-left">
+              HEADLINE · SHOWDOWN
+            </div>
+
+            <h1
+              data-testid="winner-name"
+              className="text-center mt-1 font-serif text-[32px] font-semibold leading-[0.95] tracking-[-0.6px] text-cream  sm:text-left lg:text-[56px] lg:tracking-[-1.5px]"
             >
-              Main Menu
-            </button>
-          ) : isOfflineGame ? (
-            <>
-              <button
-                type="button"
-                onClick={onPlayAnotherOffline}
-                disabled={isStartingNewGame}
-                className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isStartingNewGame ? "Starting..." : "Play Another"}
-              </button>
+              {headline}
+            </h1>
 
-              <button
-                type="button"
-                onClick={onReturnToMainMenu}
-                disabled={isStartingNewGame}
-                className="flex-1 rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-6 py-4 text-base font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                Main Menu
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={onPlayAgainOnline}
-                disabled={isStartingPlayAgain}
-                data-testid="play-again-button"
-                className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isStartingPlayAgain ? "Starting..." : "Play Again"}
-              </button>
+            <p className="text-center mt-3 max-w-[420px] text-sm leading-relaxed text-[rgba(232,220,192,0.6)]  sm:text-left lg:mt-3.5">
+              Winning word: {winnerWord}
+            </p>
 
-              <button
-                type="button"
-                onClick={onReturnToOnlineRooms}
-                data-testid="lobby-button"
-                className="flex-1 rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-4 py-4 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01]"
-              >
-                Lobby
-              </button>
+            {didWinByFold && (
+              <p className="mt-2 text-sm leading-relaxed text-[rgba(232,220,192,0.45)]">
+                The hand ended immediately because only one player remained.
+              </p>
+            )}
 
-              <button
-                type="button"
-                onClick={onReturnToMainMenu}
-                className="rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-4 py-4 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01]"
-              >
-                Main Menu
-              </button>
-            </>
-          )}
-        </div>
-
-        <p className="mt-3 text-center text-sm text-white/52">
-          {isGuestTutorialGame
-            ? "Return home when you are ready."
-            : isOfflineGame
-              ? "Start another bot game or return home."
-              : countdown != null
-                ? `Auto-leaving in ${countdown}s`
-                : "Return to the room list or head back home."}
-        </p>
-
-        <div id="tutorial-showdown-results" className="mt-8 flex-1 space-y-3">
-          {submissions.map((submission, index) => (
-            <ShowdownSubmissionCard
-              key={submission.playerId}
-              submission={submission}
-              isWinner={submission.playerId === showdownResults.winnerId}
-              isCurrentPlayer={submission.playerId === playerId}
-              playerName={
-                submission.playerId === playerId
-                  ? `${getPlayerName(submission.playerId)} (you)`
-                  : getPlayerName(submission.playerId)
-              }
-              avatarUrl={getPlayerAvatar(submission.playerId)}
-              gradientClassName={
-                PLAYER_GRADIENTS[index % PLAYER_GRADIENTS.length]
-              }
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ShowdownSubmissionCard({
-  submission,
-  isWinner,
-  isCurrentPlayer,
-  playerName,
-  avatarUrl,
-  gradientClassName,
-}: {
-  submission: Submission;
-  isWinner: boolean;
-  isCurrentPlayer: boolean;
-  playerName: string;
-  avatarUrl?: string | null;
-  gradientClassName: string;
-}) {
-  const displayWord =
-    submission.status === "submitted" && submission.word
-      ? submission.word.toUpperCase()
-      : submission.status === "forfeited"
-        ? "FORFEITED"
-        : "NO SUBMISSION";
-  const tiles = getDisplayTiles(submission);
-
-  return (
-    <article
-      data-testid="player-result"
-      className={cn(
-        "rounded-[16px] border px-4 py-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
-        isWinner
-          ? "border-gold-bright bg-[linear-gradient(180deg,#f6d86f_0%,#d4a54a_56%,#b98227_100%)] text-[#2a1a02] shadow-[0_0_0_1px_rgba(255,235,163,0.32),0_16px_40px_rgba(0,0,0,0.36),0_0_24px_rgba(212,165,74,0.22)]"
-          : "border-white/8 bg-felt-light text-white",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <Avatar className="h-11 w-11 shrink-0 border border-white/10 shadow-[0_8px_20px_rgba(0,0,0,0.35)]">
-          <AvatarImage
-            src={avatarUrl ?? undefined}
-            alt={`${playerName} avatar`}
-          />
-          <AvatarFallback
-            className={`bg-gradient-to-br ${gradientClassName} text-base font-bold text-white`}
-          >
-            {getInitials(playerName)}
-          </AvatarFallback>
-        </Avatar>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div
-                data-testid="player-name"
-                className={cn(
-                  "truncate text-[19px] font-semibold",
-                  isWinner ? "text-[#2a1a02]" : "text-white",
-                )}
-              >
-                {playerName}
-              </div>
-              <div
-                data-testid="player-word"
-                className={cn(
-                  "mt-0.5 text-[12px] font-medium uppercase tracking-[0.12em]",
-                  isWinner
-                    ? submission.status === "submitted"
-                      ? "text-[#3d2705]"
-                      : "text-[#3d2705]"
-                    : submission.status === "submitted"
-                      ? "text-white"
-                      : "text-white",
-                )}
-              >
-                {displayWord}
-                {isCurrentPlayer ? (
-                  <span
-                    className={cn(
-                      "ml-2",
-                      isWinner ? "text-[#3d2705]" : "text-[#d8b84a]",
-                    )}
+            {/* Pot Card */}
+            {isDesktop && !didWinByFold && (
+              <div className="mt-7 flex items-center justify-between rounded-2xl border border-[rgba(212,175,55,0.35)] bg-[linear-gradient(180deg,rgba(212,175,55,0.12)_0%,rgba(0,0,0,0.3)_100%)] p-6">
+                <div>
+                  <div className="font-mono text-[9px] tracking-[1.8px] text-[rgba(232,220,192,0.6)]">
+                    POT AWARDED
+                  </div>
+                  <div
+                    data-testid="pot-amount"
+                    className="mt-0.5 font-serif text-[40px] font-semibold leading-none text-gold lg:text-[56px]"
                   >
-                    YOU
-                  </span>
-                ) : null}
-              </div>
-              {submission.status === "submitted" &&
-              submission.scoreBreakdown ? (
-                <div
-                  className={cn(
-                    "mt-1 text-[11px] tracking-[0.08em]",
-                    isWinner ? "text-[#3d2705]" : "text-white",
-                  )}
-                >
-                  Base {submission.scoreBreakdown.basePoints}
-                  {" | "}
-                  Mult {submission.scoreBreakdown.multiplierBonus}
-                  {" | "}
-                  Rack {submission.scoreBreakdown.fullRackBonus}
+                    ${pot}
+                  </div>
                 </div>
-              ) : null}
+                {winnerName && winnerWord && winnerScore != null && (
+                  <div className="text-right">
+                    <div className="font-mono text-[9px] tracking-[1.6px] text-[rgba(232,220,192,0.5)]">
+                      {winnerName.toUpperCase()}
+                    </div>
+                    <div className="font-serif text-lg font-semibold text-cream lg:text-[22px]">
+                      {winnerWord.toUpperCase()}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[10px] tracking-[1px] text-[#9ec27a]">
+                      +{winnerScore} PTS
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isDesktop && didWinByFold && (
+              <div className="mt-7 flex items-center justify-between rounded-2xl border border-[rgba(212,175,55,0.35)] bg-[linear-gradient(180deg,rgba(212,175,55,0.12)_0%,rgba(0,0,0,0.3)_100%)] p-6">
+                <div>
+                  <div className="font-mono text-[9px] tracking-[1.8px] text-[rgba(232,220,192,0.6)]">
+                    POT AWARDED
+                  </div>
+                  <div
+                    data-testid="pot-amount"
+                    className="mt-0.5 font-serif text-[40px] font-semibold leading-none text-gold lg:text-[56px]"
+                  >
+                    ${pot}
+                  </div>
+                </div>
+                {winnerName && (
+                  <div className="text-right">
+                    <div className="font-serif text-lg font-semibold text-cream lg:text-[22px]">
+                      {winnerName.toUpperCase()}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[10px] tracking-[1px] text-[#9ec27a]">
+                      WINS BY FOLD
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* CTA Buttons */}
+            <div className="mt-4 flex gap-2.5">
+              {isGuestTutorialGame ? (
+                <button
+                  type="button"
+                  onClick={onReturnToMainMenu}
+                  className="flex flex-1 items-center justify-center gap-2.5 rounded-lg border border-[#806316] bg-[linear-gradient(180deg,#f4d35e_0%,#d4af37_60%,#a8801f_100%)] px-4 py-3.5 font-body text-[13px] font-bold uppercase tracking-[1px] text-[#1a1208] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.4)]"
+                >
+                  Main Menu
+                </button>
+              ) : isOfflineGame ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={onPlayAnotherOffline}
+                    disabled={isStartingNewGame}
+                    className="flex flex-1 items-center justify-center gap-2.5 rounded-lg border border-[#806316] bg-[linear-gradient(180deg,#f4d35e_0%,#d4af37_60%,#a8801f_100%)] px-4 py-3.5 font-body text-[13px] font-bold uppercase tracking-[1px] text-[#1a1208] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.4)] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {isStartingNewGame ? "Starting..." : "Play Another"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onReturnToMainMenu}
+                    disabled={isStartingNewGame}
+                    className="rounded-lg border border-[rgba(212,175,55,0.3)] bg-transparent px-4 py-3.5 font-body text-[13px] font-semibold text-cream disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Main Menu
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={onPlayAgainOnline}
+                    disabled={isStartingPlayAgain}
+                    data-testid="play-again-button"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#806316] bg-[linear-gradient(180deg,#f4d35e_0%,#d4af37_60%,#a8801f_100%)] px-4 py-3.5 font-body text-[13px] font-bold uppercase tracking-[1px] text-[#1a1208] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.4)] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {isStartingPlayAgain ? "Starting..." : "Deal another hand"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onReturnToOnlineRooms}
+                    data-testid="lobby-button"
+                    className="rounded-lg border border-[rgba(212,175,55,0.3)] bg-transparent px-5 py-3.5 font-body text-[13px] font-semibold text-cream"
+                  >
+                    Leave table
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onReturnToMainMenu}
+                    className="rounded-lg border border-[rgba(212,175,55,0.15)] bg-transparent px-4 py-3.5 font-body text-[13px] font-semibold text-[rgba(232,220,192,0.55)]"
+                  >
+                    Menu
+                  </button>
+                </>
+              )}
             </div>
 
-            <div className="shrink-0 text-right">
-              <div
-                data-testid="player-score"
-                className={cn(
-                  "text-[32px] leading-none font-semibold",
-                  isWinner ? "text-[#2a1a02]" : "text-white",
+            {/* Timeline row */}
+            {isDesktop && (
+              <div className="mt-4.5 flex items-baseline gap-3 rounded-lg border border-[rgba(212,175,55,0.1)] bg-[rgba(0,0,0,0.25)] p-3 font-mono text-[11px]">
+                <span className="text-[rgba(232,220,192,0.35)]">NOW</span>
+                <span className="text-gold">●</span>
+                <span className="text-[rgba(232,220,192,0.55)]">
+                  {roomName.toUpperCase()}
+                </span>
+                <span className="flex-1 font-body text-cream">
+                  {winnerName && winnerWord
+                    ? `${winnerName} played ${winnerWord.toUpperCase()} · won $${pot} pot`
+                    : winnerName
+                      ? `${winnerName} won $${pot} pot`
+                      : `$${pot} pot awarded`}
+                </span>
+                {winnerScore != null && !didWinByFold && (
+                  <span className="font-serif text-sm font-semibold text-gold">
+                    +{winnerScore}
+                  </span>
                 )}
-              >
-                {submission.score}
-              </div>
-              <div
-                className={cn(
-                  "mt-1 text-[12px] uppercase tracking-[0.16em]",
-                  isWinner ? "text-black" : "text-white/42",
-                )}
-              >
-                pts
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 min-h-14">
-            {tiles.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {tiles.map((tile, index) => (
-                  <ShowdownLetterTile
-                    key={`${submission.playerId}-${index}-${tile.letter}-${tile.baseValue}`}
-                    tile={tile}
-                    isWinner={isWinner}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div
-                className={cn(
-                  "inline-flex rounded-full border px-3 py-1.5 text-[12px] uppercase tracking-[0.12em]",
-                  isWinner
-                    ? "border-[#3d2705]/18 bg-white/18 text-[#3d2705]/60"
-                    : "border-cream/45 bg-cream text-[#1f1605]",
-                )}
-              >
-                {submission.status === "forfeited"
-                  ? "Folded before showdown"
-                  : "No tiles played"}
               </div>
             )}
           </div>
         </div>
+
+        {/* ── RIGHT PANEL — Scoreboard ── */}
+        <div className="overflow-auto p-4 lg:px-12 lg:py-10">
+          <div className="mx-auto w-full max-w-[600px]">
+            <div className="flex items-baseline justify-between">
+              <div>
+                <div className="font-mono text-[10px] tracking-[2px] text-[rgba(232,220,192,0.5)]">
+                  SCOREBOARD
+                </div>
+                <div className="mt-0.5 font-serif text-[22px] font-semibold italic text-cream">
+                  How it played
+                </div>
+              </div>
+              <div className="hidden font-mono text-[10px] tracking-[1.4px] text-[rgba(232,220,192,0.5)] lg:block">
+                {playerCount} PLAYERS
+                {foldCount > 0 && ` · ${foldCount} FOLD`}
+                {wordCount > 0 &&
+                  ` · ${wordCount} WORD${wordCount !== 1 ? "S" : ""} PLAYED`}
+              </div>
+            </div>
+            {/* Mobile stats */}
+            <div className="mt-4 font-mono text-[10px] tracking-[1.4px] text-[rgba(232,220,192,0.5)] lg:hidden">
+              {playerCount} PLAYERS
+              {foldCount > 0 && ` · ${foldCount} FOLD`}
+              {wordCount > 0 &&
+                ` · ${wordCount} WORD${wordCount !== 1 ? "S" : ""} PLAYED`}
+            </div>
+            <div className="mt-4.5 flex flex-col gap-2.5 lg:mt-6">
+              {submissions.map((submission) => (
+                <ShowdownResultCard
+                  key={submission.playerId}
+                  submission={submission}
+                  isWinner={submission.playerId === showdownResults.winnerId}
+                  isCurrentPlayer={submission.playerId === playerId}
+                  playerName={
+                    submission.playerId === playerId
+                      ? getPlayerName(submission.playerId)
+                      : getPlayerName(submission.playerId)
+                  }
+                  playerInitials={getInitials(
+                    getPlayerName(submission.playerId),
+                  )}
+                  avatarColor={
+                    submissionColors.get(submission.playerId) ??
+                    PLAYER_COLORS[0]
+                  }
+                  isDesktop
+                />
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
-    </article>
+    </div>
   );
 }
 
@@ -456,7 +451,7 @@ function ScoringScreen({
   return (
     <div
       data-testid="scoring-screen"
-      className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-felt-deep px-5 py-[max(20px,env(safe-area-inset-top))] text-cream"
+      className="flex min-h-dvh items-center justify-center bg-linear-to-b from-wire to-wire-deep px-5 py-[max(20px,env(safe-area-inset-top))] text-cream"
       onClick={onContinue}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -471,7 +466,7 @@ function ScoringScreen({
         className="w-full max-w-[390px] px-1"
       >
         <motion.div
-          className="text-center font-display text-[28px] font-extrabold tracking-[0.1em] text-gold"
+          className="text-center font-serif text-[28px] font-extrabold tracking-[0.1em] text-gold"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
@@ -495,12 +490,12 @@ function ScoringScreen({
         </div>
 
         <motion.div
-          className="mt-4 rounded-[8px] bg-gold px-4 py-3 text-center text-felt-deep"
+          className="mt-4 rounded-lg bg-gold px-4 py-3 text-center text-felt-deep"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25, delay: 0.15 + rows.length * 0.15 }}
         >
-          <div className="font-display text-[32px] font-black leading-none">
+          <div className="font-serif text-[32px] font-black leading-none">
             + {submission.score}
           </div>
           <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.2em]">
@@ -521,72 +516,55 @@ function ScoringScreen({
   );
 }
 
-function ShowdownLetterTile({
-  tile,
-  isWinner,
-}: {
-  tile: SubmissionTile;
-  isWinner: boolean;
-}) {
-  const isCommunityTile = tile.source === "community";
+function generateNarrative(
+  submissions: Submission[],
+  results: ShowdownResults,
+  getPlayerName: (id: string) => string,
+  didWinByFold: boolean,
+): string {
+  if (didWinByFold) {
+    return "Everyone folded. The last player standing takes the pot uncontested.";
+  }
 
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div
-        className={cn(
-          "relative flex h-10 w-8 items-center justify-center rounded-[7px] border text-[22px] font-bold text-[#26190a] shadow-[0_6px_14px_rgba(0,0,0,0.25)]",
-          isCommunityTile
-            ? "border-[#e0bc4a] bg-[linear-gradient(180deg,#fff2c1_0%,#efd88f_100%)] shadow-[0_0_0_1px_rgba(238,206,99,0.28),0_0_10px_rgba(238,206,99,0.45)]"
-            : "border-[#d1b06a]/70 bg-[linear-gradient(180deg,#f7e8c3_0%,#e8d3a2_100%)]",
-        )}
-      >
-        {tile.letter.toUpperCase()}
-        {tile.multiplier ? (
-          <span
-            className={`absolute left-0.5 top-0.5 rounded-[3px] px-0.5 text-[6px] font-black leading-none ${
-              tile.multiplier === "3L"
-                ? "bg-[#f1f5f9] text-[#111827]"
-                : "bg-[#f3d66f] text-[#2b1800]"
-            }`}
-          >
-            {tile.multiplier}
-          </span>
-        ) : null}
-        {tile.wasChoice ? (
-          <span className="absolute right-0.5 top-0.5 rounded-[3px] bg-[#d7af32] px-0.5 text-[6px] font-black leading-none text-[#2b1800]">
-            ?
-          </span>
-        ) : null}
-      </div>
-      <span
-        className={cn(
-          "text-[10px] font-medium leading-none",
-          isWinner ? "text-[#3d2705]/68" : "text-[#d7c58d]",
-        )}
-      >
-        {tile.baseValue}
-      </span>
-    </div>
+  if (!results.hasWinner || !results.winnerId) {
+    return "No winning word was played.";
+  }
+
+  const winnerSub = submissions.find((s) => s.playerId === results.winnerId);
+  if (!winnerSub || !winnerSub.word) {
+    return "The pot was awarded without a word being played.";
+  }
+
+  const word = winnerSub.word.toUpperCase();
+  const score = winnerSub.score;
+
+  const multiplierTiles = winnerSub.tiles?.filter((t) => t.multiplier) ?? [];
+  const multiplierNote =
+    multiplierTiles.length > 0
+      ? multiplierTiles
+          .map((t) => `a doubled ${t.letter.toUpperCase()}`)
+          .join(" on ")
+      : null;
+
+  const otherSubmissions = submissions.filter(
+    (s) => s.playerId !== results.winnerId && s.status === "submitted",
   );
+  const runnerUp = otherSubmissions[0];
+  const comparison =
+    runnerUp && runnerUp.word
+      ? `, ${score - runnerUp.score} above ${getPlayerName(runnerUp.playerId)}'s ${runnerUp.word.toUpperCase()}`
+      : "";
+
+  const multiplierPrefix = multiplierNote ? ` — ${multiplierNote}` : "";
+
+  return `${word} clears the field at ${score}${multiplierPrefix}${comparison}.`;
 }
 
-function getDisplayTiles(submission: Submission) {
-  if (submission.tiles && submission.tiles.length > 0) {
-    return submission.tiles;
-  }
-
-  if (!submission.word) {
-    return [];
-  }
-
-  return submission.word.split("").map((letter) => ({
-    letter,
-    baseValue: getLetterValue(letter) ?? 1,
-    source: "hand" as const,
-  }));
-}
-
-function getInitials(name: string) {
+function getInitials(name: string): string {
   const trimmed = name.replace(/\s+\(you\)$/i, "").trim();
-  return trimmed[0]?.toUpperCase() ?? "?";
+  const parts = trimmed.split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return (trimmed[0] ?? "?").toUpperCase();
 }

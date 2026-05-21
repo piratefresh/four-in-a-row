@@ -8,17 +8,37 @@ type SeatStatus = {
 };
 
 const SEAT_STATUS: Record<string, SeatStatus> = {
-  waiting: { color: "#9ec27a", border: "rgba(158,194,122,0.33)", label: "WAITING" },
+  waiting: {
+    color: "#9ec27a",
+    border: "rgba(158,194,122,0.33)",
+    label: "WAITING",
+  },
   yourturn: { color: "#d4af37", border: "#806316", label: "YOUR TURN" },
   call: { color: "#7ec4cf", border: "rgba(126,196,207,0.45)", label: "CALL" },
   called: { color: "#7ec4cf", border: "rgba(126,196,207,0.45)", label: "CALL" },
   raise: { color: "#e6b450", border: "rgba(230,180,80,0.45)", label: "RAISE" },
   raised: { color: "#e6b450", border: "rgba(230,180,80,0.45)", label: "RAISE" },
   check: { color: "#9ec27a", border: "rgba(158,194,122,0.33)", label: "CHECK" },
-  checked: { color: "#9ec27a", border: "rgba(158,194,122,0.33)", label: "CHECK" },
-  fold: { color: "rgba(232,220,192,0.45)", border: "rgba(232,220,192,0.24)", label: "FOLD" },
-  folded: { color: "rgba(232,220,192,0.45)", border: "rgba(232,220,192,0.24)", label: "FOLD" },
-  thinking: { color: "#d4af37", border: "rgba(212,175,55,0.45)", label: "THINKING..." },
+  checked: {
+    color: "#9ec27a",
+    border: "rgba(158,194,122,0.33)",
+    label: "CHECK",
+  },
+  fold: {
+    color: "rgba(232,220,192,0.45)",
+    border: "rgba(232,220,192,0.24)",
+    label: "FOLD",
+  },
+  folded: {
+    color: "rgba(232,220,192,0.45)",
+    border: "rgba(232,220,192,0.24)",
+    label: "FOLD",
+  },
+  thinking: {
+    color: "#d4af37",
+    border: "rgba(212,175,55,0.45)",
+    label: "THINKING...",
+  },
   winner: { color: "#f7df7a", border: "#806316", label: "WINNER" },
 };
 
@@ -48,6 +68,7 @@ type SeatProps = {
   isThinking?: boolean;
   mobileInfoPlacement?: "top" | "bottom";
   infoLayout?: "card" | "compact";
+  variant?: "default" | "mobile";
 };
 
 function getInitials(name: string) {
@@ -101,13 +122,22 @@ function normalizeStatus({
   isActiveTurn,
   isCurrentPlayer,
   isThinking,
-}: Pick<SeatProps, "actionLabel" | "isActiveTurn" | "isCurrentPlayer" | "isThinking">) {
+}: Pick<
+  SeatProps,
+  "actionLabel" | "isActiveTurn" | "isCurrentPlayer" | "isThinking"
+>) {
   if (isCurrentPlayer && isActiveTurn) return "yourturn";
   if (isThinking || isActiveTurn) return "thinking";
   return actionLabel?.toLowerCase().replace(/\s+/g, "") || "waiting";
 }
 
-function SeatChip({ amount, className }: { amount: number; className?: string }) {
+function SeatChip({
+  amount,
+  className,
+}: {
+  amount: number;
+  className?: string;
+}) {
   return (
     <div
       className={cn(
@@ -140,6 +170,7 @@ export function Seat({
   className = "",
   blindPosition,
   isThinking = false,
+  variant = "default",
 }: SeatProps) {
   const statusKey = normalizeStatus({
     actionLabel,
@@ -158,6 +189,7 @@ export function Seat({
     <div
       className={cn(
         "relative flex flex-col items-center",
+        variant === "mobile" && "w-[112px]",
         isFolded && "opacity-50",
         className,
       )}
@@ -206,9 +238,9 @@ export function Seat({
             isWinner
               ? "shadow-[0_0_0_3px_#0c2620,0_0_0_6px_#f7df7a,0_0_44px_rgba(244,211,94,0.7)] motion-safe:animate-[winner-burst_1.1s_cubic-bezier(0.34,1.56,0.64,1)_both]"
               : isActiveTurn
-                ? "shadow-[0_0_0_3px_#0c2620,0_0_0_5px_#d4af37,0_0_22px_rgba(212,175,55,0.35)] motion-safe:animate-[seat-breathe_1.6s_ease-in-out_infinite]"
+                ? "shadow-[0_0_0_3px_#0c2620,0_0_0_5px_#d4af37,0_0_22px_rgba(212,175,55,0.35)] animate-seat-breathe"
                 : "shadow-[0_0_0_3px_#0c2620,0_4px_10px_rgba(0,0,0,0.5)]",
-            avatarSizeClass,
+            variant === "mobile" ? "h-9 w-9" : avatarSizeClass,
           )}
         >
           <AvatarImage src={avatarUrl ?? undefined} alt={`${name} avatar`} />
@@ -216,7 +248,7 @@ export function Seat({
             className={cn(
               "font-sans font-extrabold text-[#0c1410]",
               getAvatarColor(name, personality),
-              initialsClass,
+              variant === "mobile" ? "text-[12px]" : initialsClass,
             )}
           >
             {getInitials(name)}
@@ -225,27 +257,55 @@ export function Seat({
       </div>
 
       <div
-        className="mt-2 max-w-36 truncate text-center font-mono text-[10px] font-semibold uppercase leading-none tracking-[1.4px] text-[#f4e4c1]"
+        className={cn(
+          "mt-2 max-w-36 truncate text-center font-mono font-semibold uppercase leading-none text-[#f4e4c1]",
+          variant === "mobile"
+            ? "mt-1.5 max-w-[124px] text-[8px] tracking-[0.16em]"
+            : "text-[10px] tracking-[1.4px]",
+        )}
       >
         {name}
         {personality ? (
           <span className="ml-1 text-[#d4af37]/70">({personality})</span>
         ) : null}
-        {isCurrentPlayer ? <span className="text-[#d4af37]"> / YOU</span> : null}
+        {isCurrentPlayer ? (
+          <span className="text-[#d4af37]"> · YOU</span>
+        ) : null}
       </div>
 
       <div
-        className="mt-1.5 rounded px-2.5 py-[3px] font-mono text-[9px] font-semibold uppercase leading-none tracking-[1.4px] transition-colors duration-200"
+        className={cn(
+          "mt-1.5 rounded font-mono font-semibold uppercase leading-none transition-colors duration-200",
+          variant === "mobile"
+            ? "mt-1 max-w-[74px] truncate px-1.5 py-[3px] text-[7px] tracking-[0.16em]"
+            : "px-2.5 py-[3px] text-[9px] tracking-[1.4px]",
+        )}
         style={{
-          background: isWinner ? "#f7df7a" : isCurrentPlayer && isActiveTurn ? "#d4af37" : "rgba(0,0,0,0.4)",
+          background: isWinner
+            ? "#f7df7a"
+            : isCurrentPlayer && isActiveTurn
+              ? "#d4af37"
+              : "rgba(0,0,0,0.4)",
           border: `1px solid ${isWinner || (isCurrentPlayer && isActiveTurn) ? "#806316" : status.border}`,
-          color: isWinner || (isCurrentPlayer && isActiveTurn) ? "#1a1208" : status.color,
+          color:
+            isWinner || (isCurrentPlayer && isActiveTurn)
+              ? "#1a1208"
+              : status.color,
         }}
       >
-        {isWinner ? "WINNER" : isCurrentPlayer && isActiveTurn ? "YOUR TURN" : status.label}
+        {isWinner
+          ? "WINNER"
+          : isCurrentPlayer && isActiveTurn
+            ? "YOUR TURN"
+            : status.label}
       </div>
 
-      <div className="mt-[5px] font-serif text-[13px] font-semibold leading-none text-[#d4af37]">
+      <div
+        className={cn(
+          "mt-[5px] font-serif font-semibold leading-none text-[#d4af37]",
+          variant === "mobile" ? "mt-1 text-[12px]" : "text-[13px]",
+        )}
+      >
         ${chips.toLocaleString()}
       </div>
 

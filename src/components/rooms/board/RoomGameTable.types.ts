@@ -40,6 +40,12 @@ export type RoomGameChatMessage = {
   isCurrentPlayer?: boolean;
 };
 
+export type RoomHandLogEntry = {
+  id: string;
+  message: string;
+  tone: "play" | "call" | "raise" | "fold" | "pot" | "turn" | "showdown";
+};
+
 export type RoomGameTableProps = {
   gameId: Id<"games">;
   activePlayerId?: string;
@@ -61,6 +67,7 @@ export type RoomGameTableProps = {
   chatMessages?: RoomGameChatMessage[];
   onChatDraftChange?: (message: string) => void;
   onSendChatMessage?: (message: string) => void | Promise<void>;
+  onHandLogEntriesChange?: (entries: RoomHandLogEntry[]) => void;
   tutorialReplayControl?: ReactNode;
 };
 

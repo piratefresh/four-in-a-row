@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useNextStep } from "nextstepjs";
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/lib/tutorial-guest";
 import { dismissRoomRejoin } from "@/lib/room-rejoin-dismissal";
 import { FIRST_BOT_GAME_TOUR } from "@/components/onboarding/wordPokerTours";
+import type { RoomHandLogEntry } from "@/components/rooms/board/RoomGameTable.types";
 
 type RoomSearch = {
   tutorial?: "intro" | "restart";
@@ -40,8 +41,7 @@ export const Route = createFileRoute("/rooms/$code")({
       search.tutorial === "intro" || search.tutorial === "restart"
         ? search.tutorial
         : undefined,
-    pause:
-      typeof search.pause === "string" ? search.pause : undefined,
+    pause: typeof search.pause === "string" ? search.pause : undefined,
   }),
   head: ({ params }) => {
     const roomCode = params.code.toUpperCase();
@@ -69,6 +69,27 @@ function RoomDetailsPage() {
   const forcedTutorialReplay =
     search.tutorial === "intro" || search.tutorial === "restart";
   const [isDesktopChatVisible, setIsDesktopChatVisible] = useState(false);
+  const [handLogEntries, setHandLogEntries] = useState<RoomHandLogEntry[]>([]);
+  const updateHandLogEntries = useCallback((entries: RoomHandLogEntry[]) => {
+    setHandLogEntries((currentEntries) => {
+      if (
+        currentEntries.length === entries.length &&
+        currentEntries.every((entry, index) => {
+          const nextEntry = entries[index];
+          return (
+            nextEntry &&
+            entry.id === nextEntry.id &&
+            entry.message === nextEntry.message &&
+            entry.tone === nextEntry.tone
+          );
+        })
+      ) {
+        return currentEntries;
+      }
+
+      return entries;
+    });
+  }, []);
 
   const {
     session,
@@ -168,9 +189,7 @@ function RoomDetailsPage() {
       myPlayerId: myPlayer?._id ?? null,
       gameStatus: game?.status ?? null,
       gameStage: game?.stage ?? null,
-      guest: describeTutorialGuestIdForDebug(
-        getTutorialGuestId(),
-      ),
+      guest: describeTutorialGuestIdForDebug(getTutorialGuestId()),
     });
   }, [
     code,
@@ -305,6 +324,7 @@ function RoomDetailsPage() {
                 chatMessages={chat.messages}
                 onChatDraftChange={chat.setDraftMessage}
                 onSendChatMessage={chat.sendMessage}
+                onHandLogEntriesChange={updateHandLogEntries}
                 tutorialReplayControl={tutorialAdapter.replayButton}
               />
             </div>
@@ -313,7 +333,7 @@ function RoomDetailsPage() {
 
         {!tutorialAdapter.isTutorialRoom && !isDesktopChatVisible && (
           <>
-            <div className="fixed bottom-6 right-6 z-30">
+            <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+10rem)] right-2 z-30 sm:bottom-6 sm:right-6">
               <ChatToggleButton
                 onClick={chat.toggleChat}
                 unreadCount={chat.unreadCount}
@@ -324,6 +344,8 @@ function RoomDetailsPage() {
               isOpen={chat.isOpen}
               onClose={chat.closeChat}
               messages={chat.messages}
+              handLogEntries={handLogEntries}
+              roomCode={code}
               draftMessage={chat.draftMessage}
               onDraftMessageChange={chat.setDraftMessage}
               onSendMessage={chat.sendMessage}

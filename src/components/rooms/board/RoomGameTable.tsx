@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type FormEvent } from "react";
+import { useEffect, useMemo, type FormEvent, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -20,11 +20,7 @@ import { RoomCommunityStrip } from "./RoomCommunityStrip";
 import { RoomHelpMenu } from "./RoomHelpMenu";
 import { RoomHelperTipTrigger } from "@/components/onboarding/RoomHelperTipTrigger";
 import { PlayerHand } from "./PlayerHand";
-import {
-  RoomOpponentLayer,
-  getOpponentPosition,
-  getPhase1OpponentPosition,
-} from "./RoomOpponentLayer";
+import { RoomOpponentLayer, getOpponentPosition } from "./RoomOpponentLayer";
 import { RoomTable } from "./RoomTable";
 import type { BuilderTile, RoomGameTableProps } from "./RoomGameTable.types";
 import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "./roomBoardLayout";
@@ -33,11 +29,9 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
 import { useTutorialAdapterContext } from "../tutorial/TutorialAdapter";
 import type { WordTileSize } from "../table/word-tile-v2";
-import {
-  IN_GAME_HELPER_STEPS,
-} from "@/components/onboarding/wordPokerTours";
+import { IN_GAME_HELPER_STEPS } from "@/components/onboarding/wordPokerTours";
 import { buildRoomHandLog } from "./roomHandLog";
-import type { RoomHandLogEntry } from "./roomHandLog";
+import type { RoomHandLogEntry } from "./RoomGameTable.types";
 import { getVisibleOpponents } from "./roomOpponentVisibility";
 
 type SortableBuilderTileProps = {
@@ -126,6 +120,19 @@ const BET_POSITION_CLASS: Record<"top" | "left" | "right" | "bottom", string> =
       "left-[57%] top-[72%] -translate-x-1/2 -translate-y-1/2 sm:left-[57%] sm:top-[71%]",
   };
 
+const MOBILE_BET_POSITION_CLASS: Record<
+  "top" | "left" | "right" | "bottom",
+  string
+> = {
+  top: "left-1/2 top-[28%] -translate-x-1/2 -translate-y-1/2",
+  left: "left-[18%] top-[50%] -translate-x-1/2 -translate-y-1/2",
+  right: "left-[82%] top-[50%] -translate-x-1/2 -translate-y-1/2",
+  bottom: "left-1/2 top-[70%] -translate-x-1/2 -translate-y-1/2",
+};
+
+const MOBILE_BOTTOM_BADGE_POSITION_CLASS =
+  "absolute bottom-[-44px] left-1/2 z-40 -translate-x-1/2";
+
 function formatPlayerActionLabel(
   lastAction?: "check" | "call" | "raise" | "fold",
 ) {
@@ -208,6 +215,122 @@ function getMoreTilesLabel(
   return `${remaining} more tiles to come`;
 }
 
+type RoomMobileGameTableProps = {
+  tutorialReplayControl?: ReactNode;
+  gameStage: RoomGameTableProps["gameStage"];
+  isMyTurn: boolean;
+  turnClockTimeRemaining: number | null;
+  communityTiles: RoomGameTableProps["communityTiles"];
+  isPhase0: boolean;
+  isPhase1: boolean;
+  revealedCommunityCount: number;
+  communityHelperTip: ReactNode;
+  centerStage: ReactNode;
+  hiddenPhase0Builder: ReactNode;
+  rackBuilder: ReactNode;
+  raiseSlider: ReactNode;
+  readyControls: ReactNode;
+  actionControls: ReactNode;
+  bestWordLabel: string;
+  rackScoreLabel: string;
+};
+
+function RoomMobileGameTable({
+  tutorialReplayControl,
+  gameStage,
+  isMyTurn,
+  turnClockTimeRemaining,
+  communityTiles,
+  isPhase0,
+  isPhase1,
+  revealedCommunityCount,
+  communityHelperTip,
+  centerStage,
+  hiddenPhase0Builder,
+  rackBuilder,
+  raiseSlider,
+  readyControls,
+  actionControls,
+  bestWordLabel,
+  rackScoreLabel,
+}: RoomMobileGameTableProps) {
+  const secondsRemaining =
+    turnClockTimeRemaining == null
+      ? null
+      : Math.max(0, Math.ceil(turnClockTimeRemaining / 1000));
+
+  return (
+    <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(ellipse_at_50%_38%,rgba(20,82,63,0.42),transparent_48%),linear-gradient(180deg,#0a1d17_0%,#051410_100%)] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      {tutorialReplayControl ? (
+        <div className="px-4 pb-2 pt-3">{tutorialReplayControl}</div>
+      ) : null}
+
+      <div className="border-b border-[#d4af37]/20 px-4 pb-3 pt-4 text-center hidden sm:block">
+        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.38em] text-[#d4af37]">
+          Phase{" "}
+          {gameStage === "showdown"
+            ? 6
+            : gameStage === "final"
+              ? 5
+              : gameStage === "river"
+                ? 4
+                : gameStage === "turn"
+                  ? 3
+                  : gameStage === "flop"
+                    ? 2
+                    : 1}{" "}
+          <span className="text-[#d4af37]/70">{"\u00b7"}</span>{" "}
+          {formatStageLabel(gameStage)}
+        </div>
+        <div className="mt-1 font-mono text-[32px] font-semibold leading-none tracking-[0.08em] text-[#9ec27a] motion-safe:animate-[timer-pulse_1s_ease-in-out_infinite]">
+          {secondsRemaining == null
+            ? "--:--"
+            : `00:${secondsRemaining.toString().padStart(2, "0")}`}
+        </div>
+        <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.2em] text-[#e8dcc0]/45">
+          {isMyTurn ? "Your turn" : "Watching"}
+        </div>
+      </div>
+
+      <div className="border-b border-dashed border-[#d4af37]/15 px-3 py-1.5">
+        <div className="mb-1 text-center font-mono text-[8px] uppercase tracking-[0.24em] text-[#d4af37]">
+          Community <span className="text-[#d4af37]/65">{"\u00b7"}</span>{" "}
+          {revealedCommunityCount}/5
+        </div>
+        <RoomCommunityStrip
+          tiles={communityTiles}
+          hidden={isPhase0 || isPhase1}
+          tileSize="xs"
+          helperTip={communityHelperTip}
+          showLabel={false}
+          dense
+        />
+      </div>
+
+      <div className="relative flex min-h-[238px] flex-1 items-center justify-center overflow-visible px-2 pb-4 pt-10 xs:min-h-[270px] xs:pt-12 [@media(max-height:760px)]:min-h-[206px] [@media(max-height:760px)]:pb-2 [@media(max-height:760px)]:pt-8">
+        {centerStage}
+      </div>
+
+      <div className="px-3 pb-0.5 text-center">
+        <div className="truncate font-serif text-[28px] font-bold italic leading-none text-[#f4e4c1] motion-safe:animate-[word-morph_0.55s_cubic-bezier(0.34,1.4,0.64,1)_both] [@media(max-height:760px)]:text-[26px]">
+          {bestWordLabel}
+          <span className="ml-2 font-mono text-[18px] not-italic text-[#d4af37]">
+            {rackScoreLabel}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex flex-none flex-col items-center gap-0 px-3 pt-1 sm:gap-1.5">
+        {hiddenPhase0Builder}
+        {rackBuilder}
+        {raiseSlider}
+        {readyControls}
+        {actionControls}
+      </div>
+    </main>
+  );
+}
+
 export function RoomGameTable({
   gameId,
   activePlayerId,
@@ -229,6 +352,7 @@ export function RoomGameTable({
   chatMessages = [],
   onChatDraftChange,
   onSendChatMessage,
+  onHandLogEntriesChange,
   tutorialReplayControl,
 }: RoomGameTableProps) {
   const tutorial = useTutorialAdapterContext();
@@ -265,6 +389,7 @@ export function RoomGameTable({
     onRaise,
     onFold,
     onRaiseAmountChange,
+    onLeaveRoom,
     callLabel,
     callAmount,
     raiseLabel,
@@ -290,6 +415,7 @@ export function RoomGameTable({
   const isMediumViewport = useMediaQuery("(min-width: 768px)");
   const isDesktopTable = useMediaQuery("(min-width: 1280px)");
   const boardTileSize: WordTileSize = isMediumViewport ? "md" : "sm";
+  const rackTileSize: WordTileSize = isDesktopTable ? boardTileSize : "xs";
 
   const orderedHands = useMemo(() => {
     if (!bottomPlayerId || hands.length === 0) return hands;
@@ -320,7 +446,7 @@ export function RoomGameTable({
     [bottomHand, orderedHands],
   );
   const visibleOpponents = useMemo(
-    () => getVisibleOpponents(opponents),
+    () => getVisibleOpponents(opponents, { includeFolded: true }),
     [opponents],
   );
 
@@ -351,7 +477,9 @@ export function RoomGameTable({
     communityTiles,
   });
 
-  const normalizedWordPreview = wordPreview.replace(/[^a-z]/gi, "").toUpperCase();
+  const normalizedWordPreview = wordPreview
+    .replace(/[^a-z]/gi, "")
+    .toUpperCase();
   const normalizedActiveBuilderWord = useMemo(
     () =>
       builderTiles
@@ -399,8 +527,9 @@ export function RoomGameTable({
     );
   }, [bottomHand?.tiles, communityTiles]);
 
-  const boardPhase: "phase0" | RoomGameTableProps["gameStage"] =
-    showReadyButton ? "phase0" : gameStage;
+  const boardPhase: "phase0" | RoomGameTableProps["gameStage"] = showReadyButton
+    ? "phase0"
+    : gameStage;
   const isPhase0 = boardPhase === "phase0";
   const isPhase1 = boardPhase === "preflop";
   const canRevealSubmittedWords = false;
@@ -491,6 +620,10 @@ export function RoomGameTable({
       smallBlindIndex,
     ],
   );
+  useEffect(() => {
+    onHandLogEntriesChange?.(handLogEntries);
+  }, [handLogEntries, onHandLogEntriesChange]);
+
   const recentChatMessages = chatMessages.slice(-3);
   const showRailChat = Boolean(onChatDraftChange && onSendChatMessage);
   const handleChatSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -501,14 +634,14 @@ export function RoomGameTable({
   };
   const bestWordLabel = mySubmission?.word
     ? mySubmission.word.toUpperCase()
-    : builtWord || "No word yet";
+    : builtWord || "-";
   const rackScoreLabel =
     currentRackScore === null ? "--" : `${currentRackScore}pts`;
   const tableStage = (
     <div
       id="tutorial-room-table"
       className={`relative flex items-center justify-center ${
-        isDesktopTable ? "" : "w-[min(320px,calc(100vw-42px))]"
+        isDesktopTable ? "" : "w-full overflow-visible"
       }`}
     >
       <RoomTable
@@ -518,7 +651,10 @@ export function RoomGameTable({
         opponentBets={opponentBets}
         bottomBet={bottomHand.betThisRound ?? 0}
         bottomBetOwnerName={myName}
-        betPositionClass={BET_POSITION_CLASS}
+        betPositionClass={
+          isDesktopTable ? BET_POSITION_CLASS : MOBILE_BET_POSITION_CLASS
+        }
+        variant={isDesktopTable ? "desktop" : "mobile"}
       />
       <RoomOpponentLayer
         opponents={visibleOpponents}
@@ -532,8 +668,15 @@ export function RoomGameTable({
         gameStage={gameStage}
         currentPlayerHasSubmitted={!!mySubmission}
         canRevealSubmittedWords={canRevealSubmittedWords}
+        variant={isDesktopTable ? "desktop" : "mobile"}
       />
-      <div className={ROOM_BOTTOM_BADGE_POSITION_CLASS}>
+      <div
+        className={
+          isDesktopTable
+            ? ROOM_BOTTOM_BADGE_POSITION_CLASS
+            : MOBILE_BOTTOM_BADGE_POSITION_CLASS
+        }
+      >
         <Seat
           name={myName}
           avatarUrl={getPlayerAvatar(bottomHand.playerId)}
@@ -542,20 +685,19 @@ export function RoomGameTable({
           actionLabel={formatPlayerActionLabel(bottomHand.lastAction)}
           chatBubbleMessage={activeChatDraft}
           urgentBubbleMessage={
-            showTurnUrgencyBubble
-              ? "Time is running out. Make a move."
-              : null
+            showTurnUrgencyBubble ? "Time is running out. Make a move." : null
           }
           isActiveTurn={currentTurnPlayerId === bottomHand.playerId}
           isCurrentPlayer
           blindPosition={getBlindPosition(bottomHand.playerId)}
           avatarSizeClass={
-            isDesktopTable ? "h-14 w-14" : "h-10 w-10 xs:h-11 xs:w-11"
+            isDesktopTable ? "h-14 w-14" : "h-12 w-12 xs:h-14 xs:w-14"
           }
-          initialsClass={isDesktopTable ? "text-[12px]" : "text-[9px]"}
+          initialsClass={isDesktopTable ? "text-[12px]" : "text-[14px]"}
           betClassName="left-auto right-0 translate-x-1/4"
           mobileInfoPlacement="top"
           infoLayout="compact"
+          variant={isDesktopTable ? "default" : "mobile"}
         />
       </div>
     </div>
@@ -604,11 +746,12 @@ export function RoomGameTable({
       gameStage={gameStage}
       isShowdownSubmissionOpen={isShowdownSubmissionOpen}
       handleSubmitWord={handleSubmitWord}
-      onShuffleTiles={
-        showInlineBottomPanelShuffle ? handleShuffleTilesClick : undefined
-      }
-      disableShuffle={showInlineBottomPanelShuffle ? isValidating : undefined}
-      tileSize={boardTileSize}
+      onShuffleTiles={showShuffleControl ? handleShuffleTilesClick : undefined}
+      disableShuffle={showShuffleControl ? isValidating : undefined}
+      tileSize={rackTileSize}
+      className={isDesktopTable ? "w-full sm:w-full" : undefined}
+      showWordPreview={isDesktopTable}
+      variant={isDesktopTable ? "default" : "mobile"}
       renderBuilderTile={(tile) => (
         <SortableBuilderTile
           tile={tile}
@@ -616,7 +759,7 @@ export function RoomGameTable({
             handleToggleDisabled(tileId);
           }}
           selectedLetter={choiceSelections[tile.id]}
-          tileSize={boardTileSize}
+          tileSize={rackTileSize}
         />
       )}
       hasFolded={hasBottomPlayerFolded}
@@ -625,15 +768,20 @@ export function RoomGameTable({
   ) : null;
 
   const raiseSlider = showTableRaiseSlider ? (
-    <div className="w-full max-w-[42rem] px-3 sm:px-4">
-      <RaiseAmountSlider
-        value={raiseAmount}
-        options={raiseOptions}
-        callAmount={callAmount}
-        disabled={isBetting || !isMyTurn}
-        onChange={(amount) => onRaiseAmountChange?.(amount)}
-        orientation="horizontal"
-      />
+    <div className="flex w-full max-w-[42rem] items-center gap-2 px-3 sm:px-4">
+      <div className="min-w-0 flex-1">
+        <RaiseAmountSlider
+          value={raiseAmount}
+          options={raiseOptions}
+          callAmount={callAmount}
+          disabled={isBetting || !isMyTurn}
+          onChange={(amount) => onRaiseAmountChange?.(amount)}
+          orientation="horizontal"
+        />
+      </div>
+      {!isDesktopTable ? (
+        <div className="shrink-0">{actionsHelperTip}</div>
+      ) : null}
     </div>
   ) : null;
 
@@ -654,9 +802,16 @@ export function RoomGameTable({
 
   const actionControls =
     !isPhase0 &&
-    ((showBettingControls && !hasBottomPlayerFolded) ||
-      (showShuffleControl && !showInlineBottomPanelShuffle)) ? (
+    (hasBottomPlayerFolded ||
+      (showBettingControls && !hasBottomPlayerFolded)) ? (
       <RoomActionControls
+        folded={
+          hasBottomPlayerFolded
+            ? {
+                onLeaveRoom,
+              }
+            : undefined
+        }
         betting={
           showBettingControls && !hasBottomPlayerFolded
             ? {
@@ -680,15 +835,9 @@ export function RoomGameTable({
               }
             : undefined
         }
-        utility={
-          showShuffleControl && !showInlineBottomPanelShuffle
-            ? {
-                onShuffleTiles: handleShuffleTilesClick,
-                disableShuffle: isValidating,
-              }
-            : undefined
+        helperTip={
+          isDesktopTable || !showTableRaiseSlider ? actionsHelperTip : null
         }
-        helperTip={actionsHelperTip}
       />
     ) : null;
 
@@ -703,23 +852,22 @@ export function RoomGameTable({
       }}
     >
       <div className="relative grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-[#06130f] font-serif text-[#f1eee7] xl:grid-cols-[minmax(0,1fr)_360px] [@media(max-height:460px)]:min-h-0">
-        <div className="absolute right-3 top-3 z-40 sm:right-4 sm:top-4">
+        <div className="absolute right-3 top-3 z-40 hidden sm:right-4 sm:top-4 xl:block">
           <RoomHelpMenu />
         </div>
         {isDesktopTable ? (
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(ellipse_at_50%_20%,rgba(20,82,63,0.45),rgba(5,20,16,0.96)_62%)]">
-            {tutorialReplayControl ? (
-              <div className="px-4 pb-2 pt-3">{tutorialReplayControl}</div>
-            ) : null}
             <div className="border-b border-dashed border-[#d4af37]/20 bg-black/20 px-9 py-4 shadow-[0_12px_40px_rgba(0,0,0,0.18)]">
-              <div className="mb-2 flex items-end justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-[#d4af37]">
                     Community letters / {communityProgressLabel}
                   </div>
-                  <div className="mt-0.5 font-serif text-[18px] italic text-[#f4e4c1]">
-                    The shared rack
-                  </div>
+                  {tutorialReplayControl ? (
+                    <div className="px-4 pb-2 pt-3">
+                      {tutorialReplayControl}
+                    </div>
+                  ) : null}
                 </div>
                 <RoomCommunityStrip
                   tiles={communityTiles}
@@ -748,7 +896,7 @@ export function RoomGameTable({
                     avatarUrl: getPlayerAvatar(hand.playerId),
                     chips: hand.chips ?? 0,
                     bet: hand.betThisRound ?? 0,
-                    position: getPhase1OpponentPosition(
+                    position: getOpponentPosition(
                       opponentIndex,
                       visibleOpponents.length,
                     ),
@@ -759,14 +907,15 @@ export function RoomGameTable({
                     chips: bottomHand.chips ?? 0,
                     bet: bottomHand.betThisRound ?? 0,
                   }}
+                  variant="desktop"
                 />
               ) : (
                 tableStage
               )}
             </div>
 
-            <div className="grid flex-none grid-cols-[minmax(260px,auto)_minmax(180px,1fr)_minmax(320px,auto)] items-center gap-7 border-t border-[#d4af37]/20 bg-[linear-gradient(180deg,rgba(0,0,0,0.22),rgba(0,0,0,0.48))] px-7 py-5">
-              <div className="min-w-0">
+            <div className="grid flex-none grid-cols-[minmax(0,1fr)_minmax(180px,auto)_minmax(0,1fr)] items-center gap-7 border-t border-[#d4af37]/20 bg-[linear-gradient(180deg,rgba(0,0,0,0.22),rgba(0,0,0,0.48))] px-7 py-5">
+              <div className="min-w-0 justify-self-start">
                 <div className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-[#d4af37]">
                   Your rack / 2 hole + {visibleCommunityCount} shared
                 </div>
@@ -775,7 +924,9 @@ export function RoomGameTable({
               </div>
               <div className="min-w-0 text-center">
                 <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#e8dcc0]/50">
-                  {gameStage === "showdown" ? "Final word" : "Best word so far"}
+                  {gameStage === "showdown"
+                    ? "Final word"
+                    : "Select letters to preview"}
                 </div>
                 <div className="mt-1 truncate font-serif text-[26px] font-semibold italic text-[#f4e4c1]">
                   {bestWordLabel}
@@ -787,7 +938,7 @@ export function RoomGameTable({
                   {getMoreTilesLabel(gameStage, revealedCommunityCount)}
                 </div>
               </div>
-              <div className="flex min-w-0 flex-col items-center gap-3">
+              <div className="flex min-w-0 max-w-[42rem] flex-col items-center gap-3 justify-self-end">
                 {raiseSlider}
                 {readyControls}
                 {actionControls}
@@ -795,36 +946,18 @@ export function RoomGameTable({
             </div>
           </main>
         ) : (
-          <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,#0a1d17_0%,#051410_100%)] pb-[max(1rem,env(safe-area-inset-bottom))]">
-            {tutorialReplayControl ? (
-              <div className="px-4 pb-2 pt-3">{tutorialReplayControl}</div>
-            ) : null}
-            <div className="border-b border-[#d4af37]/20 px-3 py-2 text-center">
-              <div className="font-mono text-[8px] font-semibold uppercase tracking-[0.18em] text-[#d4af37]">
-                {formatStageLabel(gameStage)} / {isMyTurn ? "Your turn" : "Watching"}
-              </div>
-              <div className="mt-1 font-mono text-[18px] font-semibold tracking-[0.08em] text-[#9ec27a]">
-                {turnClockTimeRemaining == null
-                  ? "--:--"
-                  : `00:${Math.max(0, Math.ceil(turnClockTimeRemaining / 1000))
-                      .toString()
-                      .padStart(2, "0")}`}
-              </div>
-            </div>
-            <div className="border-b border-dashed border-[#d4af37]/15 px-3 py-3">
-              <div className="mb-2 text-center font-mono text-[8px] uppercase tracking-[0.18em] text-[#d4af37]">
-                Community / {revealedCommunityCount}/5
-              </div>
-              <RoomCommunityStrip
-                tiles={communityTiles}
-                hidden={isPhase0 || isPhase1}
-                tileSize="sm"
-                helperTip={communityHelperTip}
-                showLabel={false}
-              />
-            </div>
-            <div className="relative flex min-h-0 flex-1 items-center justify-center px-3 py-4">
-              {isPhase0 ? (
+          <RoomMobileGameTable
+            tutorialReplayControl={tutorialReplayControl}
+            gameStage={gameStage}
+            isMyTurn={isMyTurn}
+            turnClockTimeRemaining={turnClockTimeRemaining}
+            communityTiles={communityTiles}
+            isPhase0={isPhase0}
+            isPhase1={isPhase1}
+            revealedCommunityCount={revealedCommunityCount}
+            communityHelperTip={communityHelperTip}
+            centerStage={
+              isPhase0 ? (
                 <BlankRoomPhase
                   opponents={visibleOpponents.map((hand, opponentIndex) => ({
                     id: hand._id,
@@ -832,7 +965,7 @@ export function RoomGameTable({
                     avatarUrl: getPlayerAvatar(hand.playerId),
                     chips: hand.chips ?? 0,
                     bet: hand.betThisRound ?? 0,
-                    position: getPhase1OpponentPosition(
+                    position: getOpponentPosition(
                       opponentIndex,
                       visibleOpponents.length,
                     ),
@@ -843,121 +976,113 @@ export function RoomGameTable({
                     chips: bottomHand.chips ?? 0,
                     bet: bottomHand.betThisRound ?? 0,
                   }}
+                  variant="mobile"
                 />
               ) : (
                 tableStage
-              )}
-            </div>
-            <div className="px-3 pb-1 text-center">
-              <div className="font-mono text-[8px] uppercase tracking-[0.18em] text-[#e8dcc0]/50">
-                {gameStage === "showdown" ? "Final word" : "Best word so far"}
-              </div>
-              <div className="mt-1 truncate font-serif text-[22px] font-semibold italic text-[#f4e4c1]">
-                {bestWordLabel}
-                <span className="ml-2 font-mono text-[13px] not-italic text-[#d4af37]">
-                  {rackScoreLabel}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-none flex-col items-center gap-2 border-t border-[#d4af37]/15 bg-black/25 px-3 py-3">
-              {hiddenPhase0Builder}
-              {rackBuilder}
-              {raiseSlider}
-              {readyControls}
-              {actionControls}
-            </div>
-          </main>
+              )
+            }
+            hiddenPhase0Builder={hiddenPhase0Builder}
+            rackBuilder={rackBuilder}
+            raiseSlider={raiseSlider}
+            readyControls={readyControls}
+            actionControls={actionControls}
+            bestWordLabel={bestWordLabel}
+            rackScoreLabel={rackScoreLabel}
+          />
         )}
 
         {isDesktopTable ? (
-        <aside className="hidden min-h-0 flex-col border-l border-[#d4af37]/15 bg-black/25 xl:flex">
-          <div className="border-b border-[#d4af37]/15 px-5 py-4">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#ff5d4e] shadow-[0_0_14px_rgba(255,93,78,0.6)]" />
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#e8dcc0]/60">
-                Table log / Live
-              </div>
-            </div>
-            <div className="mt-1 font-serif text-[19px] font-semibold italic text-[#f4e4c1]">
-              This hand
-            </div>
-            <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4af37]/75">
-              Room {roomCode ?? "table"}
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
-            <div className="py-1">
-              {handLogEntries.map((entry, index) => (
-                <div
-                  key={entry.id}
-                  className="flex items-baseline gap-3 border-b border-[#d4af37]/[0.06] py-2.5"
-                >
-                  <span
-                    className={`mt-1 h-1.5 w-1.5 flex-none rounded-full ${getLogDotClass(entry.tone)}`}
-                  />
-                  <span className="w-9 flex-none font-mono text-[10px] text-[#e8dcc0]/35">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[12px] font-medium leading-snug text-[#f4e4c1]">
-                      {entry.message}
-                    </div>
-                  </div>
+          <aside className="hidden min-h-0 flex-col border-l border-[#d4af37]/15 bg-black/25 xl:flex">
+            <div className="border-b border-[#d4af37]/15 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#ff5d4e] shadow-[0_0_14px_rgba(255,93,78,0.6)]" />
+                <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#e8dcc0]/60">
+                  Table log / Live
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-[#d4af37]/15 px-5 py-4">
-            <div className="mb-3 font-mono text-[9px] uppercase tracking-[0.18em] text-[#e8dcc0]/45">
-              Chat
-            </div>
-            {recentChatMessages.length === 0 ? (
-              <div className="mb-3 text-[12px] text-[#e8dcc0]/45">
-                No messages yet.
               </div>
-            ) : (
-              <div className="mb-3 space-y-3">
-                {recentChatMessages.map((message) => (
-                  <div key={message.id} className="text-[12px]">
-                    <div className="flex items-baseline gap-2">
-                      <span className="truncate font-semibold text-[#d4af37]">
-                        {message.senderName}
-                      </span>
-                      <span className="font-mono text-[9px] text-[#e8dcc0]/40">
-                        {formatChatTime(message.timestamp)}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 break-words text-[#e8dcc0]">
-                      {message.message}
+              <div className="mt-1 font-serif text-[19px] font-semibold italic text-[#f4e4c1]">
+                This hand
+              </div>
+              <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4af37]/75">
+                Room {roomCode ?? "table"}
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
+              <div className="py-1">
+                {handLogEntries.map((entry, index) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-baseline gap-3 border-b border-[#d4af37]/[0.06] py-2.5"
+                  >
+                    <span
+                      className={`mt-1 h-1.5 w-1.5 flex-none rounded-full ${getLogDotClass(entry.tone)}`}
+                    />
+                    <span className="w-9 flex-none font-mono text-[10px] text-[#e8dcc0]/35">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[12px] font-medium leading-snug text-[#f4e4c1]">
+                        {entry.message}
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-            {showRailChat ? (
-              <form
-                onSubmit={handleChatSubmit}
-                className="flex items-center gap-2 rounded-md border border-[#d4af37]/15 bg-black/30 px-3 py-2"
-              >
-                <input
-                  value={chatDraft ?? ""}
-                  onChange={(event) => onChatDraftChange?.(event.target.value)}
-                  placeholder="Type a message..."
-                  className="min-w-0 flex-1 bg-transparent text-[12px] text-[#e8dcc0] placeholder:text-[#e8dcc0]/35 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  className="flex h-7 w-7 flex-none items-center justify-center rounded-md border border-[#806316] bg-[linear-gradient(180deg,#f4d35e_0%,#d4af37_60%,#a8801f_100%)] font-mono text-[11px] font-bold text-[#1a1208]"
-                  aria-label="Send chat message"
+            </div>
+
+            <div className="border-t border-[#d4af37]/15 px-5 py-4">
+              <div className="mb-3 font-mono text-[9px] uppercase tracking-[0.18em] text-[#e8dcc0]/45">
+                Chat
+              </div>
+              {recentChatMessages.length === 0 ? (
+                <div className="mb-3 text-[12px] text-[#e8dcc0]/45">
+                  No messages yet.
+                </div>
+              ) : (
+                <div className="mb-3 space-y-3">
+                  {recentChatMessages.map((message) => (
+                    <div key={message.id} className="text-[12px]">
+                      <div className="flex items-baseline gap-2">
+                        <span className="truncate font-semibold text-[#d4af37]">
+                          {message.senderName}
+                        </span>
+                        <span className="font-mono text-[9px] text-[#e8dcc0]/40">
+                          {formatChatTime(message.timestamp)}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 break-words text-[#e8dcc0]">
+                        {message.message}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {showRailChat ? (
+                <form
+                  onSubmit={handleChatSubmit}
+                  className="flex items-center gap-2 rounded-md border border-[#d4af37]/15 bg-black/30 px-3 py-2"
                 >
-                  &gt;
-                </button>
-              </form>
-            ) : null}
-          </div>
-        </aside>
+                  <input
+                    value={chatDraft ?? ""}
+                    onChange={(event) =>
+                      onChatDraftChange?.(event.target.value)
+                    }
+                    placeholder="Type a message..."
+                    className="min-w-0 flex-1 bg-transparent text-[12px] text-[#e8dcc0] placeholder:text-[#e8dcc0]/35 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="flex h-7 w-7 flex-none items-center justify-center rounded-md border border-[#806316] bg-[linear-gradient(180deg,#f4d35e_0%,#d4af37_60%,#a8801f_100%)] font-mono text-[11px] font-bold text-[#1a1208]"
+                    aria-label="Send chat message"
+                  >
+                    &gt;
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          </aside>
         ) : null}
 
         <DragOverlay>
@@ -965,7 +1090,7 @@ export function RoomGameTable({
             <PlayerHand
               tile={activeTile}
               selectedLetter={choiceSelections[activeTile.id]}
-              tileSize={boardTileSize}
+              tileSize={rackTileSize}
             />
           ) : null}
         </DragOverlay>

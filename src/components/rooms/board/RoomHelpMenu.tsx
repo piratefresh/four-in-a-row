@@ -1,4 +1,3 @@
-import { CircleHelp } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -134,9 +133,9 @@ export function RoomHelpMenu() {
           id="tutorial-help-menu-button"
           aria-label="Open game help"
           title="Open game help"
-          className="inline-grid size-9 place-items-center rounded-full border border-gold/55 bg-felt-deep/90 text-gold shadow-[0_10px_26px_rgba(0,0,0,0.38)] backdrop-blur transition-colors hover:border-gold hover:bg-felt-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-felt-deep"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#d4af37]/20 bg-black/30 font-mono text-[11px] font-semibold text-[#d4af37] transition-colors hover:border-[#d4af37]/40 hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-felt-deep"
         >
-          <CircleHelp className="size-5" aria-hidden="true" />
+          ?
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

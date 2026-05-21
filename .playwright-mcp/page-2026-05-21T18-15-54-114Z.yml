@@ -1,0 +1,8 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e5]:
+    - heading "Word Poker" [level=1] [ref=e8]:
+      - link "Word Poker" [ref=e9] [cursor=pointer]:
+        - /url: /
+    - link "Login" [ref=e11] [cursor=pointer]:
+      - /url: /login
+  - region "Notifications alt+T"

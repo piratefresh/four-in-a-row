@@ -84,7 +84,7 @@ export function useRoomWordBuilder({
         };
       }),
       ...communityTiles
-        .filter((tile) => tile.revealed)
+        .filter((tile) => tile.revealed !== false)
         .map((tile, index) => {
           if (tile.kind === "choice") {
             return {

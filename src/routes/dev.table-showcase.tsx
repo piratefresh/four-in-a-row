@@ -233,6 +233,7 @@ function renderBuilderTile(tile: BuilderTile, tileSize: WordTileSize) {
 
 function DevTableShowcaseRoute() {
   const [scenario, setScenario] = useState<ShowcaseScenario>("turn");
+  const [revealStep, setRevealStep] = useState(-1);
   const isMediumViewport = useMediaQuery("(min-width: 768px)");
   const tileSize: WordTileSize = isMediumViewport ? "md" : "xs";
 
@@ -248,9 +249,12 @@ function DevTableShowcaseRoute() {
   const isPhase1 = scenario === "preflop";
   const isShowdown = scenario === "showdown";
   const currentTurnPlayerId = scenario === "turn" ? "you" : "alex";
-  const communityTiles = isPhase1
-    ? COMMUNITY_TILES.map((tile) => ({ ...tile, revealed: false }))
-    : COMMUNITY_TILES;
+  const isTestMode = revealStep >= 0;
+  const communityTiles = isTestMode
+    ? COMMUNITY_TILES.map((tile, i) => ({ ...tile, revealed: i < revealStep }))
+    : isPhase1
+      ? COMMUNITY_TILES.map((tile) => ({ ...tile, revealed: false }))
+      : COMMUNITY_TILES;
 
   const opponentBets = useMemo(
     () =>
@@ -316,7 +320,7 @@ function DevTableShowcaseRoute() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setScenario(item.id)}
+                onClick={() => { setScenario(item.id); setRevealStep(-1); }}
                 className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] shadow-[0_6px_18px_rgba(0,0,0,0.28)] transition sm:px-3 sm:text-xs ${
                   scenario === item.id
                     ? "border-[#f4d37a] bg-[#f4d37a] text-[#23160d]"
@@ -326,12 +330,23 @@ function DevTableShowcaseRoute() {
                 {item.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => setRevealStep((s) => (s === -1 ? 0 : s === 0 ? 3 : s === 3 ? 4 : s === 4 ? 5 : -1))}
+              className={`rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] shadow-[0_6px_18px_rgba(0,0,0,0.28)] transition sm:px-3 sm:text-xs ${
+                isTestMode
+                  ? "border-[#f4d37a] bg-[#f4d37a] text-[#23160d]"
+                  : "border-white/15 bg-black/45 text-[#f1eee7] hover:border-[#f4d37a]/70"
+              }`}
+            >
+              {revealStep === -1 ? "Flip" : `Flip (${revealStep}/5)`}
+            </button>
           </div>
 
           <main className="flex min-h-0 flex-1 flex-col pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pt-16">
             <RoomCommunityStrip
               tiles={communityTiles}
-              hidden={isLobby || isPhase1}
+              hidden={isTestMode ? false : isLobby || isPhase1}
               tileSize={tileSize}
             />
 

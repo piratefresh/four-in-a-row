@@ -1,10 +1,9 @@
-import type { PlayerHand, RoomGameTableProps, Tile } from "./RoomGameTable.types";
-
-export type RoomHandLogEntry = {
-  id: string;
-  message: string;
-  tone: "play" | "call" | "raise" | "fold" | "pot" | "turn" | "showdown";
-};
+import type {
+  PlayerHand,
+  RoomGameTableProps,
+  RoomHandLogEntry,
+  Tile,
+} from "./RoomGameTable.types";
 
 type BuildRoomHandLogArgs = {
   gameStage: RoomGameTableProps["gameStage"];
