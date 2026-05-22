@@ -7,6 +7,8 @@ import {
   SINGLE_TOTAL,
   createInitialGameDocument,
   createShuffledDeck,
+  DOUBLE_LETTER_TILE_RATE,
+  TRIPLE_LETTER_TILE_RATE,
   validateDeckConfig,
   type GameDeckTile,
 } from "./gameState";
@@ -113,6 +115,22 @@ describe("Two-letter choice tile deck", () => {
           expect(baseValue).toBeLessThanOrEqual(10);
         }
       }
+    });
+
+    it("marks the configured share of tiles with letter multipliers", () => {
+      const deck = createShuffledDeck();
+      const doubled = deck.filter((card) => card.multiplier === "2L");
+      const tripled = deck.filter((card) => card.multiplier === "3L");
+
+      expect(doubled).toHaveLength(
+        Math.round(DECK_SIZE * DOUBLE_LETTER_TILE_RATE),
+      );
+      expect(tripled).toHaveLength(
+        Math.round(DECK_SIZE * TRIPLE_LETTER_TILE_RATE),
+      );
+      expect(
+        deck.filter((card) => card.multiplier === "2L" || card.multiplier === "3L"),
+      ).toHaveLength(doubled.length + tripled.length);
     });
 
     it("can generate an all-single deck", () => {

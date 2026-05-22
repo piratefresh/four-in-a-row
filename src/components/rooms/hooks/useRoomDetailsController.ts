@@ -239,7 +239,7 @@ export function useRoomDetailsController(
       raiseLabel:
         selectedRaiseAmount !== null
           ? `Raise to ${selectedRaiseAmount}`
-          : "Raise Maxed",
+          : "Maxed",
       raiseAmount: selectedRaiseAmount,
       raiseOptions,
       turnClockTimeRemaining: timers.turnClockTimeRemaining,
