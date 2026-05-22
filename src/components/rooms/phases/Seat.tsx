@@ -37,7 +37,7 @@ const SEAT_STATUS: Record<string, SeatStatus> = {
   thinking: {
     color: "#d4af37",
     border: "rgba(212,175,55,0.45)",
-    label: "THINKING...",
+    label: "THINKING",
   },
   winner: { color: "#f7df7a", border: "#806316", label: "WINNER" },
 };

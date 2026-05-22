@@ -207,18 +207,12 @@ export function RoomTable({
     : BET_THROW_TRANSITION;
   const potDisplay = (
     <div className="flex flex-col items-center gap-1 text-center leading-none">
-      <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-cream/55">
-        Pot
-      </div>
       <div
         id="pot-amount"
         key={pot}
-        className="mt-1 animate-pot-pop font-serif text-[36px] font-semibold leading-none text-gold"
+        className="animate-pot-pop font-serif text-[28px] font-semibold leading-none text-gold"
       >
         ${pot}
-      </div>
-      <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-cream/50">
-        Worth {(pot / 20).toFixed(1)}x BB
       </div>
     </div>
   );

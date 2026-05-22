@@ -98,11 +98,11 @@ export function PhasePlayerBadge({
     isCurrentPlayer && isActiveTurn
       ? "Your Turn"
       : isThinking
-        ? "Thinking..."
+        ? "Thinking"
         : actionLabel
           ? actionLabel
           : isActiveTurn
-            ? "Thinking..."
+            ? "Thinking"
             : "Waiting";
 
   useEffect(() => {
