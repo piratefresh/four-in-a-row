@@ -18,6 +18,7 @@ import { PLAYER_NAME_MAX_LENGTH, ROOM_MAX_PLAYERS } from "../constants";
 import { buildDevBotAuthUserId, getBotCharacterForSeatIndex } from "../aiStrategy";
 import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 import type { RoomConfig } from "../gameConfig";
+import { recordRoomCreated } from "../activityFeed";
 
 // ==================== Leave Room ====================
 
@@ -332,6 +333,15 @@ export async function createRoomWithHostOptions(
   });
 
   await ctx.db.patch(roomId, { hostPlayerId: playerId });
+
+  if (!options.tutorialId) {
+    await recordRoomCreated(ctx, {
+      roomId,
+      roomCode: code,
+      playerName: name,
+      roomTitle: options.title,
+    });
+  }
 
   return {
     roomId,

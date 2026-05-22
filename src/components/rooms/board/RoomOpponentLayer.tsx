@@ -1,4 +1,4 @@
-import { PhasePlayerBadge } from "../phases/PhasePlayerBadge";
+import { Seat } from "../phases/Seat";
 import { WordTile } from "../table/word-tile-v2";
 import type { PlayerHand } from "./RoomGameTable.types";
 import { ROOM_OPPONENT_POSITION_CLASS } from "./roomBoardLayout";
@@ -79,7 +79,7 @@ export function RoomOpponentLayer({
         key={`opponent-${hand._id}`}
         className={`absolute ${ROOM_OPPONENT_POSITION_CLASS[position]} z-20`}
       >
-        <PhasePlayerBadge
+        <Seat
           name={opponentName}
           avatarUrl={getPlayerAvatar(hand.playerId)}
           chips={hand.chips ?? 0}

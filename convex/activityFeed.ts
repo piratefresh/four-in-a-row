@@ -39,6 +39,10 @@ export async function recordGameStart(
   await ctx.db.insert("activityFeed", {
     displayText: text,
     type: "game_started",
+    roomId: room._id,
+    roomCode: room.code,
+    roomTitle: room.title,
+    playerName: hostName,
     createdAt: Date.now(),
   });
 }
@@ -84,6 +88,12 @@ export async function recordGameCompletion(
         await ctx.db.insert("activityFeed", {
           displayText: text,
           type: "game_completed",
+          roomId: room._id,
+          roomCode: room.code,
+          roomTitle: room.title,
+          playerName: human.name,
+          word: sub?.word,
+          score: sub?.score,
           createdAt: now,
         });
       } else {
@@ -94,6 +104,12 @@ export async function recordGameCompletion(
         await ctx.db.insert("activityFeed", {
           displayText: text,
           type: "game_completed",
+          roomId: room._id,
+          roomCode: room.code,
+          roomTitle: room.title,
+          playerName: human.name,
+          word: sub?.word,
+          score: sub?.score,
           createdAt: now,
         });
       }
@@ -110,11 +126,113 @@ export async function recordGameCompletion(
       await ctx.db.insert("activityFeed", {
         displayText: text,
         type: "game_completed",
+        roomId: room._id,
+        roomCode: room.code,
+        roomTitle: room.title,
+        playerName: human.name,
+        word: sub?.word,
+        score: sub?.score,
         createdAt: now,
       });
     }
   }
 }
+
+export async function recordPlay(
+  ctx: MutationCtx,
+  args: {
+    roomId: Id<"rooms">;
+    playerName: string;
+    word: string;
+    score: number;
+    roomCode: string;
+    roomTitle?: string;
+  },
+) {
+  const isBigPlay = args.score >= 30;
+  await ctx.db.insert("activityFeed", {
+    displayText: `${args.playerName} played "${args.word}" for ${args.score} pts`,
+    type: isBigPlay ? "big_play" : "regular_play",
+    roomId: args.roomId,
+    roomCode: args.roomCode,
+    roomTitle: args.roomTitle,
+    playerName: args.playerName,
+    word: args.word,
+    score: args.score,
+    createdAt: Date.now(),
+  });
+}
+
+export async function recordAction(
+  ctx: MutationCtx,
+  args: {
+    roomId: Id<"rooms">;
+    playerName: string;
+    actionType: "call" | "fold";
+    roomCode: string;
+    roomTitle?: string;
+  },
+) {
+  const label = args.actionType === "call" ? "called" : "folded";
+  await ctx.db.insert("activityFeed", {
+    displayText: `${args.playerName} ${label}`,
+    type: args.actionType,
+    roomId: args.roomId,
+    roomCode: args.roomCode,
+    roomTitle: args.roomTitle,
+    playerName: args.playerName,
+    createdAt: Date.now(),
+  });
+}
+
+export async function recordRaise(
+  ctx: MutationCtx,
+  args: {
+    roomId: Id<"rooms">;
+    playerName: string;
+    amount: number;
+    roomCode: string;
+    roomTitle?: string;
+  },
+) {
+  await ctx.db.insert("activityFeed", {
+    displayText: `${args.playerName} raised to $${args.amount}`,
+    type: "raise",
+    roomId: args.roomId,
+    roomCode: args.roomCode,
+    roomTitle: args.roomTitle,
+    playerName: args.playerName,
+    amount: args.amount,
+    createdAt: Date.now(),
+  });
+}
+
+export async function recordRoomCreated(
+  ctx: MutationCtx,
+  args: {
+    roomId: Id<"rooms">;
+    roomCode: string;
+    playerName: string;
+    roomTitle?: string;
+  },
+) {
+  await ctx.db.insert("activityFeed", {
+    displayText: `${args.playerName} created room ${args.roomCode}`,
+    type: "room_created",
+    roomId: args.roomId,
+    roomCode: args.roomCode,
+    roomTitle: args.roomTitle,
+    playerName: args.playerName,
+    createdAt: Date.now(),
+  });
+}
+
+export const getLiveActivity = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("activityFeed").order("desc").take(50);
+  },
+});
 
 export const getRecentActivity = query({
   args: { limit: v.optional(v.number()) },

@@ -1,7 +1,7 @@
 import { ConvexError } from "convex/values";
 import { api, internal } from "../_generated/api";
 import type { ActionCtx, MutationCtx, QueryCtx } from "../_generated/server";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { GameTile } from "../gameState";
 import { resolveConfig } from "../gameConfig";
 import { FIRST_BOT_GAME_TUTORIAL_ID } from "../rooms/helpers";
@@ -9,7 +9,7 @@ import { getBotCharacterForAuthUserId, getBotCharacterForSeed, isBluffLikely, sh
 import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 import { tutorialBotShowdownWord } from "../tutorialBots";
 import { calculateScore, getHighestScoringTileValue } from "./gamesScoring";
-import { recordGameCompletion } from "../activityFeed";
+import { recordGameCompletion, recordPlay } from "../activityFeed";
 
 export type SubmitWordArgs = {
   gameId: Doc<"games">["_id"];
@@ -323,6 +323,20 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
       choiceResolutions,
     },
   });
+
+  if (!invalidWord && score.total > 0) {
+    const room = await ctx.db.get(game.roomId as Id<"rooms">);
+    if (room && !room.tutorialId) {
+      await recordPlay(ctx, {
+        roomId: room._id,
+        playerName: tracePlayer.playerName,
+        word: normalizedWord,
+        score: score.total,
+        roomCode: room.code,
+        roomTitle: room.title,
+      });
+    }
+  }
 
   const eligiblePlayerIds = hands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
   if (eligiblePlayerIds.length === 0) {

@@ -32,6 +32,7 @@ import {
 } from "../aiDialogue";
 import { getDialogueProfile } from "../aiPersonalities";
 import { isOpenRouterConfigured, callOpenRouterChat } from "../openRouterClient";
+import { recordAction, recordRaise } from "../activityFeed";
 
 const BOT_AI_TIMEOUT_MS = 4_000;
 
@@ -41,6 +42,27 @@ type ScheduledBotTurnArgs = PlayerActionArgs & {
   expectedCurrentPlayerIndex?: number;
   expectedTurnStartedAt?: number;
 };
+
+async function getActivityRoomInfo(
+  ctx: MutationCtx,
+  gameId: Id<"games">,
+) {
+  const game = await ctx.db.get(gameId);
+  if (!game) return null;
+  const roomId = game.roomId as Id<"rooms">;
+  const room = await ctx.db.get(roomId);
+  if (!room || room.tutorialId) return null;
+  return { roomId, roomCode: room.code, roomTitle: room.title };
+}
+
+async function getActivityPlayerName(ctx: MutationCtx, playerId: string) {
+  if (playerId === AI_DEALER_PLAYER_ID) return "AI Dealer";
+  const normalizedPlayerId = ctx.db.normalizeId("players", playerId);
+  if (!normalizedPlayerId) return playerId;
+  const player = await ctx.db.get(normalizedPlayerId);
+  const character = getBotCharacterForAuthUserId(player?.authUserId ?? "");
+  return character?.name ?? player?.name ?? playerId;
+}
 
 function logBotTurn(
   message: string,
@@ -208,6 +230,16 @@ export async function callHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     totalBet: hand._id === currentTurnHand._id ? hand.totalBet + amountToCall : hand.totalBet,
   }));
   await handlePostActionProgression(ctx, game as any, updatedHands);
+  const roomInfo = await getActivityRoomInfo(ctx, game._id);
+  if (roomInfo) {
+    await recordAction(ctx, {
+      roomId: roomInfo.roomId,
+      playerName: await getActivityPlayerName(ctx, playerId),
+      actionType: "call",
+      roomCode: roomInfo.roomCode,
+      roomTitle: roomInfo.roomTitle,
+    });
+  }
   return { ok: true, action: "call" as const, playerId, amountCalled: amountToCall, chipsAfterCall: currentTurnHand.chips - amountToCall, betAfterCall: currentTurnHand.betThisRound + amountToCall };
 }
 
@@ -261,6 +293,16 @@ export async function raiseHandler(
   }));
   await advanceTurn(ctx, game as any, updatedHands);
   await scheduleBotTurnIfNeeded(ctx, game._id);
+  const roomInfo = await getActivityRoomInfo(ctx, game._id);
+  if (roomInfo) {
+    await recordRaise(ctx, {
+      roomId: roomInfo.roomId,
+      playerName: await getActivityPlayerName(ctx, playerId),
+      amount: raiseToAmount,
+      roomCode: roomInfo.roomCode,
+      roomTitle: roomInfo.roomTitle,
+    });
+  }
   return { ok: true, action: "raise" as const, playerId, raisedTo: raiseToAmount, amountAdded: additionalChipsNeeded };
 }
 
@@ -286,6 +328,16 @@ export async function foldHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     betThisRound: hand.betThisRound, chips: hand.chips, totalBet: hand.totalBet,
   }));
   await handlePostActionProgression(ctx, game as any, updatedHands);
+  const roomInfo = await getActivityRoomInfo(ctx, game._id);
+  if (roomInfo) {
+    await recordAction(ctx, {
+      roomId: roomInfo.roomId,
+      playerName: await getActivityPlayerName(ctx, playerId),
+      actionType: "fold",
+      roomCode: roomInfo.roomCode,
+      roomTitle: roomInfo.roomTitle,
+    });
+  }
   return { ok: true, action: "fold" as const, playerId };
 }
 

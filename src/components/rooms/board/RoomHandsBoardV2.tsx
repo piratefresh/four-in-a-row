@@ -14,7 +14,7 @@ import { WordTile } from "../table/word-tile-v2";
 import { RoomActionControls } from "../controls/RoomActionControls";
 import { RaiseAmountSlider } from "../controls/RaiseAmountSlider";
 import { BlankRoomPhase } from "../phases/BlankRoomPhase";
-import { Seat } from "../phases/Seat";
+import { PhasePlayerBadge } from "../phases/PhasePlayerBadge";
 import { RoomBottomPanel } from "./RoomBottomPanel";
 import { RoomCommunityStrip } from "./RoomCommunityStrip";
 import { RoomHelpMenu } from "./RoomHelpMenu";
@@ -23,10 +23,9 @@ import { PlayerHand } from "./PlayerHand";
 import {
   RoomOpponentLayer,
   getOpponentPosition,
-  getPhase1OpponentPosition,
 } from "./RoomOpponentLayer";
 import { RoomTable } from "./RoomTable";
-import type { BuilderTile, RoomGameTableProps } from "./RoomGameTable.types";
+import type { BuilderTile, RoomHandsBoardProps } from "./RoomHandsBoard.types";
 import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "./roomBoardLayout";
 import { useRoomGameContext } from "../context/RoomGameContext";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -134,7 +133,7 @@ function renderEmptyBuilderTile() {
   return null;
 }
 
-export function RoomGameTable({
+export function RoomHandsBoardV2({
   gameId,
   activePlayerId,
   helperTipsEnabled,
@@ -152,7 +151,7 @@ export function RoomGameTable({
   pot = 0,
   chatDraft,
   tutorialReplayControl,
-}: RoomGameTableProps) {
+}: RoomHandsBoardProps) {
   const tutorial = useTutorialAdapterContext();
   const getBlindPosition = (
     playerId: string,
@@ -317,7 +316,7 @@ export function RoomGameTable({
     );
   }, [bottomHand?.tiles, communityTiles]);
 
-  const boardPhase: "phase0" | RoomGameTableProps["gameStage"] =
+  const boardPhase: "phase0" | RoomHandsBoardProps["gameStage"] =
     showReadyButton ? "phase0" : gameStage;
   const isPhase0 = boardPhase === "phase0";
   const isPhase1 = boardPhase === "preflop";
@@ -404,7 +403,7 @@ export function RoomGameTable({
                   avatarUrl: getPlayerAvatar(hand.playerId),
                   chips: hand.chips ?? 0,
                   bet: hand.betThisRound ?? 0,
-                  position: getPhase1OpponentPosition(
+                  position: getOpponentPosition(
                     opponentIndex,
                     opponents.length,
                   ),
@@ -447,7 +446,7 @@ export function RoomGameTable({
                     canRevealSubmittedWords={canRevealSubmittedWords}
                   />
                   <div className={ROOM_BOTTOM_BADGE_POSITION_CLASS}>
-                    <Seat
+                    <PhasePlayerBadge
                       name={myName}
                       avatarUrl={getPlayerAvatar(bottomHand.playerId)}
                       chips={bottomHand.chips ?? 0}

@@ -19,6 +19,7 @@ export { RoomBottomPanel } from './board/RoomBottomPanel'
 
 // Room phases
 export { BlankRoomPhase } from './phases/BlankRoomPhase'
+export { Seat } from './phases/Seat'
 export { PhasePlayerBadge } from './phases/PhasePlayerBadge'
 
 // Context and hooks
