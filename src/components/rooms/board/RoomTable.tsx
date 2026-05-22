@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import type { Transition } from "motion/react";
 import {
   Tooltip,
@@ -119,21 +119,10 @@ const BET_THROW_MOTION: Record<
   },
 };
 
-const REDUCED_BET_THROW_MOTION = {
-  initial: { opacity: 0, scale: 0.9, rotate: 0, x: 0, y: 0 },
-  animate: { opacity: 1, scale: 1, rotate: 0, x: 0, y: 0 },
-  exit: { opacity: 0, scale: 0.9, rotate: 0, x: 0, y: 0 },
-};
-
 const BET_THROW_TRANSITION: Transition = {
   duration: 0.46,
   ease: [0.16, 1, 0.3, 1],
   times: [0, 0.7, 0.9, 1],
-};
-
-const REDUCED_BET_THROW_TRANSITION: Transition = {
-  duration: 0.16,
-  ease: "easeOut",
 };
 
 function formatWagerOwnerLabel(ownerName: string) {
@@ -198,12 +187,6 @@ export function RoomTable({
   betPositionClass,
   showCenterPot = true,
 }: RoomTableProps) {
-  const shouldReduceMotion = useReducedMotion();
-  const getBetThrowMotion = (position: TableBetPosition) =>
-    shouldReduceMotion ? REDUCED_BET_THROW_MOTION : BET_THROW_MOTION[position];
-  const betThrowTransition = shouldReduceMotion
-    ? REDUCED_BET_THROW_TRANSITION
-    : BET_THROW_TRANSITION;
   const potDisplay = (
     <div className="flex flex-col items-center gap-1 text-center leading-none">
       <div className="font-semibold uppercase tracking-[0.2em] text-[#d7c48e]/75 xs:text-[9px] sm:text-xs">
@@ -211,7 +194,8 @@ export function RoomTable({
       </div>
       <div
         id="pot-amount"
-        className="text-[18px] font-semibold text-[#f4d37a] xs:text-[22px] sm:text-[38px]"
+        key={pot}
+        className="animate-pot-pop text-[18px] font-semibold text-[#f4d37a] xs:text-[22px] sm:text-[38px]"
       >
         ${pot}
       </div>
@@ -232,10 +216,10 @@ export function RoomTable({
           {opponentBets.map((bet) => (
             <motion.div
               key={`${bet.id}-${bet.amount}`}
-              initial={getBetThrowMotion(bet.position).initial}
-              animate={getBetThrowMotion(bet.position).animate}
-              exit={getBetThrowMotion(bet.position).exit}
-              transition={betThrowTransition}
+              initial={BET_THROW_MOTION[bet.position].initial}
+              animate={BET_THROW_MOTION[bet.position].animate}
+              exit={BET_THROW_MOTION[bet.position].exit}
+              transition={BET_THROW_TRANSITION}
               className={`absolute ${betPositionClass[bet.position]} z-30`}
             >
               <WagerChip amount={bet.amount} ownerName={bet.ownerName} />
@@ -245,10 +229,10 @@ export function RoomTable({
           {bottomBet > 0 && (
             <motion.div
               key={`bottom-${bottomBet}`}
-              initial={getBetThrowMotion("bottom").initial}
-              animate={getBetThrowMotion("bottom").animate}
-              exit={getBetThrowMotion("bottom").exit}
-              transition={betThrowTransition}
+              initial={BET_THROW_MOTION.bottom.initial}
+              animate={BET_THROW_MOTION.bottom.animate}
+              exit={BET_THROW_MOTION.bottom.exit}
+              transition={BET_THROW_TRANSITION}
               className={`absolute ${betPositionClass.bottom} z-30`}
             >
               <WagerChip amount={bottomBet} ownerName={bottomBetOwnerName} />

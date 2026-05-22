@@ -26,7 +26,7 @@ import {
   getPhase1OpponentPosition,
 } from "./RoomOpponentLayer";
 import { RoomTable } from "./RoomTable";
-import type { BuilderTile, RoomHandsBoardProps } from "./RoomHandsBoard.types";
+import type { BuilderTile, RoomGameTableProps } from "./RoomGameTable.types";
 import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "./roomBoardLayout";
 import { useRoomGameContext } from "../context/RoomGameContext";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -134,7 +134,7 @@ function renderEmptyBuilderTile() {
   return null;
 }
 
-export function RoomHandsBoardV2({
+export function RoomGameTable({
   gameId,
   activePlayerId,
   helperTipsEnabled,
@@ -152,7 +152,7 @@ export function RoomHandsBoardV2({
   pot = 0,
   chatDraft,
   tutorialReplayControl,
-}: RoomHandsBoardProps) {
+}: RoomGameTableProps) {
   const tutorial = useTutorialAdapterContext();
   const getBlindPosition = (
     playerId: string,
@@ -317,7 +317,7 @@ export function RoomHandsBoardV2({
     );
   }, [bottomHand?.tiles, communityTiles]);
 
-  const boardPhase: "phase0" | RoomHandsBoardProps["gameStage"] =
+  const boardPhase: "phase0" | RoomGameTableProps["gameStage"] =
     showReadyButton ? "phase0" : gameStage;
   const isPhase0 = boardPhase === "phase0";
   const isPhase1 = boardPhase === "preflop";

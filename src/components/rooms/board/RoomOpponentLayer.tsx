@@ -1,6 +1,6 @@
 import { PhasePlayerBadge } from "../phases/PhasePlayerBadge";
 import { WordTile } from "../table/word-tile-v2";
-import type { PlayerHand } from "./RoomHandsBoard.types";
+import type { PlayerHand } from "./RoomGameTable.types";
 import { ROOM_OPPONENT_POSITION_CLASS } from "./roomBoardLayout";
 
 function formatPlayerActionLabel(

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import type { BuilderTile, PlayerHand, Tile } from "../board/RoomHandsBoard.types";
+import type { BuilderTile, PlayerHand, Tile } from "../board/RoomGameTable.types";
 import type {
   DragCancelEvent,
   DragEndEvent,

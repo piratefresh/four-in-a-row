@@ -13,7 +13,7 @@ export { ActionButton } from './controls/ActionButton'
 export { RoomActionControls } from './controls/RoomActionControls'
 
 // Room boards
-export { RoomHandsBoardV2 } from './board/RoomHandsBoardV2'
+export { RoomGameTable } from './board/RoomGameTable'
 export { RoomTable } from './board/RoomTable'
 export { RoomBottomPanel } from './board/RoomBottomPanel'
 

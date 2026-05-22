@@ -1,5 +1,5 @@
 import { WordTile, type WordTileSize } from "../table/word-tile-v2";
-import type { BuilderTile } from "./RoomHandsBoard.types";
+import type { BuilderTile } from "./RoomGameTable.types";
 
 type PlayerHandProps = {
   tile: BuilderTile;

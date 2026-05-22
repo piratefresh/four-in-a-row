@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useNextStep } from "nextstepjs";
 import {
   RoomGameProvider,
-  RoomHandsBoardV2,
+  RoomGameTable,
   RoomHeader,
   RoomPageProvider,
   useRoomDetailsController,
@@ -288,7 +288,7 @@ function RoomDetailsPage() {
               className="relative flex flex-1 [@media(min-width:1441px)]:pr-[400px]"
               data-testid="room-content"
             >
-              <RoomHandsBoardV2
+              <RoomGameTable
               gameId={game._id}
               activePlayerId={activePlayerId}
               helperTipsEnabled={helperTipsEnabled}

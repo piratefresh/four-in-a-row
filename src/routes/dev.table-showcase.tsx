@@ -11,9 +11,9 @@ import { RoomTable } from "@/components/rooms/board/RoomTable";
 import type {
   BuilderTile,
   PlayerHand,
-  RoomHandsBoardProps,
+  RoomGameTableProps,
   Tile,
-} from "@/components/rooms/board/RoomHandsBoard.types";
+} from "@/components/rooms/board/RoomGameTable.types";
 import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "@/components/rooms/board/roomBoardLayout";
 import { RoomActionControls } from "@/components/rooms/controls/RoomActionControls";
 import {
@@ -238,7 +238,7 @@ function DevTableShowcaseRoute() {
 
   const bottomHand = HANDS[0]!;
   const opponents = OPPONENTS;
-  const gameStage: RoomHandsBoardProps["gameStage"] =
+  const gameStage: RoomGameTableProps["gameStage"] =
     scenario === "showdown"
       ? "showdown"
       : scenario === "preflop"

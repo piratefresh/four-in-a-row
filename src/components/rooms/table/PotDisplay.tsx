@@ -9,7 +9,12 @@ export function PotDisplay({ amount }: PotDisplayProps) {
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
           Pot
         </span>
-        <span className="text-2xl font-bold text-[#d4af37]">${amount}</span>
+        <span
+          key={amount}
+          className="animate-pot-pop text-2xl font-bold text-[#d4af37]"
+        >
+          ${amount}
+        </span>
       </div>
     </div>
   )

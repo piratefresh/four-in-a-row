@@ -30,7 +30,7 @@ export type PlayerHand = {
   lastAction?: "check" | "call" | "raise" | "fold";
 };
 
-export type RoomHandsBoardProps = {
+export type RoomGameTableProps = {
   gameId: Id<"games">;
   activePlayerId?: string;
   helperTipsEnabled?: boolean;

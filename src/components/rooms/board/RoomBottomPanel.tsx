@@ -11,7 +11,7 @@ import {
   type WordTileSize,
   type WordTileVariant,
 } from "../table/word-tile-v2";
-import type { BuilderTile } from "./RoomHandsBoard.types";
+import type { BuilderTile } from "./RoomGameTable.types";
 import { getLetterValue } from "../../../lib/letterValues";
 import type { ShowdownPreviewScore } from "../../../lib/showdownScore";
 
@@ -94,6 +94,10 @@ function AnimatedBuilderTile({
     !tile.disabled && tile.isChoice && choiceLetters.length > 0;
   const hasSelectedChoice = Boolean(choiceSelections[tile.id]);
   const tileVariant = getTileVariant(tile);
+  const isHandTile = tile.source === "hand";
+  const tileEntranceStyle = isHandTile
+    ? ({ animationDelay: `${index * 0.12}s` } as React.CSSProperties)
+    : undefined;
 
   useEffect(() => {
     if (shuffleTick === 0) return;
@@ -152,7 +156,12 @@ function AnimatedBuilderTile({
           </div>
         </div>
       )}
-      {renderBuilderTile(tile)}
+      <div
+        className={isHandTile ? "gf-tile animate-hole-slide-in" : undefined}
+        style={tileEntranceStyle}
+      >
+        {renderBuilderTile(tile)}
+      </div>
     </motion.div>
   );
 }
@@ -353,13 +362,21 @@ export function RoomBottomPanel({
             <div className="flex flex-col items-center gap-1 sm:gap-1.5">
               <div className="text-center font-bold text-white sm:text-xl">
                 {wordPreview ? (
-                  <span className="tracking-[0.2em]">{wordPreview}</span>
+                  <span
+                    key={wordPreview}
+                    className="animate-word-morph inline-block tracking-[0.2em]"
+                  >
+                    {wordPreview}
+                  </span>
                 ) : (
                   <span className="text-sm font-normal text-white/40 sm:text-base">
                     Select letters to preview
                   </span>
                 )}{" "}
-                <span className="text-[#f4d98b]">
+                <span
+                  key={wordScorePreview?.total ?? 0}
+                  className="animate-word-morph inline-block text-[#f4d98b]"
+                >
                   {wordScorePreview
                     ? `${wordScorePreview.total}pts`
                     : hasUnresolvedChoices
