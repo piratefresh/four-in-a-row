@@ -187,6 +187,7 @@ export function RoomHandsBoardV2({
     onRaise,
     onFold,
     onRaiseAmountChange,
+    onLeaveRoom,
     callLabel,
     callAmount,
     raiseLabel,
@@ -574,43 +575,51 @@ export function RoomHandsBoardV2({
 
             {!isPhase0 && (
               <>
-                {((showBettingControls && !hasBottomPlayerFolded) ||
-              (showShuffleControl && !showInlineBottomPanelShuffle)) && (
-              <RoomActionControls
-                betting={
-                  showBettingControls && !hasBottomPlayerFolded
-                    ? {
-                        isBetting,
-                        isMyTurn,
-                        canCheck,
-                        canCall,
-                        canRaise,
-                        canFold,
-                        currentTurnPlayerName,
-                        onCheck,
-                        onCall,
-                        onRaise,
-                        onFold,
-                        onRaiseAmountChange,
-                        callLabel,
-                        callAmount,
-                        raiseLabel,
-                        raiseAmount,
-                        raiseOptions,
-                      }
-                    : undefined
-                }
-                utility={
-                  showShuffleControl && !showInlineBottomPanelShuffle
-                    ? {
-                        onShuffleTiles: handleShuffleTilesClick,
-                        disableShuffle: isValidating,
-                      }
-                    : undefined
-                }
-                helperTip={actionsHelperTip}
-              />
-            )}
+                {(hasBottomPlayerFolded ||
+                  (showBettingControls && !hasBottomPlayerFolded) ||
+                  (showShuffleControl && !showInlineBottomPanelShuffle)) && (
+                  <RoomActionControls
+                    folded={
+                      hasBottomPlayerFolded
+                        ? {
+                            onLeaveRoom,
+                          }
+                        : undefined
+                    }
+                    betting={
+                      showBettingControls && !hasBottomPlayerFolded
+                        ? {
+                            isBetting,
+                            isMyTurn,
+                            canCheck,
+                            canCall,
+                            canRaise,
+                            canFold,
+                            currentTurnPlayerName,
+                            onCheck,
+                            onCall,
+                            onRaise,
+                            onFold,
+                            onRaiseAmountChange,
+                            callLabel,
+                            callAmount,
+                            raiseLabel,
+                            raiseAmount,
+                            raiseOptions,
+                          }
+                        : undefined
+                    }
+                    utility={
+                      showShuffleControl && !showInlineBottomPanelShuffle
+                        ? {
+                            onShuffleTiles: handleShuffleTilesClick,
+                            disableShuffle: isValidating,
+                          }
+                        : undefined
+                    }
+                    helperTip={actionsHelperTip}
+                  />
+                )}
               </>
             )}
           </div>

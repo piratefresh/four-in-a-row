@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CountdownTimer } from "@/components/ui/countdown-timer";
 import { ActionButton } from "./ActionButton";
@@ -40,26 +40,85 @@ type UtilityControlsProps = {
   disableShuffle?: boolean;
 };
 
+type FoldedControlsProps = {
+  onLeaveRoom?: () => void;
+};
+
 type RoomActionControlsProps = {
   ready?: ReadyControlsProps;
   betting?: BettingControlsProps;
   utility?: UtilityControlsProps;
+  folded?: FoldedControlsProps;
   helperTip?: ReactNode;
 };
+
+export function shouldResetFoldConfirmation(
+  betting:
+    | Pick<BettingControlsProps, "isMyTurn" | "isBetting" | "canFold">
+    | undefined,
+) {
+  return !betting?.isMyTurn || betting.isBetting || !betting.canFold;
+}
+
+export function getFoldActionState({
+  isConfirmingFold,
+  isBetting,
+}: {
+  isConfirmingFold: boolean;
+  isBetting: boolean;
+}) {
+  if (isConfirmingFold) {
+    return {
+      primaryLabel: isBetting ? "Betting..." : "Confirm fold",
+      secondaryLabel: "Cancel",
+    };
+  }
+
+  return {
+    primaryLabel: isBetting ? "Betting..." : "Fold",
+    secondaryLabel: null,
+  };
+}
 
 export function RoomActionControls({
   ready,
   betting,
   utility,
+  folded,
   helperTip,
 }: RoomActionControlsProps) {
   const tutorial = useTutorialAdapterContext();
+  const [isConfirmingFold, setIsConfirmingFold] = useState(false);
   const showRaiseChip = !!betting && (betting.raiseAmount ?? 0) > 0;
+  const foldActionState = getFoldActionState({
+    isConfirmingFold,
+    isBetting: betting?.isBetting ?? false,
+  });
 
   useEffect(() => {
     if (!betting?.isMyTurn) return;
     tutorial.onMyTurn();
   }, [betting?.isMyTurn, tutorial]);
+
+  useEffect(() => {
+    if (shouldResetFoldConfirmation(betting)) {
+      setIsConfirmingFold(false);
+    }
+  }, [betting]);
+
+  const requestFoldConfirmation = () => {
+    setIsConfirmingFold(true);
+  };
+
+  const cancelFoldConfirmation = () => {
+    setIsConfirmingFold(false);
+  };
+
+  const confirmFold = () => {
+    betting?.onFold?.();
+    tutorial.onBettingAction();
+    setIsConfirmingFold(false);
+  };
 
   if (ready) {
     const handleReadyClick = () => {
@@ -98,6 +157,27 @@ export function RoomActionControls({
           </div>
         </div>
       </>
+    );
+  }
+
+  if (folded) {
+    return (
+      <div
+        id="tutorial-room-actions"
+        className="flex w-full items-center justify-center"
+      >
+        <div className="flex w-full max-w-[42rem] flex-wrap items-center justify-center gap-2">
+          {helperTip}
+          <ActionButton
+            variant="call"
+            size="wide"
+            onClick={() => folded.onLeaveRoom?.()}
+            disabled={!folded.onLeaveRoom}
+          >
+            Leave room
+          </ActionButton>
+        </div>
+      </div>
     );
   }
 
@@ -173,61 +253,80 @@ export function RoomActionControls({
                     disabled={utility.disableShuffle}
                   />
                 ) : null}
-                <ActionButton
-                  variant="fold"
-                  onClick={() => {
-                    betting.onFold?.();
-                    tutorial.onBettingAction();
-                  }}
-                  disabled={betting.isBetting || !betting.canFold}
-                >
-                  {betting.isBetting ? "Betting..." : "Fold"}
-                </ActionButton>
-                <ActionButton
-                  variant={betting.canCheck ? "check" : "call"}
-                  onClick={() => {
-                    if (betting.canCheck) {
-                      betting.onCheck?.();
-                      tutorial.onBettingAction();
-                      return;
-                    }
-                    betting.onCall?.();
-                    tutorial.onBettingAction();
-                  }}
-                  disabled={
-                    betting.isBetting || (!betting.canCheck && !betting.canCall)
-                  }
-                >
-                  {betting.isBetting ? (
-                    "Betting..."
-                  ) : betting.canCheck ? (
-                    "Check"
-                  ) : (
-                    <span className="inline-flex items-center gap-2">
-                      <span>Call</span>
-                      {betting.callAmount ?? 0}
-                    </span>
-                  )}
-                </ActionButton>
-                <ActionButton
-                  variant="raise"
-                  onClick={() => {
-                    betting.onRaise?.();
-                    tutorial.onBettingAction();
-                  }}
-                  disabled={betting.isBetting || !betting.canRaise}
-                >
-                  {betting.isBetting ? (
-                    "Betting..."
-                  ) : showRaiseChip ? (
-                    <span className="inline-flex items-center gap-2">
-                      <span>Raise to</span>
-                      {betting.raiseAmount ?? 0}
-                    </span>
-                  ) : (
-                    betting.raiseLabel
-                  )}
-                </ActionButton>
+                {isConfirmingFold ? (
+                  <>
+                    <ActionButton
+                      variant="fold"
+                      onClick={confirmFold}
+                      disabled={betting.isBetting}
+                    >
+                      {foldActionState.primaryLabel}
+                    </ActionButton>
+                    <ActionButton
+                      variant="call"
+                      onClick={cancelFoldConfirmation}
+                      disabled={betting.isBetting}
+                    >
+                      {foldActionState.secondaryLabel}
+                    </ActionButton>
+                  </>
+                ) : (
+                  <>
+                    <ActionButton
+                      variant="fold"
+                      onClick={requestFoldConfirmation}
+                      disabled={betting.isBetting || !betting.canFold}
+                    >
+                      {foldActionState.primaryLabel}
+                    </ActionButton>
+                    <ActionButton
+                      variant={betting.canCheck ? "check" : "call"}
+                      onClick={() => {
+                        if (betting.canCheck) {
+                          betting.onCheck?.();
+                          tutorial.onBettingAction();
+                          return;
+                        }
+                        betting.onCall?.();
+                        tutorial.onBettingAction();
+                      }}
+                      disabled={
+                        betting.isBetting ||
+                        (!betting.canCheck && !betting.canCall)
+                      }
+                    >
+                      {betting.isBetting ? (
+                        "Betting..."
+                      ) : betting.canCheck ? (
+                        "Check"
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <span>Call</span>
+                          {betting.callAmount ?? 0}
+                        </span>
+                      )}
+                    </ActionButton>
+                    <ActionButton
+                      variant="raise"
+                      onClick={() => {
+                        betting.onRaise?.();
+                        tutorial.onBettingAction();
+                      }}
+                      disabled={betting.isBetting || !betting.canRaise}
+                    >
+                      {betting.isBetting ? (
+                        "Betting..."
+                      ) : showRaiseChip ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span>Raise to</span>
+                          {betting.raiseAmount ?? 0}
+                        </span>
+                      ) : (
+                        betting.raiseLabel
+                      )}
+                    </ActionButton>
+                  </>
+                )}
               </div>
 
               <div className="flex w-full items-end justify-center sm:hidden">
@@ -241,62 +340,80 @@ export function RoomActionControls({
                       disabled={utility.disableShuffle}
                     />
                   ) : null}
-                  <ActionButton
-                    variant="fold"
-                    onClick={() => {
-                      betting.onFold?.();
-                      tutorial.onBettingAction();
-                    }}
-                    disabled={betting.isBetting || !betting.canFold}
-                  >
-                    {betting.isBetting ? "Betting..." : "Fold"}
-                  </ActionButton>
-                  <ActionButton
-                    variant={betting.canCheck ? "check" : "call"}
-                    onClick={() => {
-                      if (betting.canCheck) {
-                        betting.onCheck?.();
-                        tutorial.onBettingAction();
-                        return;
-                      }
-                      betting.onCall?.();
-                      tutorial.onBettingAction();
-                    }}
-                    disabled={
-                      betting.isBetting ||
-                      (!betting.canCheck && !betting.canCall)
-                    }
-                  >
-                    {betting.isBetting ? (
-                      "Betting..."
-                    ) : betting.canCheck ? (
-                      "Check"
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        <span>Call</span>
-                        {betting.callAmount ?? 0}
-                      </span>
-                    )}
-                  </ActionButton>
-                  <ActionButton
-                    variant="raise"
-                    onClick={() => {
-                      betting.onRaise?.();
-                      tutorial.onBettingAction();
-                    }}
-                    disabled={betting.isBetting || !betting.canRaise}
-                  >
-                    {betting.isBetting ? (
-                      "Betting..."
-                    ) : showRaiseChip ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span>Raise to</span>
-                        {betting.raiseAmount ?? 0}
-                      </span>
-                    ) : (
-                      betting.raiseLabel
-                    )}
-                  </ActionButton>
+                  {isConfirmingFold ? (
+                    <>
+                      <ActionButton
+                        variant="fold"
+                        onClick={confirmFold}
+                        disabled={betting.isBetting}
+                      >
+                        {foldActionState.primaryLabel}
+                      </ActionButton>
+                      <ActionButton
+                        variant="call"
+                        onClick={cancelFoldConfirmation}
+                        disabled={betting.isBetting}
+                      >
+                        {foldActionState.secondaryLabel}
+                      </ActionButton>
+                    </>
+                  ) : (
+                    <>
+                      <ActionButton
+                        variant="fold"
+                        onClick={requestFoldConfirmation}
+                        disabled={betting.isBetting || !betting.canFold}
+                      >
+                        {foldActionState.primaryLabel}
+                      </ActionButton>
+                      <ActionButton
+                        variant={betting.canCheck ? "check" : "call"}
+                        onClick={() => {
+                          if (betting.canCheck) {
+                            betting.onCheck?.();
+                            tutorial.onBettingAction();
+                            return;
+                          }
+                          betting.onCall?.();
+                          tutorial.onBettingAction();
+                        }}
+                        disabled={
+                          betting.isBetting ||
+                          (!betting.canCheck && !betting.canCall)
+                        }
+                      >
+                        {betting.isBetting ? (
+                          "Betting..."
+                        ) : betting.canCheck ? (
+                          "Check"
+                        ) : (
+                          <span className="inline-flex items-center gap-2">
+                            <span>Call</span>
+                            {betting.callAmount ?? 0}
+                          </span>
+                        )}
+                      </ActionButton>
+                      <ActionButton
+                        variant="raise"
+                        onClick={() => {
+                          betting.onRaise?.();
+                          tutorial.onBettingAction();
+                        }}
+                        disabled={betting.isBetting || !betting.canRaise}
+                      >
+                        {betting.isBetting ? (
+                          "Betting..."
+                        ) : showRaiseChip ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span>Raise to</span>
+                            {betting.raiseAmount ?? 0}
+                          </span>
+                        ) : (
+                          betting.raiseLabel
+                        )}
+                      </ActionButton>
+                    </>
+                  )}
                 </div>
               </div>
             </motion.div>
