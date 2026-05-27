@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   SortableContext,
   horizontalListSortingStrategy,
@@ -89,13 +89,15 @@ function AnimatedBuilderTile({
   shuffleTick,
 }: AnimatedBuilderTileProps) {
   const controls = useAnimationControls();
+  const [hasPlayedEntrance, setHasPlayedEntrance] = useState(false);
   const choiceLetters = Array.isArray(tile.letters) ? tile.letters : [];
   const showChoicePicker =
     !tile.disabled && tile.isChoice && choiceLetters.length > 0;
   const hasSelectedChoice = Boolean(choiceSelections[tile.id]);
   const tileVariant = getTileVariant(tile);
   const isHandTile = tile.source === "hand";
-  const tileEntranceStyle = isHandTile
+  const shouldAnimateEntrance = isHandTile && !hasPlayedEntrance;
+  const tileEntranceStyle = shouldAnimateEntrance
     ? ({ animationDelay: `${index * 0.12}s` } as React.CSSProperties)
     : undefined;
 
@@ -157,8 +159,13 @@ function AnimatedBuilderTile({
         </div>
       )}
       <div
-        className={isHandTile ? "gf-tile animate-hole-slide-in" : undefined}
+        className={
+          shouldAnimateEntrance ? "gf-tile animate-hole-slide-in" : undefined
+        }
         style={tileEntranceStyle}
+        onAnimationEnd={() => {
+          if (shouldAnimateEntrance) setHasPlayedEntrance(true);
+        }}
       >
         {renderBuilderTile(tile)}
       </div>

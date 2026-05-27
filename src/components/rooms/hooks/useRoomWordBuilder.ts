@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { BuilderTile, PlayerHand, Tile } from "../board/RoomGameTable.types";
@@ -27,6 +27,8 @@ function shuffleTiles(tiles: BuilderTile[]) {
   return shuffled;
 }
 
+const DRAG_OVERLAY_CLEAR_DELAY_MS = 260;
+
 export function useRoomWordBuilder({
   gameId,
   bottomHand,
@@ -47,10 +49,31 @@ export function useRoomWordBuilder({
   const [choiceSelections, setChoiceSelections] = useState<
     Record<string, string>
   >({});
+  const clearActiveTileTimeoutRef = useRef<number | null>(null);
   const enabledBuilderTiles = useMemo(
     () => builderTiles.filter((tile) => !tile.disabled),
     [builderTiles],
   );
+
+  const clearPendingActiveTileTimeout = () => {
+    if (clearActiveTileTimeoutRef.current === null) return;
+    window.clearTimeout(clearActiveTileTimeoutRef.current);
+    clearActiveTileTimeoutRef.current = null;
+  };
+
+  const scheduleActiveTileClear = () => {
+    clearPendingActiveTileTimeout();
+    clearActiveTileTimeoutRef.current = window.setTimeout(() => {
+      setActiveTile(null);
+      clearActiveTileTimeoutRef.current = null;
+    }, DRAG_OVERLAY_CLEAR_DELAY_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearPendingActiveTileTimeout();
+    };
+  }, []);
 
   useEffect(() => {
     if (!bottomHand) {
@@ -244,17 +267,18 @@ export function useRoomWordBuilder({
   };
 
   const handleDragStart = ({ active }: DragStartEvent) => {
+    clearPendingActiveTileTimeout();
     const tile =
       builderTiles.find((item) => item.id === String(active.id)) ?? null;
     setActiveTile(tile);
   };
 
   const handleDragCancel = (_event: DragCancelEvent) => {
-    setActiveTile(null);
+    scheduleActiveTileClear();
   };
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
-    setActiveTile(null);
+    scheduleActiveTileClear();
     if (!over || active.id === over.id) return;
     setBuilderTiles((previous) => {
       const oldIndex = previous.findIndex((item) => item.id === active.id);

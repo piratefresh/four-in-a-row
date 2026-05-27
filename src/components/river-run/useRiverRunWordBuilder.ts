@@ -1,5 +1,5 @@
 import { useMutation } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { api } from "../../../convex/_generated/api";
@@ -32,6 +32,8 @@ const LENGTH_BONUS: Record<number, number> = {
   7: 25,
 };
 
+const DRAG_OVERLAY_CLEAR_DELAY_MS = 260;
+
 export function useRiverRunWordBuilder(run: RiverRunPlayRun) {
   const submitPhaseWord = useMutation(api.riverRun.submitPhaseWord);
   const [builderTiles, setBuilderTiles] = useState<RiverRunBuilderTile[]>([]);
@@ -43,6 +45,27 @@ export function useRiverRunWordBuilder(run: RiverRunPlayRun) {
   const [choiceSelections, setChoiceSelections] = useState<
     Record<string, string>
   >({});
+  const clearActiveTileTimeoutRef = useRef<number | null>(null);
+
+  const clearPendingActiveTileTimeout = () => {
+    if (clearActiveTileTimeoutRef.current === null) return;
+    window.clearTimeout(clearActiveTileTimeoutRef.current);
+    clearActiveTileTimeoutRef.current = null;
+  };
+
+  const scheduleActiveTileClear = () => {
+    clearPendingActiveTileTimeout();
+    clearActiveTileTimeoutRef.current = window.setTimeout(() => {
+      setActiveTile(null);
+      clearActiveTileTimeoutRef.current = null;
+    }, DRAG_OVERLAY_CLEAR_DELAY_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearPendingActiveTileTimeout();
+    };
+  }, []);
 
   useEffect(() => {
     const revealed = run.tiles.filter((t) => t.revealed);
@@ -166,17 +189,18 @@ export function useRiverRunWordBuilder(run: RiverRunPlayRun) {
   }
 
   function handleDragStart({ active }: DragStartEvent) {
+    clearPendingActiveTileTimeout();
     const tile =
       builderTiles.find((t) => t.id === String(active.id)) ?? null;
     setActiveTile(tile);
   }
 
   function handleDragCancel() {
-    setActiveTile(null);
+    scheduleActiveTileClear();
   }
 
   function handleDragEnd({ active, over }: DragEndEvent) {
-    setActiveTile(null);
+    scheduleActiveTileClear();
     if (!over || active.id === over.id) return;
     setBuilderTiles((prev) => {
       const oldIdx = prev.findIndex((t) => t.id === active.id);
