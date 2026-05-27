@@ -467,7 +467,7 @@ function TimerOptionGroup({
             value={customSeconds}
             onChange={(event) => onCustomSecondsChange(event.target.value)}
             className={cn(
-              "h-7 min-w-0 border-0 px-1 py-0 text-right text-sm shadow-none [appearance:textfield] focus-visible:ring-1 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+              "h-7 min-w-0 border-0 px-1 py-0 text-right text-base shadow-none [appearance:textfield] focus-visible:ring-1 sm:text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
               isPresetSelected
                 ? "bg-transparent text-cream"
                 : "bg-transparent text-felt-deep",
