@@ -68,6 +68,14 @@ export const appTables = {
     createdAt: v.number(),
     repliedByBots: v.optional(v.array(v.string())),
   }).index("roomId_createdAt", ["roomId", "createdAt"]),
+  roomStickers: defineTable({
+    roomId: v.id("rooms"),
+    playerId: v.id("players"),
+    senderAuthUserId: v.string(),
+    stickerKey: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  }).index("by_roomId_and_createdAt", ["roomId", "createdAt"]),
   games: defineTable({
     roomId: v.string(),
     stage: gameStageValidator,

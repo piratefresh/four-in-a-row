@@ -296,18 +296,18 @@ export function estimateHandStrength(
 
 function getFcrBucket(rateOfReturn: number): { bucket: string; percentages: BettingPercentages } {
   if (rateOfReturn < 0.8) {
-    return { bucket: "RR < 0.8", percentages: { fold: 95, call: 0, raise: 5 } };
+    return { bucket: "RR < 0.8", percentages: { fold: 88, call: 7, raise: 5 } };
   }
 
   if (rateOfReturn < 1.0) {
-    return { bucket: "RR < 1.0", percentages: { fold: 80, call: 5, raise: 15 } };
+    return { bucket: "RR < 1.0", percentages: { fold: 70, call: 20, raise: 10 } };
   }
 
   if (rateOfReturn < 1.3) {
-    return { bucket: "RR < 1.3", percentages: { fold: 0, call: 60, raise: 40 } };
+    return { bucket: "RR < 1.3", percentages: { fold: 5, call: 55, raise: 40 } };
   }
 
-  return { bucket: "RR >= 1.3", percentages: { fold: 0, call: 30, raise: 70 } };
+  return { bucket: "RR >= 1.3", percentages: { fold: 5, call: 40, raise: 55 } };
 }
 
 function getBettingPersonalityModifiers(

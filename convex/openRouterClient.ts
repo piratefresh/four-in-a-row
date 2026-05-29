@@ -8,7 +8,7 @@
 import OpenAI from "openai";
 
 const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_OPENROUTER_MODEL = "mistralai/devstral-small:nitro";
+const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
 
 export function getRequiredOpenRouterApiKey(): string {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
@@ -41,7 +41,16 @@ export async function callOpenRouterChat(args: {
   maxTokens?: number;
   timeoutMs?: number;
   responseFormat?: { type: "json_object" };
-}): Promise<{ content: string; latencyMs: number }> {
+  tools?: Array<{
+    type: "function";
+    function: {
+      name: string;
+      description: string;
+      parameters: Record<string, unknown>;
+    };
+  }>;
+  toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
+}): Promise<{ content: string; latencyMs: number; toolCalls?: Array<{ name: string; arguments: string }> }> {
   const apiKey = getRequiredOpenRouterApiKey();
   const model = getConfiguredOpenRouterModel(args.model);
   const baseUrl = getConfiguredOpenRouterBaseUrl();
@@ -66,6 +75,8 @@ export async function callOpenRouterChat(args: {
     promptLength: args.prompt.length,
     maxTokens: args.maxTokens ?? 500,
     temperature: args.temperature ?? 0.7,
+    hasTools: !!args.tools,
+    toolCount: args.tools?.length ?? 0,
   });
 
   let response;
@@ -82,7 +93,9 @@ export async function callOpenRouterChat(args: {
       max_tokens: args.maxTokens ?? 500,
       stream: false,
       response_format: args.responseFormat,
-    });
+      tools: args.tools,
+      tool_choice: args.toolChoice ?? "auto",
+    } as any);
   } catch (error) {
     console.error("[openRouterClient] OpenRouter chat completion request failed", {
       model,
@@ -118,15 +131,30 @@ export async function callOpenRouterChat(args: {
     durationMs: Date.now() - startedAt,
     choiceCount: response.choices.length,
     finishReason: response.choices[0]?.finish_reason,
+    hasToolCalls: !!response.choices[0]?.message?.tool_calls?.length,
   });
 
-  const content = response.choices[0]?.message?.content;
-  if (typeof content === "string" && content.trim()) {
+  const message = response.choices[0]?.message;
+  const content = typeof message?.content === "string" ? message.content.trim() : "";
+
+  // Extract native tool calls from the response
+  const toolCalls = message?.tool_calls
+    ?.filter((tc: any) => tc.type === "function")
+    .map((tc: any) => ({
+      name: tc.function.name,
+      arguments: tc.function.arguments,
+    }));
+
+  if (toolCalls && toolCalls.length > 0) {
+    return { content: content || "", latencyMs: Date.now() - startedAt, toolCalls };
+  }
+
+  if (content) {
     return { content, latencyMs: Date.now() - startedAt };
   }
 
-  if (Array.isArray(content)) {
-    const text = content
+  if (Array.isArray(message?.content)) {
+    const text = (message!.content as any[])
       .flatMap((part) => ("text" in part && typeof part.text === "string" ? [part.text] : []))
       .join("\n")
       .trim();

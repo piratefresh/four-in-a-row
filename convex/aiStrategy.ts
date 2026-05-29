@@ -42,9 +42,9 @@ export function getConfiguredAIProvider(): AIProvider {
 
 // Model selection for OpenRouter
 export const OPENROUTER_MODELS = {
-  [AI_DIFFICULTY.EASY]: "mistralai/devstral-small:nitro",
-  [AI_DIFFICULTY.MEDIUM]: "mistralai/devstral-small:nitro",
-  [AI_DIFFICULTY.HARD]: "mistralai/devstral-small:nitro",
+  [AI_DIFFICULTY.EASY]: "deepseek/deepseek-v4-flash",
+  [AI_DIFFICULTY.MEDIUM]: "deepseek/deepseek-v4-flash",
+  [AI_DIFFICULTY.HARD]: "deepseek/deepseek-v4-flash",
 } as const;
 
 // Alias for backwards compatibility

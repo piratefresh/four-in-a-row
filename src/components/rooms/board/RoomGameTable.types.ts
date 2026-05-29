@@ -30,6 +30,17 @@ export type PlayerHand = {
   lastAction?: "check" | "call" | "raise" | "fold";
 };
 
+export type RoomStickerReaction = {
+  id: string;
+  playerId: string;
+  stickerKey: string;
+  label: string;
+  symbol: string;
+  createdAt: number;
+  expiresAt: number;
+  isCurrentPlayer?: boolean;
+};
+
 export type RoomGameTableProps = {
   gameId: Id<"games">;
   activePlayerId?: string;
@@ -48,6 +59,8 @@ export type RoomGameTableProps = {
   bigBlindIndex?: number;
   pot?: number;
   chatDraft?: string;
+  stickers?: RoomStickerReaction[];
+  onSendSticker?: (stickerKey: string) => void | Promise<void>;
   tutorialReplayControl?: ReactNode;
 };
 

@@ -269,33 +269,41 @@ export async function aiDecideBetHandler(
       believesPlayer,
     });
 
-    const toolsJson = JSON.stringify(BETTING_TOOLS);
-    const toolInstructions = `You have access to the following tools. Choose exactly one tool to call based on the game state.
-
-Available tools:
-- check: Pass without betting (only when no bet is owed)
-- call: Match the current bet to stay in
-- raise: Increase the bet (provide the amount parameter)
-- fold: Exit the round and forfeit bets
-
-Respond by calling one of these tools.`;
-
-    const fullPrompt = `${prompt}\n\n${toolInstructions}\n\nTool definitions:\n${toolsJson}`;
-
-    const { content: response, latencyMs } = await callOpenRouterChat({
+    const { content: response, latencyMs, toolCalls } = await callOpenRouterChat({
       model,
-      prompt: fullPrompt,
+      prompt,
       timeoutMs,
+      tools: BETTING_TOOLS as any,
+      toolChoice: "required",
     });
 
     let toolCall: ToolCallResult | null = null;
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*"name"\s*:\s*"(check|call|raise|fold)"[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        toolCall = { name: parsed.name, arguments: parsed.arguments || parsed.params || {} };
+
+    // Parse native function-calling tool_calls from the response
+    if (toolCalls && toolCalls.length > 0) {
+      const firstTool = toolCalls[0]!;
+      if (isBettingToolName(firstTool.name)) {
+        try {
+          const parsedArgs = typeof firstTool.arguments === "string"
+            ? JSON.parse(firstTool.arguments)
+            : firstTool.arguments;
+          toolCall = { name: firstTool.name, arguments: parsedArgs };
+        } catch {
+          toolCall = { name: firstTool.name, arguments: {} };
+        }
       }
-    } catch { /* not JSON */ }
+    }
+
+    // Fallback: try parsing from text content
+    if (!toolCall || !isBettingToolName(toolCall.name)) {
+      try {
+        const jsonMatch = response.match(/\{[\s\S]*"name"\s*:\s*"(check|call|raise|fold)"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          toolCall = { name: parsed.name, arguments: parsed.arguments || parsed.params || {} };
+        }
+      } catch { /* not JSON */ }
+    }
 
     if (!toolCall || !isBettingToolName(toolCall.name)) {
       toolCall = parseStructuredTextResponse(response);
@@ -346,7 +354,7 @@ Respond by calling one of these tools.`;
       isBluffing,
       bluffDetected: args.bluffDetected,
       believesPlayer,
-      inputPrompt: fullPrompt,
+      inputPrompt: prompt,
       outputRaw: response,
       outputParsed: JSON.stringify(toAIBettingDecision(decision)),
       usedFallback: false,

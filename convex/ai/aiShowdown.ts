@@ -194,30 +194,39 @@ export async function aiSubmitWordHandler(
       believesPlayer,
     });
 
-    const toolsJson = JSON.stringify(SHOWDOWN_TOOLS);
-    const toolInstructions = `You have access to the following tools. Choose exactly one tool to call based on the available tiles.
-
-Available tools:
-- submit_word: Submit your chosen word (provide the "word" parameter)
-
-Respond by calling one of these tools.`;
-
-    const fullPrompt = `${prompt}\n\n${toolInstructions}\n\nTool definitions:\n${toolsJson}`;
-
-    const { content: response, latencyMs } = await callOpenRouterChat({
+    const { content: response, latencyMs, toolCalls } = await callOpenRouterChat({
       model,
-      prompt: fullPrompt,
+      prompt,
       timeoutMs,
+      tools: SHOWDOWN_TOOLS as any,
+      toolChoice: "required",
     });
 
     let toolCall: ToolCallResult | null = null;
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*"name"\s*:\s*"submit_word"[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        toolCall = { name: parsed.name, arguments: parsed.arguments || parsed.params || {} };
+
+    // Parse native function-calling tool_calls from the response
+    if (toolCalls && toolCalls.length > 0) {
+      const firstTool = toolCalls[0]!;
+      try {
+        const parsedArgs = typeof firstTool.arguments === "string"
+          ? JSON.parse(firstTool.arguments)
+          : firstTool.arguments;
+        toolCall = { name: firstTool.name, arguments: parsedArgs };
+      } catch {
+        toolCall = { name: firstTool.name, arguments: {} };
       }
-    } catch { /* not JSON */ }
+    }
+
+    // Fallback: try parsing from text content
+    if (!toolCall) {
+      try {
+        const jsonMatch = response.match(/\{[\s\S]*"name"\s*:\s*"submit_word"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          toolCall = { name: parsed.name, arguments: parsed.arguments || parsed.params || {} };
+        }
+      } catch { /* not JSON */ }
+    }
 
     if (!toolCall) {
       toolCall = parseStructuredTextResponse(response);
@@ -241,7 +250,7 @@ Respond by calling one of these tools.`;
           difficulty, personality, model,
           wordSubmitted: result.word,
           wordScore: result.estimatedScore,
-          inputPrompt: fullPrompt,
+          inputPrompt: prompt,
           outputRaw: response,
           outputParsed: JSON.stringify(result),
           provider: "openrouter",
@@ -279,7 +288,7 @@ Respond by calling one of these tools.`;
       fallbackReason: "llm_word_failed_validation",
       bluffDetected: args.bluffDetected,
       believesPlayer,
-      inputPrompt: fullPrompt,
+      inputPrompt: prompt,
       outputRaw: response,
       outputParsed: JSON.stringify(result),
       usedFallback: true,

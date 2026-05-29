@@ -274,6 +274,7 @@ export function RoomActionControls({
                   <>
                     <ActionButton
                       variant="fold"
+                      className="min-w-[58px] xs:min-w-[64px] sm:min-w-[112px]"
                       onClick={requestFoldConfirmation}
                       disabled={betting.isBetting || !betting.canFold}
                     >
@@ -361,6 +362,7 @@ export function RoomActionControls({
                     <>
                       <ActionButton
                         variant="fold"
+                        className="min-w-[58px] xs:min-w-[64px] sm:min-w-[112px]"
                         onClick={requestFoldConfirmation}
                         disabled={betting.isBetting || !betting.canFold}
                       >

@@ -123,6 +123,13 @@ function RoomDetailsPage() {
     tutorialAdapter.isTutorialRoom ? undefined : roomData?.room._id,
     isDesktopChatVisible,
   );
+  const roomStickers = useQuery(
+    api.stickers.listRecent,
+    !tutorialAdapter.isTutorialRoom && roomData?.room._id
+      ? { roomId: roomData.room._id }
+      : "skip",
+  );
+  const sendSticker = useMutation(api.stickers.send);
   const activePlayerId = myPlayer?._id ? String(myPlayer._id) : undefined;
   const activePlayerHand = activePlayerId
     ? displayHands.find((hand) => hand.playerId === activePlayerId)
@@ -306,6 +313,21 @@ function RoomDetailsPage() {
               getPlayerAvatar={getPlayerAvatar}
               getPlayerPersonality={getPlayerPersonality}
               chatDraft={chat.draftMessage}
+              stickers={roomStickers ?? []}
+              onSendSticker={
+                tutorialAdapter.isTutorialRoom || !roomData?.room._id
+                  ? undefined
+                  : async (stickerKey) => {
+                      try {
+                        await sendSticker({
+                          roomId: roomData.room._id,
+                          stickerKey,
+                        });
+                      } catch (error) {
+                        console.error("Failed to send sticker:", error);
+                      }
+                    }
+              }
               tutorialReplayControl={tutorialAdapter.replayButton}
             />
             </div>

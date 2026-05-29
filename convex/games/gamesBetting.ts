@@ -33,6 +33,7 @@ import {
 import { getDialogueProfile } from "../aiPersonalities";
 import { isOpenRouterConfigured, callOpenRouterChat } from "../openRouterClient";
 import { recordAction, recordRaise } from "../activityFeed";
+import { redactReasoningNumbersForChat } from "../reasoningRedaction";
 
 const BOT_AI_TIMEOUT_MS = 4_000;
 
@@ -69,6 +70,50 @@ function logBotTurn(
   details: Record<string, unknown>,
 ) {
   console.log(`[bot-turn] ${message}`, details);
+}
+
+function redactBracketedCandidateWords(text: string): string {
+  return text.replace(/\{[A-Za-z]{2,7}\}/g, "[hidden word]");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getPrivateTileLetters(
+  tiles: Array<{ kind?: string; letter?: string; options?: string[] }>,
+): string[] {
+  const letters = new Set<string>();
+  for (const tile of tiles) {
+    if (tile.kind === "single" && typeof tile.letter === "string") {
+      letters.add(tile.letter.toUpperCase());
+    }
+    if (tile.kind === "choice" && Array.isArray(tile.options)) {
+      for (const option of tile.options) {
+        letters.add(option.toUpperCase());
+      }
+    }
+  }
+  return [...letters].filter((letter) => /^[A-Z]$/.test(letter));
+}
+
+function redactPrivateTileLetters(
+  text: string,
+  tiles: Array<{ kind?: string; letter?: string; options?: string[] }>,
+): string {
+  let redacted = text;
+  for (const letter of getPrivateTileLetters(tiles)) {
+    const escapedLetter = escapeRegExp(letter);
+    redacted = redacted.replace(
+      new RegExp(`\\b${escapedLetter}\\s*\\(\\s*\\d+\\s*\\)`, "g"),
+      "[hidden tile]",
+    );
+    redacted = redacted.replace(
+      new RegExp(`\\b${escapedLetter}\\b`, "g"),
+      "[hidden tile]",
+    );
+  }
+  return redacted;
 }
 
 function getGameConfig(game: Doc<"games">): ResolvedGameConfig {
@@ -378,6 +423,66 @@ export async function internalResolveExpiredTurnClockHandler(
   return { ok: true, action: "fold" as const, playerId: args.playerId };
 }
 
+/**
+ * Stream bot reasoning into chat as short "thinking aloud" messages.
+ * Sends 2-3 short system messages with delays for a streaming effect.
+ */
+async function streamReasoning(
+  ctx: ActionCtx,
+  roomId: Id<"rooms">,
+  botName: string,
+  reasoning: string,
+  privateTiles: Array<{ kind?: string; letter?: string; options?: string[] }>,
+): Promise<void> {
+  const messages: string[] = [];
+  let current = "";
+  const visibleReasoning = redactPrivateTileLetters(
+    redactBracketedCandidateWords(reasoning),
+    privateTiles,
+  );
+
+  // Extract key pieces: RR stats and final action.
+  const segments = visibleReasoning.split(" | ").map((s) => s.trim());
+
+  // First message: hand analysis (RR info)
+  for (const seg of segments) {
+    if (seg.startsWith("RR=")) {
+      current = `Analyzing: ${seg}`;
+    }
+  }
+  if (current) messages.push(current);
+
+  // Second message: the decision
+  for (const seg of segments) {
+    if (seg.includes("->")) {
+      const action = seg.split("->").pop()?.trim();
+      const labels: Record<string, string> = {
+        fold: "folding", call: "calling", raise: "raising", check: "checking",
+      };
+      messages.push(`Decision: ${labels[action ?? ""] ?? action}`);
+    }
+  }
+
+  // Fallback: send raw reasoning if we couldn't parse anything
+  if (messages.length === 0) {
+    await ctx.runMutation(api.messages.sendSystemMessage, {
+      roomId,
+      text: `[${botName}] ${redactReasoningNumbersForChat(visibleReasoning)}`,
+    });
+    return;
+  }
+
+  for (let i = 0; i < messages.length; i++) {
+    await ctx.runMutation(api.messages.sendSystemMessage, {
+      roomId,
+      text: `[${botName}] ${redactReasoningNumbersForChat(messages[i]!)}`,
+    });
+    if (i < messages.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+}
+
 export async function internalProcessBotTurnHandler(
   ctx: ActionCtx,
   args: ScheduledBotTurnArgs,
@@ -479,7 +584,7 @@ export async function internalProcessBotTurnHandler(
   const botAuthUserId = botPlayer?.authUserId ?? "";
   const difficulty = (runtimeState.room?.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM;
 
-  const sendDialogue = async (action: string) => {
+  const sendDialogue = async (action: string, reasoning?: string) => {
     if (!botAuthUserId) return;
     try {
       const character = getBotCharacterForAuthUserId(botAuthUserId);
@@ -509,6 +614,16 @@ export async function internalProcessBotTurnHandler(
         currentBet: game.currentBet,
         believesPlayer,
       });
+
+      if (reasoning) {
+        await streamReasoning(
+          ctx,
+          roomId,
+          character?.name ?? "Bot",
+          reasoning,
+          currentTurnHand.tiles,
+        );
+      }
     } catch (dialogError) {
       console.warn("[bot-turn] sendDialogue failed", {
         gameId: args.gameId,
@@ -608,18 +723,18 @@ export async function internalProcessBotTurnHandler(
       if (amountToCall <= 0) {
         await runCheck();
         logBotTurn("overrode AI fold to check (no bet to call)", { playerId: currentTurnHand.playerId, reasoning: decision.reasoning });
-        await sendDialogue("check");
+        await sendDialogue("check", decision.reasoning);
         return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: `Overrode fold: ${decision.reasoning}` };
       }
       await runFold();
       logBotTurn("executed AI fold", { playerId: currentTurnHand.playerId, reasoning: decision.reasoning });
-      await sendDialogue("fold");
+      await sendDialogue("fold", decision.reasoning);
       return { ok: true, action: "fold", playerId: currentTurnHand.playerId, reasoning: decision.reasoning };
     }
     if (decision.action === "check" && amountToCall <= 0) {
       await runCheck();
       logBotTurn("executed AI check", { playerId: currentTurnHand.playerId, reasoning: decision.reasoning });
-      await sendDialogue("check");
+      await sendDialogue("check", decision.reasoning);
       return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: decision.reasoning };
     }
     if (decision.action === "call") {
@@ -629,7 +744,7 @@ export async function internalProcessBotTurnHandler(
           playerId: currentTurnHand.playerId,
           reasoning: decision.reasoning,
         });
-        await sendDialogue("check");
+        await sendDialogue("check", decision.reasoning);
         return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: decision.reasoning };
       }
       if (currentTurnHand.chips < amountToCall) {
@@ -639,12 +754,12 @@ export async function internalProcessBotTurnHandler(
           amountToCall,
           chips: currentTurnHand.chips,
         });
-        await sendDialogue("fold");
+        await sendDialogue("fold", "Insufficient chips");
         return { ok: true, action: "fold", playerId: currentTurnHand.playerId, reasoning: "Insufficient chips" };
       }
       await runCall();
       logBotTurn("executed AI call", { playerId: currentTurnHand.playerId, amountToCall, reasoning: decision.reasoning });
-      await sendDialogue("call");
+      await sendDialogue("call", decision.reasoning);
       return { ok: true, action: "call", playerId: currentTurnHand.playerId, reasoning: decision.reasoning };
     }
     if (decision.action === "raise" && decision.raiseAmount) {
@@ -658,7 +773,7 @@ export async function internalProcessBotTurnHandler(
           additionalChipsNeeded,
           reasoning: decision.reasoning,
         });
-        await sendDialogue("raise");
+        await sendDialogue("raise", decision.reasoning);
         return { ok: true, action: "raise", playerId: currentTurnHand.playerId, raiseAmount: raiseToAmount, reasoning: decision.reasoning };
       }
       logBotTurn("AI raise was invalid, using fallback resolution", {
@@ -671,18 +786,18 @@ export async function internalProcessBotTurnHandler(
       if (amountToCall > 0 && currentTurnHand.chips >= amountToCall) {
         await runCall();
         logBotTurn("invalid AI raise downgraded to call", { playerId: currentTurnHand.playerId, amountToCall });
-        await sendDialogue("call");
+        await sendDialogue("call", "Raise invalid, downgraded to call");
         return { ok: true, action: "call", playerId: currentTurnHand.playerId, reasoning: "Insufficient chips to raise" };
       }
       if (amountToCall <= 0) {
         await runCheck();
         logBotTurn("invalid AI raise downgraded to check", { playerId: currentTurnHand.playerId });
-        await sendDialogue("check");
+        await sendDialogue("check", "Raise invalid, downgraded to check");
         return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: "AI fallback" };
       }
       await runFold();
       logBotTurn("invalid AI raise downgraded to fold", { playerId: currentTurnHand.playerId, amountToCall, chips: currentTurnHand.chips });
-      await sendDialogue("fold");
+      await sendDialogue("fold", "Insufficient chips");
       return { ok: true, action: "fold", playerId: currentTurnHand.playerId, reasoning: "Insufficient chips" };
     }
     logBotTurn("AI returned an unusable decision, applying generic fallback", {
@@ -693,12 +808,12 @@ export async function internalProcessBotTurnHandler(
     if (amountToCall <= 0) {
       await runCheck();
       logBotTurn("generic fallback resolved to check", { playerId: currentTurnHand.playerId });
-      await sendDialogue("check");
+      await sendDialogue("check", "AI fallback");
       return { ok: true, action: "check", playerId: currentTurnHand.playerId, reasoning: "AI fallback" };
     }
     await runFold();
     logBotTurn("generic fallback resolved to fold", { playerId: currentTurnHand.playerId, amountToCall });
-    await sendDialogue("fold");
+    await sendDialogue("fold", "AI fallback");
     return { ok: true, action: "fold", playerId: currentTurnHand.playerId, reasoning: "AI fallback" };
   } catch (error) {
     console.error("[bot-turn] AI betting execution failed", {

@@ -46,6 +46,11 @@ type PhasePlayerBadgeProps = {
   actionLabel?: string;
   chatBubbleMessage?: string | null;
   urgentBubbleMessage?: string | null;
+  stickerReaction?: {
+    id: string;
+    label: string;
+    symbol: string;
+  } | null;
   isActiveTurn?: boolean;
   isCurrentPlayer?: boolean;
   personality?: string | null;
@@ -68,6 +73,7 @@ export function PhasePlayerBadge({
   actionLabel,
   chatBubbleMessage = null,
   urgentBubbleMessage = null,
+  stickerReaction = null,
   isActiveTurn = false,
   isCurrentPlayer = false,
   personality,
@@ -134,7 +140,7 @@ export function PhasePlayerBadge({
       <div className="max-w-full truncate text-[11px] font-medium leading-none text-white sm:text-[14px]">
         {name}
         {personality ? (
-          <span className="ml-1 text-[#a0a0ff]">({personality})</span>
+          <span className="ml-1 hidden text-[#a0a0ff] xs:inline">({personality})</span>
         ) : null}
         {isCurrentPlayer ? (
           <span className="ml-1 text-[#d7c27a]">(you)</span>
@@ -159,6 +165,18 @@ export function PhasePlayerBadge({
       className={`relative flex flex-col items-center ${className}`}
     >
       <div className="relative">
+        {stickerReaction ? (
+          <div
+            key={stickerReaction.id}
+            className="pointer-events-none absolute -top-5 left-1/2 z-40 -translate-x-1/2 -translate-y-full motion-safe:animate-[sticker-pop_3s_ease-out_both]"
+            aria-label={stickerReaction.label}
+          >
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[#f7df7a]/50 bg-black/45 text-[38px] shadow-[0_12px_34px_rgba(0,0,0,0.46),0_0_24px_rgba(247,223,122,0.24)] backdrop-blur-[1px] [text-shadow:0_3px_12px_rgba(0,0,0,0.7)]">
+              {stickerReaction.symbol}
+            </div>
+          </div>
+        ) : null}
+
         {bubbleMessage ? (
           <div className="pointer-events-none absolute -top-4 left-1/2 z-30 w-max max-w-[180px] -translate-x-1/2 -translate-y-full sm:max-w-[220px]">
             <div

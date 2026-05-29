@@ -19,6 +19,11 @@ type BlankRoomPhasePlayer = {
   chips: number;
   bet?: number;
   position: "top" | "left" | "right";
+  stickerReaction?: {
+    id: string;
+    label: string;
+    symbol: string;
+  } | null;
 };
 
 type BlankRoomPhaseProps = {
@@ -28,6 +33,11 @@ type BlankRoomPhaseProps = {
     avatarUrl?: string | null;
     chips: number;
     bet?: number;
+    stickerReaction?: {
+      id: string;
+      label: string;
+      symbol: string;
+    } | null;
   };
 };
 
@@ -58,6 +68,7 @@ export function BlankRoomPhase({
               avatarUrl={opponent.avatarUrl}
               chips={opponent.chips}
               bet={opponent.bet}
+              stickerReaction={opponent.stickerReaction}
               avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
               initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"
               infoCardClassName="min-w-[82px] px-1.5 py-1 xs:min-w-[92px] xs:px-2 sm:min-w-[118px] sm:px-3 sm:py-1.5"
@@ -72,6 +83,7 @@ export function BlankRoomPhase({
             avatarUrl={bottomPlayer.avatarUrl}
             chips={bottomPlayer.chips}
             bet={bottomPlayer.bet}
+            stickerReaction={bottomPlayer.stickerReaction}
             isCurrentPlayer
             avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
             initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"

@@ -25,7 +25,13 @@ export const BETTING_TOOLS = [
         "Pass without betting. Only available when no bet is currently owed (currentBet is 0).",
       parameters: {
         type: "object",
-        properties: {},
+        properties: {
+          reasoning: {
+            type: "string",
+            description:
+              "Brief explanation of why you are checking. Wrap any candidate word in curly brackets, for example {TRAIN}.",
+          },
+        },
         required: [] as string[],
       },
     },
@@ -38,7 +44,13 @@ export const BETTING_TOOLS = [
         "Match the current bet to stay in the round. Costs currentBet chips.",
       parameters: {
         type: "object",
-        properties: {},
+        properties: {
+          reasoning: {
+            type: "string",
+            description:
+              "Brief explanation of why you are calling. Wrap any candidate word in curly brackets, for example {TRAIN}.",
+          },
+        },
         required: [] as string[],
       },
     },
@@ -59,7 +71,8 @@ export const BETTING_TOOLS = [
           },
           reasoning: {
             type: "string",
-            description: "Brief explanation of why you are raising.",
+            description:
+              "Brief explanation of why you are raising. Wrap any candidate word in curly brackets, for example {TRAIN}.",
           },
         },
         required: ["amount"],
@@ -77,7 +90,8 @@ export const BETTING_TOOLS = [
         properties: {
           reasoning: {
             type: "string",
-            description: "Brief explanation of why you are folding.",
+            description:
+              "Brief explanation of why you are folding. Wrap any candidate word in curly brackets, for example {TRAIN}.",
           },
         },
         required: [] as string[],
@@ -103,7 +117,8 @@ export const SHOWDOWN_TOOLS = [
           },
           reasoning: {
             type: "string",
-            description: "Brief explanation of your word choice.",
+            description:
+              "Brief explanation of your word choice. Wrap candidate words and the submitted word in curly brackets, for example {TRAIN}.",
           },
         },
         required: ["word"],
@@ -131,6 +146,16 @@ export interface ToolCallResult {
   arguments: Record<string, unknown>;
 }
 
+function getToolReasoning(
+  toolCall: ToolCallResult,
+  fallbackReasoning: string,
+): string {
+  const reasoning = toolCall.arguments.reasoning;
+  return typeof reasoning === "string" && reasoning.trim()
+    ? reasoning.trim()
+    : fallbackReasoning;
+}
+
 export function parseBettingToolCall(
   toolCall: ToolCallResult | null | undefined,
   fallback: AIBettingDecision,
@@ -145,14 +170,14 @@ export function parseBettingToolCall(
     case "check":
       return {
         action: "check",
-        reasoning: "AI chose to check",
+        reasoning: getToolReasoning(toolCall, "AI chose to check"),
         confidence: fallback.confidence,
       };
 
     case "call":
       return {
         action: "call",
-        reasoning: "AI chose to call",
+        reasoning: getToolReasoning(toolCall, "AI chose to call"),
         confidence: fallback.confidence,
       };
 
@@ -166,8 +191,7 @@ export function parseBettingToolCall(
       return {
         action: "raise",
         raiseAmount,
-        reasoning:
-          (toolCall.arguments.reasoning as string) || "AI chose to raise",
+        reasoning: getToolReasoning(toolCall, "AI chose to raise"),
         confidence: fallback.confidence,
       };
     }
@@ -175,8 +199,7 @@ export function parseBettingToolCall(
     case "fold":
       return {
         action: "fold",
-        reasoning:
-          (toolCall.arguments.reasoning as string) || "AI chose to fold",
+        reasoning: getToolReasoning(toolCall, "AI chose to fold"),
         confidence: fallback.confidence,
       };
 

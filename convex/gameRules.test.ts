@@ -237,7 +237,7 @@ describe("gameRules", () => {
       expect(probabilisticAction({ handStrength: 0.1, currentBet: 20, roll: 0.02 }).action).toBe("fold");
       expect(probabilisticAction({ handStrength: 0.1, currentBet: 20, roll: 0.97 }).action).toBe("raise");
       expect(probabilisticAction({ handStrength: 0.3, currentBet: 40, potSize: 80, roll: 0.02 }).action).toBe("fold");
-      expect(probabilisticAction({ handStrength: 0.3, currentBet: 40, potSize: 80, roll: 0.86 }).action).toBe("raise");
+      expect(probabilisticAction({ handStrength: 0.3, currentBet: 40, potSize: 80, roll: 0.86 }).action).toBe("call");
       expect(probabilisticAction({ handStrength: 0.35, currentBet: 40, potSize: 80, roll: 0.05 }).action).toBe("call");
       expect(probabilisticAction({ handStrength: 0.35, currentBet: 40, potSize: 80, roll: 0.75 }).action).toBe("raise");
       expect(probabilisticAction({ handStrength: 0.5, currentBet: 20, roll: 0.1 }).action).toBe("call");

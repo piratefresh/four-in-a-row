@@ -1,6 +1,6 @@
 import { Seat } from "../phases/Seat";
 import { WordTile } from "../table/word-tile-v2";
-import type { PlayerHand } from "./RoomGameTable.types";
+import type { PlayerHand, RoomStickerReaction } from "./RoomGameTable.types";
 import { ROOM_OPPONENT_POSITION_CLASS } from "./roomBoardLayout";
 
 function formatPlayerActionLabel(
@@ -52,6 +52,7 @@ type RoomOpponentLayerProps = {
   gameStage?: string;
   currentPlayerHasSubmitted?: boolean;
   canRevealSubmittedWords?: boolean;
+  stickerByPlayerId?: Map<string, RoomStickerReaction>;
 };
 
 export function RoomOpponentLayer({
@@ -66,6 +67,7 @@ export function RoomOpponentLayer({
   gameStage,
   currentPlayerHasSubmitted,
   canRevealSubmittedWords,
+  stickerByPlayerId,
 }: RoomOpponentLayerProps) {
   return opponents.map((hand, opponentIndex) => {
     const position = getOpponentPosition(opponentIndex, opponents.length);
@@ -87,6 +89,7 @@ export function RoomOpponentLayer({
           isActiveTurn={currentTurnPlayerId === hand.playerId}
           personality={getPlayerPersonality(hand.playerId)}
           blindPosition={getBlindPosition?.(hand.playerId)}
+          stickerReaction={stickerByPlayerId?.get(hand.playerId) ?? null}
           avatarSizeClass="h-9 w-9 xs:h-10 xs:w-10 sm:h-14 sm:w-14"
           initialsClass="text-[8px] xs:text-[9px] sm:text-[12px]"
           infoCardClassName="min-w-[82px] px-1.5 py-1 xs:min-w-[92px] xs:px-2 sm:min-w-[118px] sm:px-3 sm:py-1.5"

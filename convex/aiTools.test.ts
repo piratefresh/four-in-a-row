@@ -44,11 +44,22 @@ describe("aiTools", () => {
       expect(params.properties.amount.type).toBe("number");
     });
 
-    it("check and call tools have no required parameters", () => {
+    it("check and call tools request optional reasoning", () => {
       const checkTool = BETTING_TOOLS.find((t) => t.function.name === "check")!;
       const callTool = BETTING_TOOLS.find((t) => t.function.name === "call")!;
+      const checkParams = checkTool.function.parameters as {
+        required: string[];
+        properties: Record<string, { description?: string; type?: string }>;
+      };
+      const callParams = callTool.function.parameters as {
+        required: string[];
+        properties: Record<string, { description?: string; type?: string }>;
+      };
+
       expect(checkTool.function.parameters.required).toEqual([]);
       expect(callTool.function.parameters.required).toEqual([]);
+      expect(checkParams.properties.reasoning.type).toBe("string");
+      expect(callParams.properties.reasoning.type).toBe("string");
     });
   });
 
@@ -106,6 +117,32 @@ describe("aiTools", () => {
         20,
       );
       expect(result.action).toBe("call");
+    });
+
+    it("preserves check and call reasoning from tool arguments", () => {
+      const checkResult = parseBettingToolCall(
+        {
+          name: "check",
+          arguments: { reasoning: "Checking is free while my tiles are weak" },
+        },
+        fallbackDecision,
+        0,
+      );
+      expect(checkResult.reasoning).toBe(
+        "Checking is free while my tiles are weak",
+      );
+
+      const callResult = parseBettingToolCall(
+        {
+          name: "call",
+          arguments: { reasoning: "Pot odds justify seeing the next card" },
+        },
+        fallbackDecision,
+        20,
+      );
+      expect(callResult.reasoning).toBe(
+        "Pot odds justify seeing the next card",
+      );
     });
 
     it("parses a raise action with amount", () => {

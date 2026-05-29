@@ -105,6 +105,12 @@ describe("aiPrompts", () => {
       expect(result).toContain("FCR distribution");
     });
 
+    it("instructs betting reasoning to bracket candidate words", () => {
+      const result = AI_PROMPTS.bettingTooluse.build(fullVars);
+      expect(result).toContain("wrap only that word in curly brackets");
+      expect(result).toContain("{TRAIN}");
+    });
+
     it("shows CHECK when current bet is 0", () => {
       const vars = { ...fullVars, currentBet: 0, raiseLadderNext: "20" };
       const result = AI_PROMPTS.bettingTooluse.build(vars);
@@ -157,6 +163,12 @@ describe("aiPrompts", () => {
       expect(result).toContain("Strategy Hint");
       expect(result).toContain("2-7 letters");
       expect(result).toContain("CSW24");
+    });
+
+    it("instructs showdown reasoning to bracket submitted words", () => {
+      const result = AI_PROMPTS.showdownTooluse.build(fullVars);
+      expect(result).toContain("wrap candidate words and the submitted word");
+      expect(result).toContain("{TRAIN}");
     });
 
     it("adapts personality description based on difficulty", () => {

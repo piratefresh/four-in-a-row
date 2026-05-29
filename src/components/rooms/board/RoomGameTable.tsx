@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -26,8 +26,17 @@ import {
   getPhase1OpponentPosition,
 } from "./RoomOpponentLayer";
 import { RoomTable } from "./RoomTable";
-import type { BuilderTile, RoomGameTableProps } from "./RoomGameTable.types";
+import type {
+  BuilderTile,
+  RoomGameTableProps,
+  RoomStickerReaction,
+} from "./RoomGameTable.types";
 import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "./roomBoardLayout";
+import {
+  StickerWheel,
+  useStickerWheel,
+} from "../stickers/StickerWheel";
+import { ROOM_STICKER_TTL_MS } from "../../../../convex/stickerCatalog";
 import { useRoomGameContext } from "../context/RoomGameContext";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useRoomWordBuilder } from "../hooks/useRoomWordBuilder";
@@ -151,6 +160,8 @@ export function RoomGameTable({
   bigBlindIndex,
   pot = 0,
   chatDraft,
+  stickers = [],
+  onSendSticker,
   tutorialReplayControl,
 }: RoomGameTableProps) {
   const tutorial = useTutorialAdapterContext();
@@ -227,6 +238,60 @@ export function RoomGameTable({
     const trimmedDraft = chatDraft?.trim();
     return trimmedDraft ? trimmedDraft.slice(0, 120) : null;
   }, [chatDraft]);
+  const [optimisticSticker, setOptimisticSticker] =
+    useState<RoomStickerReaction | null>(null);
+  const latestStickerByPlayerId = useMemo(() => {
+    const map = new Map<string, (typeof stickers)[number]>();
+    for (const sticker of stickers) {
+      const current = map.get(sticker.playerId);
+      if (!current || sticker.createdAt >= current.createdAt) {
+        map.set(sticker.playerId, sticker);
+      }
+    }
+    if (optimisticSticker && optimisticSticker.expiresAt > Date.now()) {
+      map.set(optimisticSticker.playerId, optimisticSticker);
+    }
+    return map;
+  }, [optimisticSticker, stickers]);
+  const stickerWheel = useStickerWheel((selection) => {
+    if (!onSendSticker) return;
+    const now = Date.now();
+    const playerId = bottomHand?.playerId;
+
+    if (playerId) {
+      setOptimisticSticker({
+        id: `optimistic-${selection.stickerKey}-${now}`,
+        playerId,
+        stickerKey: selection.stickerKey,
+        label: selection.label,
+        symbol: selection.symbol,
+        createdAt: now,
+        expiresAt: now + ROOM_STICKER_TTL_MS,
+        isCurrentPlayer: true,
+      });
+    }
+
+    void Promise.resolve(onSendSticker(selection.stickerKey)).catch(() => {
+      setOptimisticSticker((current) =>
+        current?.createdAt === now ? null : current,
+      );
+    });
+  });
+
+  useEffect(() => {
+    if (!optimisticSticker) return;
+
+    const timeout = window.setTimeout(
+      () => {
+        setOptimisticSticker((current) =>
+          current?.id === optimisticSticker.id ? null : current,
+        );
+      },
+      Math.max(0, optimisticSticker.expiresAt - Date.now()),
+    );
+
+    return () => window.clearTimeout(timeout);
+  }, [optimisticSticker]);
   const showTurnUrgencyBubble =
     showBettingControls &&
     isMyTurn &&
@@ -381,10 +446,33 @@ export function RoomGameTable({
       }}
     >
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-gradient-felt-table font-serif text-[#f1eee7] [@media(max-height:460px)]:min-h-0">
+        {onSendSticker ? (
+          <StickerWheel
+            state={stickerWheel.state}
+            onClose={stickerWheel.close}
+            onSelect={stickerWheel.onSelect}
+          />
+        ) : null}
         <div className="absolute right-3 top-3 z-40 sm:right-4 sm:top-4">
           <RoomHelpMenu />
         </div>
-        <main className="flex min-h-0 flex-1 flex-col pt-3 sm:pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <main
+          className="flex min-h-0 flex-1 flex-col pt-3 sm:pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          onContextMenu={
+            onSendSticker ? stickerWheel.handleContextMenu : undefined
+          }
+          onPointerDown={
+            onSendSticker ? stickerWheel.handlePointerDown : undefined
+          }
+          onPointerMove={
+            onSendSticker ? stickerWheel.handlePointerMove : undefined
+          }
+          onPointerUp={onSendSticker ? stickerWheel.handlePointerUp : undefined}
+          onPointerCancel={
+            onSendSticker ? stickerWheel.handlePointerCancel : undefined
+          }
+          data-testid="room-sticker-surface"
+        >
           {tutorialReplayControl ? (
             <div className="px-4 pb-2">{tutorialReplayControl}</div>
           ) : null}
@@ -404,6 +492,8 @@ export function RoomGameTable({
                   avatarUrl: getPlayerAvatar(hand.playerId),
                   chips: hand.chips ?? 0,
                   bet: hand.betThisRound ?? 0,
+                  stickerReaction:
+                    latestStickerByPlayerId.get(hand.playerId) ?? null,
                   position: getPhase1OpponentPosition(
                     opponentIndex,
                     opponents.length,
@@ -414,6 +504,8 @@ export function RoomGameTable({
                   avatarUrl: getPlayerAvatar(bottomHand.playerId),
                   chips: bottomHand.chips ?? 0,
                   bet: bottomHand.betThisRound ?? 0,
+                  stickerReaction:
+                    latestStickerByPlayerId.get(bottomHand.playerId) ?? null,
                 }}
               />
             )}
@@ -445,6 +537,7 @@ export function RoomGameTable({
                     gameStage={gameStage}
                     currentPlayerHasSubmitted={!!mySubmission}
                     canRevealSubmittedWords={canRevealSubmittedWords}
+                    stickerByPlayerId={latestStickerByPlayerId}
                   />
                   <div className={ROOM_BOTTOM_BADGE_POSITION_CLASS}>
                     <Seat
@@ -460,6 +553,9 @@ export function RoomGameTable({
                         showTurnUrgencyBubble
                           ? "Time is running out. Make a move."
                           : null
+                      }
+                      stickerReaction={
+                        latestStickerByPlayerId.get(bottomHand.playerId) ?? null
                       }
                       isActiveTurn={currentTurnPlayerId === bottomHand.playerId}
                       isCurrentPlayer
