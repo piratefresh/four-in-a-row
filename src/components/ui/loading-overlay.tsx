@@ -33,7 +33,10 @@ export function LoadingOverlay({
   const displaySubtitle = subtitle ?? randomSubtitle;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-felt-deep">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-felt-deep"
+      data-loading-overlay="true"
+    >
       <div className="flex w-full max-w-xl flex-col items-center gap-6 px-6 text-center">
         {spinning ? <PokerChipHero tone="gold" size="lg" spinning /> : null}
         <div className="space-y-3">

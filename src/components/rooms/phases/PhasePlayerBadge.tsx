@@ -98,6 +98,11 @@ export function PhasePlayerBadge({
   const badge = blindPosition ? blindBadgeConfig[blindPosition] : null;
   const bubbleMessage = urgentBubbleMessage ?? chatBubbleMessage;
   const isUrgentBubble = urgentBubbleMessage !== null;
+  const [bubbleDismissed, setBubbleDismissed] = useState(false);
+
+  useEffect(() => {
+    setBubbleDismissed(false);
+  }, [bubbleMessage]);
   const mobileInfoPopupClassName =
     mobileInfoPlacement === "top" ? "bottom-full mb-2" : "top-full mt-2";
   const statusLabel =
@@ -177,8 +182,11 @@ export function PhasePlayerBadge({
           </div>
         ) : null}
 
-        {bubbleMessage ? (
-          <div className="pointer-events-none absolute -top-4 left-1/2 z-30 w-max max-w-[180px] -translate-x-1/2 -translate-y-full sm:max-w-[220px]">
+        {bubbleMessage && !bubbleDismissed ? (
+          <div
+            className="pointer-events-auto absolute -top-4 left-1/2 z-30 w-max max-w-[180px] -translate-x-1/2 -translate-y-full sm:max-w-[220px]"
+            onPointerLeave={() => setBubbleDismissed(true)}
+          >
             <div
               className={`relative rounded-2xl border px-3 py-2 text-center text-[11px] font-bold leading-snug shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:text-[12px] ${
                 isUrgentBubble

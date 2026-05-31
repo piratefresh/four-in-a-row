@@ -29,6 +29,8 @@ import {
   buildGameStateDescription,
   cleanDialogueResponse,
   parseDialogueResponse,
+  dialogueResponseToTraceText,
+  type DialogueResponse,
 } from "../aiDialogue";
 import { getDialogueProfile } from "../aiPersonalities";
 import { isOpenRouterConfigured, callOpenRouterChat } from "../openRouterClient";
@@ -37,7 +39,11 @@ import { redactReasoningNumbersForChat } from "../reasoningRedaction";
 
 const BOT_AI_TIMEOUT_MS = 4_000;
 
-type PlayerActionArgs = { gameId: Doc<"games">["_id"]; playerId: string };
+type PlayerActionArgs = {
+  gameId: Doc<"games">["_id"];
+  playerId: string;
+  clientIsMobile?: boolean;
+};
 type ScheduledBotTurnArgs = PlayerActionArgs & {
   expectedStage?: string;
   expectedCurrentPlayerIndex?: number;
@@ -70,6 +76,12 @@ function logBotTurn(
   details: Record<string, unknown>,
 ) {
   console.log(`[bot-turn] ${message}`, details);
+}
+
+function getAudiencePatch(args: PlayerActionArgs) {
+  return typeof args.clientIsMobile === "boolean"
+    ? { lastAudienceIsMobile: args.clientIsMobile }
+    : {};
 }
 
 function redactBracketedCandidateWords(text: string): string {
@@ -218,11 +230,15 @@ export async function checkHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     throw new ConvexError({ code: "CANNOT_CHECK", message: `You must call ${game.currentBet} or fold.` });
   }
   const now = Date.now();
+  const audiencePatch = getAudiencePatch(args);
   await ctx.db.patch(currentTurnHand._id, {
     hasActed: true,
     lastAction: "check",
     updatedAt: now,
   });
+  if (typeof args.clientIsMobile === "boolean") {
+    await ctx.db.patch(game._id, { ...audiencePatch, updatedAt: now });
+  }
   await insertGameActionTrace(ctx, {
     game,
     playerId,
@@ -249,6 +265,7 @@ export async function callHandler(ctx: MutationCtx, args: PlayerActionArgs) {
   if (amountToCall <= 0) throw new ConvexError({ code: "NOTHING_TO_CALL", message: "You have already matched the current bet. Use check instead." });
   if (currentTurnHand.chips < amountToCall) throw new ConvexError({ code: "INSUFFICIENT_CHIPS", message: `You need ${amountToCall} chips to call, but only have ${currentTurnHand.chips}.` });
   const now = Date.now();
+  const audiencePatch = getAudiencePatch(args);
   await ctx.db.patch(currentTurnHand._id, {
     chips: currentTurnHand.chips - amountToCall,
     betThisRound: currentTurnHand.betThisRound + amountToCall,
@@ -257,7 +274,7 @@ export async function callHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     lastAction: "call",
     updatedAt: now,
   });
-  await ctx.db.patch(game._id, { pot: game.pot + amountToCall, updatedAt: now });
+  await ctx.db.patch(game._id, { pot: game.pot + amountToCall, ...audiencePatch, updatedAt: now });
   await insertGameActionTrace(ctx, {
     game,
     playerId,
@@ -316,9 +333,10 @@ export async function raiseHandler(
   }
   if (currentTurnHand.chips < additionalChipsNeeded) throw new ConvexError({ code: "INSUFFICIENT_CHIPS", message: `You need ${additionalChipsNeeded} chips to raise to ${raiseToAmount}, but only have ${currentTurnHand.chips}.` });
   const now = Date.now();
+  const audiencePatch = getAudiencePatch(args);
   await ctx.db.patch(currentTurnHand._id, { chips: currentTurnHand.chips - additionalChipsNeeded, betThisRound: raiseToAmount, totalBet: currentTurnHand.totalBet + additionalChipsNeeded, hasActed: true, lastAction: "raise", updatedAt: now });
   for (const hand of orderedHands) if (hand._id !== currentTurnHand._id && !hand.hasFolded) await ctx.db.patch(hand._id, { hasActed: false, updatedAt: now });
-  await ctx.db.patch(game._id, { pot: game.pot + additionalChipsNeeded, currentBet: raiseToAmount, raisesThisRound: raisesThisRound + 1, updatedAt: now });
+  await ctx.db.patch(game._id, { pot: game.pot + additionalChipsNeeded, currentBet: raiseToAmount, raisesThisRound: raisesThisRound + 1, ...audiencePatch, updatedAt: now });
   await insertGameActionTrace(ctx, {
     game,
     playerId,
@@ -356,7 +374,11 @@ export async function foldHandler(ctx: MutationCtx, args: PlayerActionArgs) {
   const playerId = args.playerId.trim();
   const { orderedHands, currentTurnHand } = await getCurrentTurnHand(ctx, game, playerId);
   const now = Date.now();
+  const audiencePatch = getAudiencePatch(args);
   await ctx.db.patch(currentTurnHand._id, { hasFolded: true, hasActed: true, lastAction: "fold", updatedAt: now });
+  if (typeof args.clientIsMobile === "boolean") {
+    await ctx.db.patch(game._id, { ...audiencePatch, updatedAt: now });
+  }
   await insertGameActionTrace(ctx, {
     game,
     playerId,
@@ -481,6 +503,30 @@ async function streamReasoning(
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
   }
+}
+
+async function sendBotDialogueResponse(
+  ctx: ActionCtx,
+  args: {
+    roomId: Id<"rooms">;
+    playerId: string;
+    response: DialogueResponse;
+  },
+) {
+  if (args.response.type === "sticker") {
+    await ctx.runMutation(internal.stickers.sendAsAI, {
+      roomId: args.roomId,
+      playerId: args.playerId as any,
+      stickerKey: args.response.stickerKey,
+    });
+    return;
+  }
+
+  await ctx.runMutation(api.messages.sendAsAI, {
+    roomId: args.roomId,
+    playerId: args.playerId as any,
+    text: args.response.message,
+  });
 }
 
 export async function internalProcessBotTurnHandler(
@@ -613,16 +659,31 @@ export async function internalProcessBotTurnHandler(
         botChips: currentTurnHand.chips,
         currentBet: game.currentBet,
         believesPlayer,
+        isMobileAudience: game.lastAudienceIsMobile === true,
       });
 
       if (reasoning) {
-        await streamReasoning(
-          ctx,
-          roomId,
-          character?.name ?? "Bot",
-          reasoning,
-          currentTurnHand.tiles,
-        );
+        if (game.lastAudienceIsMobile === true) {
+          const visibleReasoning = redactReasoningNumbersForChat(
+            redactPrivateTileLetters(
+              redactBracketedCandidateWords(reasoning),
+              currentTurnHand.tiles,
+            ),
+          );
+          await ctx.runMutation(api.messages.sendAsAI, {
+            roomId,
+            playerId: args.playerId as any,
+            text: visibleReasoning,
+          });
+        } else {
+          await streamReasoning(
+            ctx,
+            roomId,
+            character?.name ?? "Bot",
+            reasoning,
+            currentTurnHand.tiles,
+          );
+        }
       }
     } catch (dialogError) {
       console.warn("[bot-turn] sendDialogue failed", {
@@ -889,6 +950,7 @@ export async function maybeSendBotDialogue(
     botChips: number;
     currentBet: number;
     believesPlayer?: boolean | null;
+    isMobileAudience?: boolean;
   },
 ): Promise<void> {
   try {
@@ -928,14 +990,16 @@ export async function maybeSendBotDialogue(
       gameState: "",
       recentMessages: recentMessagesStr,
       believesPlayer: args.believesPlayer ?? null,
+      isMobileAudience: args.isMobileAudience === true,
     });
 
     if (templateResult) {
-      await ctx.runMutation(api.messages.sendAsAI, {
+      await sendBotDialogueResponse(ctx, {
         roomId: args.roomId,
-        playerId: args.playerId as any,
-        text: templateResult.message,
+        playerId: args.playerId,
+        response: templateResult.response,
       });
+      const dialogueMessage = dialogueResponseToTraceText(templateResult.response);
       await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
         gameId: args.gameId,
         roomId: args.roomId,
@@ -952,13 +1016,13 @@ export async function maybeSendBotDialogue(
         action: args.action,
         personality: character.personality,
         dialogueTrigger: trigger,
-        dialogueMessage: templateResult.message,
+        dialogueMessage,
         dialogueSource: "template",
         dialogueSent: true,
         bluffDetected: false,
         believesPlayer: args.believesPlayer ?? null,
         usedFallback: true,
-        metadata: { source: "template" },
+        metadata: { source: "template", response: templateResult.response },
       });
       if (latestPlayerMsg && alreadyRepliedCount < 3) {
         try {
@@ -985,11 +1049,76 @@ export async function maybeSendBotDialogue(
       gameState: gameStateDesc,
       recentMessages: recentMessagesStr,
       believesPlayer: args.believesPlayer ?? null,
+      isMobileAudience: args.isMobileAudience === true,
     });
 
     if (!shouldSpeak) return;
 
     if (!isOpenRouterConfigured()) return;
+
+    if (args.isMobileAudience === true) {
+      const model = getModelForDifficulty("medium");
+      const profile = getDialogueProfile(character.personality);
+      const { content: rawResponse, latencyMs } = await callOpenRouterChat({
+        model,
+        prompt,
+        timeoutMs: 3000,
+        responseFormat: { type: "json_object" },
+      });
+      const response =
+        parseDialogueResponse(rawResponse) ?? {
+          type: "text" as const,
+          message: cleanDialogueResponse(rawResponse, profile.maxTokens),
+        };
+      if (response.type === "text" && !response.message) return;
+
+      await sendBotDialogueResponse(ctx, {
+        roomId: args.roomId,
+        playerId: args.playerId,
+        response,
+      });
+
+      const dialogueMessage = dialogueResponseToTraceText(response);
+      await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+        gameId: args.gameId,
+        roomId: args.roomId,
+        category: "ai_dialogue",
+        component: "dialogue",
+        operation: "send_dialogue",
+        decisionSource: "llm",
+        provider: "openrouter",
+        latencyMs,
+        playerId: args.playerId,
+        playerName: character.name,
+        characterId: character.id,
+        isBot: true,
+        stage: args.gameStage,
+        action: args.action,
+        model,
+        personality: character.personality,
+        dialogueTrigger: trigger,
+        dialogueMessage,
+        dialogueSource: response.type,
+        dialogueSent: true,
+        bluffDetected: false,
+        believesPlayer: args.believesPlayer ?? null,
+        inputPrompt: prompt,
+        outputRaw: rawResponse,
+        outputParsed: JSON.stringify(response),
+        usedFallback: false,
+        metadata: { latencyMs, response },
+      });
+
+      if (latestPlayerMsg && alreadyRepliedCount < 3) {
+        try {
+          await ctx.runMutation(api.messages.markPlayerMessageReplied, {
+            messageId: latestPlayerMsg._id,
+            botName: character.name,
+          });
+        } catch {}
+      }
+      return;
+    }
 
     // RAG: try to find a cached response for similar context
     const contextText = `Trigger: ${trigger}. ${gameStateDesc} Chat: ${recentMessagesStr || "none"}`;
@@ -1064,7 +1193,11 @@ export async function maybeSendBotDialogue(
       timeoutMs: 3000,
       responseFormat: { type: "json_object" },
     });
-    const cleaned = parseDialogueResponse(rawResponse) ?? cleanDialogueResponse(rawResponse, profile.maxTokens);
+    const parsed = parseDialogueResponse(rawResponse);
+    const cleaned =
+      parsed?.type === "text"
+        ? parsed.message
+        : cleanDialogueResponse(rawResponse, profile.maxTokens);
 
     if (!cleaned) return;
 

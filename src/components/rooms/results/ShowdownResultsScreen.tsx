@@ -1,9 +1,11 @@
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { FeedbackResultsCard } from "@/components/feedback";
 import { getLetterValue } from "@/lib/letterValues";
 import { cn } from "@/lib/utils";
 import { WinSplashOverlay } from "./WinSplashOverlay";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 type SubmissionTile = {
   letter: string;
@@ -49,7 +51,10 @@ type ShowdownResultsScreenProps = {
   isStartingNewGame?: boolean;
   onPlayAgainOnline?: () => void;
   isStartingPlayAgain?: boolean;
-  countdown?: number;
+  showFeedback?: boolean;
+  feedbackRoutePath?: string;
+  feedbackRoomId?: Id<"rooms">;
+  feedbackGameId?: Id<"games">;
 };
 
 const PLAYER_GRADIENTS = [
@@ -75,7 +80,10 @@ export function ShowdownResultsScreen({
   isStartingNewGame,
   onPlayAgainOnline,
   isStartingPlayAgain,
-  countdown,
+  showFeedback,
+  feedbackRoutePath,
+  feedbackRoomId,
+  feedbackGameId,
 }: ShowdownResultsScreenProps) {
   const submissions = showdownResults.allSubmissions ?? [];
   const currentPlayerSubmission = useMemo(() => {
@@ -244,10 +252,18 @@ export function ShowdownResultsScreen({
             ? "Return home when you are ready."
             : isOfflineGame
               ? "Start another bot game or return home."
-              : countdown != null
-                ? `Auto-leaving in ${countdown}s`
-                : "Return to the room list or head back home."}
+              : "Return to the room list or head back home."}
         </p>
+
+        {showFeedback ? (
+          <div className="mt-6">
+            <FeedbackResultsCard
+              routePath={feedbackRoutePath}
+              roomId={feedbackRoomId}
+              gameId={feedbackGameId}
+            />
+          </div>
+        ) : null}
 
         <div id="tutorial-showdown-results" className="mt-8 flex-1 space-y-3">
           {submissions.map((submission, index) => (

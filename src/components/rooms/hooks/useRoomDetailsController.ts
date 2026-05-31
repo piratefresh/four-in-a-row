@@ -9,6 +9,7 @@ import { useRoomLeave } from "./useRoomLeave";
 import { useRoomReactions } from "./useRoomReactions";
 import { useRoomDevTools } from "./useRoomDevTools";
 import { useBettingActions } from "./useBettingActions";
+import { useMediaQuery } from "./useMediaQuery";
 import {
   isMyTurn,
   canCheck,
@@ -45,6 +46,9 @@ export function useRoomDetailsController(
     playerId,
     nameMatchedPlayerId,
   } = queries;
+  const clientIsMobile = !useMediaQuery("(min-width: 640px)", undefined, {
+    getInitialValueInEffect: false,
+  });
 
   // --- Display (hand ordering, player lookups) ---
   const display = useRoomDisplay(
@@ -140,6 +144,7 @@ export function useRoomDetailsController(
     maxRaisesPerRound,
     raisesThisRound,
     selectedRaiseAmount,
+    clientIsMobile,
   );
 
   // --- Ready ---

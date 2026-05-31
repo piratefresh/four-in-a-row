@@ -30,6 +30,7 @@ import type * as csw24 from "../csw24.js";
 import type * as debugBots from "../debugBots.js";
 import type * as emails from "../emails.js";
 import type * as embeddings from "../embeddings.js";
+import type * as feedback from "../feedback.js";
 import type * as friendships_index from "../friendships/index.js";
 import type * as friendships_notifications from "../friendships/notifications.js";
 import type * as friendships_requests from "../friendships/requests.js";
@@ -113,6 +114,7 @@ declare const fullApi: ApiFromModules<{
   debugBots: typeof debugBots;
   emails: typeof emails;
   embeddings: typeof embeddings;
+  feedback: typeof feedback;
   "friendships/index": typeof friendships_index;
   "friendships/notifications": typeof friendships_notifications;
   "friendships/requests": typeof friendships_requests;

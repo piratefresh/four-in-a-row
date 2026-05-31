@@ -149,7 +149,6 @@ export function RoomHandsBoardV2({
   smallBlindIndex,
   bigBlindIndex,
   pot = 0,
-  chatDraft,
   tutorialReplayControl,
 }: RoomHandsBoardProps) {
   const tutorial = useTutorialAdapterContext();
@@ -222,10 +221,6 @@ export function RoomHandsBoardV2({
   }, [bottomPlayerId, hands]);
 
   const bottomHand = useMemo(() => orderedHands[0], [orderedHands]);
-  const activeChatDraft = useMemo(() => {
-    const trimmedDraft = chatDraft?.trim();
-    return trimmedDraft ? trimmedDraft.slice(0, 120) : null;
-  }, [chatDraft]);
   const showTurnUrgencyBubble =
     showBettingControls &&
     isMyTurn &&
@@ -454,7 +449,6 @@ export function RoomHandsBoardV2({
                       actionLabel={formatPlayerActionLabel(
                         bottomHand.lastAction,
                       )}
-                      chatBubbleMessage={activeChatDraft}
                       urgentBubbleMessage={
                         showTurnUrgencyBubble
                           ? "Time is running out. Make a move."

@@ -13,7 +13,7 @@ const WHEEL_SIZE = 360;
 const OUTER_RADIUS = WHEEL_SIZE / 2;
 const ITEM_RADIUS = 136;
 const CANCEL_RADIUS = 56;
-const LONG_PRESS_MS = 450;
+const LONG_PRESS_MS = 5_000;
 const RIGHT_PRESS_MS = 500;
 const MOVE_CANCEL_PX = 12;
 
@@ -158,8 +158,9 @@ export function StickerWheel({ state, onClose, onSelect }: StickerWheelProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-black/35 backdrop-blur-[1px]"
+      className="fixed inset-0 z-[60] select-none bg-black/35 backdrop-blur-[1px] [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none] [touch-action:none]"
       data-testid="sticker-wheel-backdrop"
+      onContextMenu={(event) => event.preventDefault()}
       onPointerMove={(event) => {
         const nextIndex = getStickerIndexFromPoint(center, {
           x: event.clientX,
@@ -188,7 +189,7 @@ export function StickerWheel({ state, onClose, onSelect }: StickerWheelProps) {
     >
       <div
         ref={wheelRef}
-        className="absolute h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2"
+        className="absolute h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 select-none [-webkit-touch-callout:none] [-webkit-user-select:none]"
         style={{ left: state.x, top: state.y }}
       >
         <div className="absolute inset-0 rounded-full border border-[#d9c88a]/45 bg-black/66 shadow-[0_24px_80px_rgba(0,0,0,0.58)]" />
@@ -208,7 +209,7 @@ export function StickerWheel({ state, onClose, onSelect }: StickerWheelProps) {
               key={sticker.key}
               type="button"
               className={cn(
-                "absolute left-1/2 top-1/2 flex h-[68px] w-[76px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-1 rounded-[8px] border border-transparent text-[#eee6cf] transition duration-100",
+                "absolute left-1/2 top-1/2 flex h-[68px] w-[76px] -translate-x-1/2 -translate-y-1/2 select-none flex-col items-center justify-center gap-1 rounded-[8px] border border-transparent text-[#eee6cf] transition duration-100 [-webkit-touch-callout:none] [-webkit-user-select:none]",
                 "hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f1d585]",
                 selected && "text-white",
               )}
@@ -332,6 +333,7 @@ export function useStickerWheel(
       }
 
       if (event.pointerType === "touch") {
+        event.preventDefault();
         touchStartRef.current = { x: event.clientX, y: event.clientY };
         clearLongPress();
         longPressTimerRef.current = window.setTimeout(() => {

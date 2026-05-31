@@ -45,6 +45,7 @@ import type { WordTileSize } from "../table/word-tile-v2";
 import {
   IN_GAME_HELPER_STEPS,
 } from "@/components/onboarding/wordPokerTours";
+import { cn } from "@/lib/utils";
 
 type SortableBuilderTileProps = {
   tile: BuilderTile;
@@ -159,7 +160,6 @@ export function RoomGameTable({
   smallBlindIndex,
   bigBlindIndex,
   pot = 0,
-  chatDraft,
   stickers = [],
   onSendSticker,
   tutorialReplayControl,
@@ -234,10 +234,6 @@ export function RoomGameTable({
   }, [bottomPlayerId, hands]);
 
   const bottomHand = useMemo(() => orderedHands[0], [orderedHands]);
-  const activeChatDraft = useMemo(() => {
-    const trimmedDraft = chatDraft?.trim();
-    return trimmedDraft ? trimmedDraft.slice(0, 120) : null;
-  }, [chatDraft]);
   const [optimisticSticker, setOptimisticSticker] =
     useState<RoomStickerReaction | null>(null);
   const latestStickerByPlayerId = useMemo(() => {
@@ -457,7 +453,11 @@ export function RoomGameTable({
           <RoomHelpMenu />
         </div>
         <main
-          className="flex min-h-0 flex-1 flex-col pt-3 sm:pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          className={cn(
+            "flex min-h-0 flex-1 flex-col pt-3 sm:pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+            onSendSticker &&
+              "select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none]",
+          )}
           onContextMenu={
             onSendSticker ? stickerWheel.handleContextMenu : undefined
           }
@@ -548,7 +548,6 @@ export function RoomGameTable({
                       actionLabel={formatPlayerActionLabel(
                         bottomHand.lastAction,
                       )}
-                      chatBubbleMessage={activeChatDraft}
                       urgentBubbleMessage={
                         showTurnUrgencyBubble
                           ? "Time is running out. Make a move."

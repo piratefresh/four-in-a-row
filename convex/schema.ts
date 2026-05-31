@@ -106,6 +106,7 @@ export const appTables = {
     turnClockCallerPlayerId: v.optional(v.string()),
     turnClockTargetPlayerId: v.optional(v.string()),
     lastBotTurnScheduledAt: v.optional(v.number()),
+    lastAudienceIsMobile: v.optional(v.boolean()),
     config: v.optional(resolvedGameConfigValidator),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -237,6 +238,41 @@ export const appTables = {
     showInGameHelper: v.boolean(),
     updatedAt: v.number(),
   }).index("by_authUserId", ["authUserId"]),
+  feedback: defineTable({
+    authUserId: v.string(),
+    userEmail: v.optional(v.string()),
+    userName: v.optional(v.string()),
+    rating: v.number(),
+    category: v.optional(
+      v.union(
+        v.literal("gameplay"),
+        v.literal("design"),
+        v.literal("bugs"),
+        v.literal("performance"),
+        v.literal("suggestion"),
+        v.literal("other"),
+      ),
+    ),
+    message: v.optional(v.string()),
+    replyEmail: v.optional(v.string()),
+    source: v.union(v.literal("launcher"), v.literal("results")),
+    routePath: v.optional(v.string()),
+    roomId: v.optional(v.id("rooms")),
+    gameId: v.optional(v.id("games")),
+    userAgent: v.optional(v.string()),
+    emailStatus: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("skipped"),
+      v.literal("failed"),
+    ),
+    emailError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_createdAt", ["createdAt"])
+    .index("by_authUserId_createdAt", ["authUserId", "createdAt"])
+    .index("by_gameId_createdAt", ["gameId", "createdAt"]),
   gameTraces: defineTable({
     gameId: v.id("games"),
     roomId: v.optional(v.id("rooms")),

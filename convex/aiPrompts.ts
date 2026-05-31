@@ -58,6 +58,8 @@ export type DialoguePromptVars = {
   recentMessages: string;
   maxTokens: number;
   believesPlayer: boolean | null;
+  isMobileAudience?: boolean;
+  availableStickers?: string;
 };
 
 export type PromptEntry<TVars> = {
@@ -212,6 +214,7 @@ export const PROMPT_DIALOGUE: PromptEntry<DialoguePromptVars> = {
 ${vars.chattinessDescription}
 
 You speak in character. Keep your message under ${vars.maxTokens} tokens. Be natural, brief, and fun.
+${vars.isMobileAudience ? `\nThe player is on mobile. Prefer a sticker reaction over text when a sticker can carry the emotion. Available stickers: ${vars.availableStickers}.` : ""}
 
 ## What Just Happened
 Trigger: ${vars.triggerDescription}
@@ -226,8 +229,12 @@ ${vars.believesPlayer === true ? "You believe the player's recent claims. You ma
 
 If there are recent player messages in the chat, you may briefly acknowledge or respond to them ONLY if no other bot has already done so. Player messages marked as "replied by" other bots have already been acknowledged — don't pile on unless you have something genuinely new to add. Focus on the game action instead.
 
-Respond in character as ${vars.botName}. Return ONLY a JSON object with this exact structure:
-{"message": "your dialogue text here"}
+Respond in character as ${vars.botName}. Return ONLY one JSON object.
+${vars.isMobileAudience ? `For text, use:
+{"type": "text", "message": "your dialogue text here"}
+For a sticker, use:
+{"sticker": {"key": "one_available_sticker_key", "emoji": "matching sticker emoji"}, "message": "optional short text"}` : `Use this exact structure:
+{"message": "your dialogue text here"}`}
 
 Do not include any other text, explanations, or markdown. Only the JSON object.`;
   },

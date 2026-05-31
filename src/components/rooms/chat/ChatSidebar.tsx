@@ -9,6 +9,7 @@ import {
 
 type ChatMessage = {
   id: string;
+  playerId?: string;
   senderId: string;
   senderName: string;
   message: string;

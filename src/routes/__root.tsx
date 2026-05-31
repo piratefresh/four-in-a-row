@@ -3,6 +3,7 @@ import {
   Outlet,
   Scripts,
   createRootRouteWithContext,
+  useLocation,
   useRouteContext,
   useMatchRoute,
 } from "@tanstack/react-router";
@@ -20,6 +21,7 @@ import { ConvexQueryClient } from "@convex-dev/react-query";
 import { authClient } from "@/lib/auth-client";
 import { Toaster } from "@/components/ui/sonner";
 import { AppTourProvider } from "@/components/onboarding/AppTourProvider";
+import { FeedbackLauncher } from "@/components/feedback";
 
 // Get auth information for SSR using available cookies
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
@@ -137,6 +139,7 @@ function RootComponent() {
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   const matchRoute = useMatchRoute();
+  const location = useLocation();
   const isRoomOrResultsView =
     matchRoute({ to: "/rooms/$code" }) || matchRoute({ to: "/results/$code" });
   const isLoginOrRegisterView =
@@ -154,6 +157,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             {showHeader && <Header />}
             <VerifyEmailBanner />
             <div className="flex flex-1 flex-col min-h-0">{children}</div>
+            {!isRoomOrResultsView && (
+              <FeedbackLauncher routePath={location.pathname} />
+            )}
           </div>
         </AppTourProvider>
         <Toaster richColors />

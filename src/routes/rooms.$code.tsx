@@ -313,6 +313,7 @@ function RoomDetailsPage() {
               getPlayerAvatar={getPlayerAvatar}
               getPlayerPersonality={getPlayerPersonality}
               chatDraft={chat.draftMessage}
+              chatMessages={chat.messages}
               stickers={roomStickers ?? []}
               onSendSticker={
                 tutorialAdapter.isTutorialRoom || !roomData?.room._id

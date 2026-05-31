@@ -5,6 +5,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 
 type ChatMessage = {
   id: string;
+  playerId?: string;
   senderId: string;
   senderName: string;
   message: string;

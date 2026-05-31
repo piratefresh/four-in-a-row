@@ -41,6 +41,15 @@ export type RoomStickerReaction = {
   isCurrentPlayer?: boolean;
 };
 
+export type RoomChatBubbleMessage = {
+  id: string;
+  playerId?: string;
+  message: string;
+  timestamp: number;
+  type: "player" | "ai" | "system";
+  isCurrentPlayer?: boolean;
+};
+
 export type RoomGameTableProps = {
   gameId: Id<"games">;
   activePlayerId?: string;
@@ -59,6 +68,7 @@ export type RoomGameTableProps = {
   bigBlindIndex?: number;
   pot?: number;
   chatDraft?: string;
+  chatMessages?: RoomChatBubbleMessage[];
   stickers?: RoomStickerReaction[];
   onSendSticker?: (stickerKey: string) => void | Promise<void>;
   tutorialReplayControl?: ReactNode;

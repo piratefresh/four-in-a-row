@@ -370,9 +370,6 @@ function DevTableShowcaseRoute() {
                       avatarUrl={getPlayerAvatar(bottomHand.playerId)}
                       chips={bottomHand.chips ?? 0}
                       actionLabel={formatPlayerActionLabel(bottomHand.lastAction)}
-                      chatBubbleMessage={
-                        scenario === "turn" ? "Thinking through the raise." : null
-                      }
                       isActiveTurn={currentTurnPlayerId === bottomHand.playerId}
                       isCurrentPlayer
                       blindPosition={getBlindPosition(bottomHand.playerId)}

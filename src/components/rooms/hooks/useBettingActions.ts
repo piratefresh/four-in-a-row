@@ -9,6 +9,7 @@ export function useBettingActions(
   maxRaisesPerRound: number,
   raisesThisRound: number,
   selectedRaiseAmount: number | null,
+  clientIsMobile: boolean,
 ) {
   const [isBetting, setIsBetting] = useState(false);
   const [gameMessage, setGameMessage] = useState<string | null>(null);
@@ -23,7 +24,7 @@ export function useBettingActions(
     setIsBetting(true);
     setGameMessage(null);
     try {
-      await check({ gameId, playerId });
+      await check({ gameId, playerId, clientIsMobile });
       setGameMessage("Checked.");
     } catch (error) {
       const message =
@@ -32,14 +33,14 @@ export function useBettingActions(
     } finally {
       setIsBetting(false);
     }
-  }, [check, gameId, playerId]);
+  }, [check, clientIsMobile, gameId, playerId]);
 
   const handleCall = useCallback(async () => {
     if (!gameId || !playerId) return;
     setIsBetting(true);
     setGameMessage(null);
     try {
-      const result = await call({ gameId, playerId });
+      const result = await call({ gameId, playerId, clientIsMobile });
       setGameMessage(`Matched ${result.amountCalled} chips.`);
     } catch (error) {
       const message =
@@ -48,7 +49,7 @@ export function useBettingActions(
     } finally {
       setIsBetting(false);
     }
-  }, [call, gameId, playerId]);
+  }, [call, clientIsMobile, gameId, playerId]);
 
   const handleRaise = useCallback(async () => {
     if (!gameId || !playerId || selectedRaiseAmount === null) return;
@@ -61,7 +62,12 @@ export function useBettingActions(
     setIsBetting(true);
     setGameMessage(null);
     try {
-      await raise({ gameId, playerId, raiseToAmount: selectedRaiseAmount });
+      await raise({
+        gameId,
+        playerId,
+        raiseToAmount: selectedRaiseAmount,
+        clientIsMobile,
+      });
       setGameMessage(`Raised to ${selectedRaiseAmount} chips.`);
     } catch (error) {
       const message =
@@ -72,6 +78,7 @@ export function useBettingActions(
     }
   }, [
     gameId,
+    clientIsMobile,
     maxRaisesPerRound,
     playerId,
     raise,
@@ -84,7 +91,7 @@ export function useBettingActions(
     setIsBetting(true);
     setGameMessage(null);
     try {
-      await fold({ gameId, playerId });
+      await fold({ gameId, playerId, clientIsMobile });
       setGameMessage("Folded.");
     } catch (error) {
       const message =
@@ -93,7 +100,7 @@ export function useBettingActions(
     } finally {
       setIsBetting(false);
     }
-  }, [fold, gameId, playerId]);
+  }, [clientIsMobile, fold, gameId, playerId]);
 
   return {
     handleCheck,

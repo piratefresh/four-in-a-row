@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -69,6 +69,52 @@ export const send = mutation({
       roomId: args.roomId,
       playerId: player._id,
       senderAuthUserId: authUserId,
+      stickerKey: args.stickerKey,
+      createdAt: now,
+      expiresAt: now + ROOM_STICKER_TTL_MS,
+    });
+    await ctx.db.patch(args.roomId, { lastActiveAt: now });
+
+    return { ok: true };
+  },
+});
+
+export const sendAsAI = internalMutation({
+  args: {
+    roomId: v.id("rooms"),
+    playerId: v.id("players"),
+    stickerKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!isRoomStickerKey(args.stickerKey)) {
+      throw new ConvexError({
+        code: "INVALID_STICKER",
+        message: "Sticker is not available.",
+      });
+    }
+
+    const room = await ctx.db.get(args.roomId);
+    if (!room || room.status !== "open" || room.tutorialId) {
+      throw new ConvexError({
+        code: "ROOM_UNAVAILABLE",
+        message: "Stickers are not available in this room.",
+      });
+    }
+
+    const player = await ctx.db.get(args.playerId);
+    if (!player || player.roomId !== args.roomId || player.status !== "active") {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "AI player is not an active member of this room.",
+      });
+    }
+
+    const now = Date.now();
+
+    await ctx.db.insert("roomStickers", {
+      roomId: args.roomId,
+      playerId: args.playerId,
+      senderAuthUserId: player.authUserId,
       stickerKey: args.stickerKey,
       createdAt: now,
       expiresAt: now + ROOM_STICKER_TTL_MS,

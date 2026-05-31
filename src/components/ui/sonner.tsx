@@ -8,13 +8,28 @@ import {
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = ({
+  closeButton = true,
+  toastOptions,
+  ...props
+}: ToasterProps) => {
   const { theme = "system" } = useTheme()
 
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      closeButton={closeButton}
+      toastOptions={{
+        ...toastOptions,
+        closeButtonAriaLabel:
+          toastOptions?.closeButtonAriaLabel ?? "Dismiss notification",
+        classNames: {
+          closeButton:
+            "border-border bg-popover text-popover-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring focus-visible:ring-2",
+          ...toastOptions?.classNames,
+        },
+      }}
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,

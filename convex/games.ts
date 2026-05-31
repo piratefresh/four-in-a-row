@@ -84,22 +84,39 @@ export const internalGetGameRuntimeState = internalQuery({
 });
 
 export const check = mutation({
-  args: { gameId: v.id("games"), playerId: v.string() },
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    clientIsMobile: v.optional(v.boolean()),
+  },
   handler: checkHandler,
 });
 
 export const call = mutation({
-  args: { gameId: v.id("games"), playerId: v.string() },
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    clientIsMobile: v.optional(v.boolean()),
+  },
   handler: callHandler,
 });
 
 export const raise = mutation({
-  args: { gameId: v.id("games"), playerId: v.string(), raiseToAmount: v.number() },
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    raiseToAmount: v.number(),
+    clientIsMobile: v.optional(v.boolean()),
+  },
   handler: raiseHandler,
 });
 
 export const fold = mutation({
-  args: { gameId: v.id("games"), playerId: v.string() },
+  args: {
+    gameId: v.id("games"),
+    playerId: v.string(),
+    clientIsMobile: v.optional(v.boolean()),
+  },
   handler: foldHandler,
 });
 

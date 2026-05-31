@@ -188,6 +188,7 @@ export const list = query({
 
     return messages.reverse().map((msg) => ({
       id: msg._id,
+      playerId: msg.playerId,
       senderId: msg.senderAuthUserId || "system",
       senderName: msg.senderName,
       message: msg.text,

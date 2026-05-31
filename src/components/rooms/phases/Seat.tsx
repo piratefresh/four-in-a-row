@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 type SeatStatus = {
   color: string;
@@ -190,6 +191,11 @@ export function Seat({
   const badge = blindPosition ? BLIND_BADGE_CONFIG[blindPosition] : null;
   const bubbleMessage = urgentBubbleMessage ?? chatBubbleMessage;
   const isUrgentBubble = urgentBubbleMessage !== null;
+  const [bubbleDismissed, setBubbleDismissed] = useState(false);
+
+  useEffect(() => {
+    setBubbleDismissed(false);
+  }, [bubbleMessage]);
 
   return (
     <div
@@ -213,8 +219,11 @@ export function Seat({
           </div>
         ) : null}
 
-        {bubbleMessage ? (
-          <div className="pointer-events-none absolute -top-4 left-1/2 z-30 w-max max-w-[180px] -translate-x-1/2 -translate-y-full sm:max-w-[220px]">
+        {bubbleMessage && !bubbleDismissed ? (
+          <div
+            className="pointer-events-auto absolute -top-4 left-1/2 z-30 w-max max-w-[180px] -translate-x-1/2 -translate-y-full sm:max-w-[220px]"
+            onPointerLeave={() => setBubbleDismissed(true)}
+          >
             <div
               className={cn(
                 "relative rounded-2xl border px-3 py-2 text-center text-[11px] font-bold leading-snug shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:text-[12px]",
@@ -284,7 +293,9 @@ export function Seat({
       >
         {name}
         {personality ? (
-          <span className="ml-1 hidden text-[#d4af37]/70 sm:inline">({personality})</span>
+          <span className="ml-1 hidden text-[#d4af37]/70 sm:inline">
+            ({personality})
+          </span>
         ) : null}
         {isCurrentPlayer ? (
           <span className="text-[#d4af37]"> · YOU</span>

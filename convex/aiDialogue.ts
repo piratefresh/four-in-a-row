@@ -25,6 +25,12 @@ import {
 } from "./aiPersonalities";
 export type { DialogueTrigger };
 import { PROMPT_DIALOGUE } from "./aiPrompts";
+import {
+  ROOM_STICKERS,
+  getRoomSticker,
+  isRoomStickerKey,
+  type RoomStickerKey,
+} from "./stickerCatalog";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -32,11 +38,34 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 
 /** Zod schema for structured LLM dialogue output */
-export const DialogueResponseSchema = z.object({
-  message: z.string().min(1).max(300),
-});
+export const DialogueResponseSchema = z.union([
+  z.object({
+    type: z.optional(z.literal("text")),
+    message: z.string().min(1).max(300),
+  }),
+  z.object({
+    sticker: z.object({
+      key: z.string(),
+      emoji: z.optional(z.string()),
+    }),
+    message: z.optional(z.string().max(300)),
+  }),
+  z.object({
+    type: z.literal("sticker"),
+    stickerKey: z.string(),
+    emoji: z.optional(z.string()),
+    message: z.optional(z.string().max(300)),
+  }),
+]);
 
-export type DialogueResponse = z.infer<typeof DialogueResponseSchema>;
+export type DialogueResponse =
+  | { type: "text"; message: string }
+  | {
+      type: "sticker";
+      stickerKey: RoomStickerKey;
+      emoji: string;
+      message?: string;
+    };
 
 export type DialogueRequest = {
   botCharacterId: BotCharacterId;
@@ -45,10 +74,12 @@ export type DialogueRequest = {
   recentMessages: string;
   randomFn?: () => number;
   believesPlayer?: boolean | null;
+  isMobileAudience?: boolean;
 };
 
 export type DialogueResult = {
   message: string;
+  response: DialogueResponse;
   trigger: DialogueTrigger;
   botCharacterId: BotCharacterId;
   wasTemplateReaction: boolean;
@@ -91,6 +122,10 @@ export function prepareDialoguePrompt(
     recentMessages: request.recentMessages,
     maxTokens: profile.maxTokens,
     believesPlayer: request.believesPlayer ?? null,
+    isMobileAudience: request.isMobileAudience === true,
+    availableStickers: ROOM_STICKERS.map(
+      (sticker) => `${sticker.key}=${sticker.label} ${sticker.symbol}`,
+    ).join(", "),
   });
 
   return { shouldSpeak: true, prompt };
@@ -121,8 +156,25 @@ export function tryTemplateReaction(
     return null;
   }
 
+  if (request.isMobileAudience) {
+    const sticker = getTemplateSticker(request.trigger);
+    return {
+      message: sticker.label,
+      response: {
+        type: "sticker",
+        stickerKey: sticker.key,
+        emoji: sticker.symbol,
+        message: reaction,
+      },
+      trigger: request.trigger,
+      botCharacterId: request.botCharacterId,
+      wasTemplateReaction: true,
+    };
+  }
+
   return {
     message: reaction,
+    response: { type: "text", message: reaction },
     trigger: request.trigger,
     botCharacterId: request.botCharacterId,
     wasTemplateReaction: true,
@@ -133,12 +185,37 @@ export function tryTemplateReaction(
  * Parse and validate a structured JSON dialogue response from the LLM.
  * Returns the cleaned message string or null if parsing fails.
  */
-export function parseDialogueResponse(raw: string): string | null {
+export function parseDialogueResponse(raw: string): DialogueResponse | null {
   try {
     const parsed = JSON.parse(raw);
     const result = DialogueResponseSchema.safeParse(parsed);
     if (!result.success) return null;
-    return result.data.message.trim();
+    const data = result.data;
+    if ("sticker" in data) {
+      if (!isRoomStickerKey(data.sticker.key)) return null;
+      const sticker = getRoomSticker(data.sticker.key);
+      if (!sticker) return null;
+      const message = data.message?.trim();
+      return {
+        type: "sticker",
+        stickerKey: data.sticker.key,
+        emoji: data.sticker.emoji?.trim() || sticker.symbol,
+        message: message || undefined,
+      };
+    }
+    if (data.type === "sticker") {
+      if (!isRoomStickerKey(data.stickerKey)) return null;
+      const sticker = getRoomSticker(data.stickerKey);
+      if (!sticker) return null;
+      const message = data.message?.trim();
+      return {
+        type: "sticker",
+        stickerKey: data.stickerKey,
+        emoji: data.emoji?.trim() || sticker.symbol,
+        message: message || undefined,
+      };
+    }
+    return { type: "text", message: data.message.trim() };
   } catch {
     return null;
   }
@@ -178,6 +255,12 @@ export function cleanDialogueResponse(
   }
 
   return cleaned;
+}
+
+export function dialogueResponseToTraceText(response: DialogueResponse): string {
+  if (response.type === "text") return response.message;
+  const sticker = getRoomSticker(response.stickerKey);
+  return `[sticker:${response.stickerKey}:${sticker?.label ?? response.emoji}]`;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,4 +315,17 @@ export function buildGameStateDescription(args: {
   }
 
   return parts.join(". ") + ".";
+}
+
+function getTemplateSticker(trigger: DialogueTrigger) {
+  const stickerKey: RoomStickerKey =
+    trigger === "botFolds"
+      ? "bye"
+      : trigger === "botRaises"
+        ? "taunt"
+        : trigger === "playerCall"
+          ? "wow"
+          : "follow";
+
+  return getRoomSticker(stickerKey) ?? ROOM_STICKERS[0]!;
 }
