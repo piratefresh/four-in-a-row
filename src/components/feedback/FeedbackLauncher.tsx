@@ -23,7 +23,7 @@ type FeedbackLauncherProps = {
 export function FeedbackLauncher({ routePath }: FeedbackLauncherProps) {
   const { data: session, isPending } = authClient.useSession();
   const [isOpen, setIsOpen] = useState(false);
-  const [hasLoadingOverlay, setHasLoadingOverlay] = useState(false);
+  const [hasBlockingOverlay, setHasBlockingOverlay] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)", false, {
     getInitialValueInEffect: false,
   });
@@ -33,15 +33,19 @@ export function FeedbackLauncher({ routePath }: FeedbackLauncherProps) {
       : "bottom-[max(1.5rem,env(safe-area-inset-bottom))]";
 
   useEffect(() => {
-    const updateLoadingOverlayState = () => {
-      setHasLoadingOverlay(
-        Boolean(document.querySelector("[data-loading-overlay='true']")),
+    const updateBlockingOverlayState = () => {
+      setHasBlockingOverlay(
+        Boolean(
+          document.querySelector(
+            "[data-loading-overlay='true'], [data-splash-screen='true']",
+          ),
+        ),
       );
     };
 
-    updateLoadingOverlayState();
+    updateBlockingOverlayState();
 
-    const observer = new MutationObserver(updateLoadingOverlayState);
+    const observer = new MutationObserver(updateBlockingOverlayState);
     observer.observe(document.body, {
       childList: true,
       subtree: true,
@@ -50,7 +54,7 @@ export function FeedbackLauncher({ routePath }: FeedbackLauncherProps) {
     return () => observer.disconnect();
   }, []);
 
-  if (isPending || !session?.user || hasLoadingOverlay) {
+  if (isPending || !session?.user || hasBlockingOverlay) {
     return null;
   }
 

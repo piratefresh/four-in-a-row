@@ -17,7 +17,10 @@ export function SplashScreen({
   }, [onComplete, autoAdvanceMs]);
 
   return (
-    <main className="relative flex h-dvh w-full flex-col items-center justify-center overflow-hidden bg-felt-deep">
+    <main
+      className="relative flex h-dvh w-full flex-col items-center justify-center overflow-hidden bg-felt-deep"
+      data-splash-screen="true"
+    >
       {/* Radial gradient background */}
       <div className="absolute inset-0 bg-gradient-felt-splash" />
 
