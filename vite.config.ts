@@ -16,6 +16,11 @@ const config = defineConfig({
       "9903-2600-4040-71a0-5200-7d80-4eb6-68eb-157e.ngrok-free.app",
     ],
   },
+  build: {
+    rollupOptions: {
+      external: [/^node:/],
+    },
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -38,7 +43,12 @@ const config = defineConfig({
     viteReact(),
   ],
   ssr: {
-    noExternal: ["@convex-dev/better-auth", "better-auth", "nextstepjs", "motion"],
+    noExternal: [
+      "@convex-dev/better-auth",
+      "better-auth",
+      "nextstepjs",
+      "motion",
+    ],
   },
 });
 
