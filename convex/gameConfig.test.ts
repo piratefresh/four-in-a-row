@@ -213,16 +213,32 @@ describe("isValidBuyIn", () => {
     }
   });
 
-  it("rejects non-preset values", () => {
-    expect(isValidBuyIn(0)).toBe(false);
-    expect(isValidBuyIn(200)).toBe(false);
-    expect(isValidBuyIn(750)).toBe(false);
-    expect(isValidBuyIn(10_000)).toBe(false);
-    expect(isValidBuyIn(-100)).toBe(false);
-    expect(isValidBuyIn(1.5)).toBe(false);
+  it("accepts custom values within range", () => {
+    expect(isValidBuyIn(10)).toBe(true);
+    expect(isValidBuyIn(200)).toBe(true);
+    expect(isValidBuyIn(750)).toBe(true);
+    expect(isValidBuyIn(10_000)).toBe(true);
+    expect(isValidBuyIn(100_000)).toBe(true);
+    expect(isValidBuyIn(42)).toBe(true);
   });
 
-  it("DEFAULT_BUY_IN is a valid preset", () => {
+  it("rejects values below minimum", () => {
+    expect(isValidBuyIn(0)).toBe(false);
+    expect(isValidBuyIn(9)).toBe(false);
+    expect(isValidBuyIn(-100)).toBe(false);
+  });
+
+  it("rejects values above maximum", () => {
+    expect(isValidBuyIn(100_001)).toBe(false);
+    expect(isValidBuyIn(999_999)).toBe(false);
+  });
+
+  it("rejects non-integer values", () => {
+    expect(isValidBuyIn(1.5)).toBe(false);
+    expect(isValidBuyIn(500.1)).toBe(false);
+  });
+
+  it("DEFAULT_BUY_IN is valid", () => {
     expect(isValidBuyIn(DEFAULT_BUY_IN)).toBe(true);
     expect(DEFAULT_BUY_IN).toBe(500);
   });

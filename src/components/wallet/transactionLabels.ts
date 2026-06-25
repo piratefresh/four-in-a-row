@@ -4,7 +4,7 @@ export const TRANSACTION_SOURCE_LABELS: Record<TransactionSource, string> = {
   starter_grant: "Starter grant",
   playtest_deposit: "Playtest deposit",
   buy_in: "Game buy-in",
-  payout: "Game payout",
+  payout: "Table cash-out",
   reward: "Gameplay reward",
   achievement: "Achievement reward",
   login_streak: "Login streak bonus",

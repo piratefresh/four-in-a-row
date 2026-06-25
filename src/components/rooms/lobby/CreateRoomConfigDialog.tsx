@@ -26,7 +26,7 @@ type BettingStructure = "noLimit" | "potLimit" | "fixedLimit";
 type ChoiceTileFrequency = "low" | "high";
 type BonusStructure = "classic" | "noRackBonus" | "bigRackBonus";
 import type { EconomyMode } from "../../../../convex/gameConfig";
-import { DEFAULT_BUY_IN, BUY_IN_PRESETS } from "../../../../convex/gameConfig";
+import { DEFAULT_BUY_IN, BUY_IN_PRESETS, BUY_IN_MIN } from "../../../../convex/gameConfig";
 export type BotDifficulty = "easy" | "medium" | "hard";
 
 export type CreateRoomConfigValues = {
@@ -192,6 +192,7 @@ function CreateRoomConfigForm({
   );
   const [economyMode, setEconomyMode] = useState<EconomyMode>("nonBalance");
   const [buyIn, setBuyIn] = useState<number>(DEFAULT_BUY_IN);
+  const [customBuyIn, setCustomBuyIn] = useState(String(DEFAULT_BUY_IN));
 
   const generateRoomTitle = () => {
     void getGeneratedRoomTitle().then((title) => {
@@ -326,12 +327,23 @@ function CreateRoomConfigForm({
               onChange={setEconomyMode}
             />
             {economyMode === "balance" ? (
-              <OptionGroup
+              <BuyInOptionGroup
                 icon={<Coins />}
                 label="Buy-in"
                 options={buyInOptions}
                 value={buyIn}
-                onChange={setBuyIn}
+                customBuyIn={customBuyIn}
+                onChange={(value) => {
+                  setBuyIn(value);
+                  setCustomBuyIn(String(value));
+                }}
+                onCustomBuyInChange={(value) => {
+                  setCustomBuyIn(value);
+                  const parsed = Number(value);
+                  if (Number.isInteger(parsed) && parsed >= BUY_IN_MIN) {
+                    setBuyIn(parsed);
+                  }
+                }}
               />
             ) : null}
           </div>
@@ -512,6 +524,81 @@ function TimerOptionGroup({
             aria-label="Custom turn timer seconds"
           />
           <span>s</span>
+        </label>
+      </div>
+    </fieldset>
+  );
+}
+
+function BuyInOptionGroup({
+  icon,
+  label,
+  options,
+  value,
+  customBuyIn,
+  onChange,
+  onCustomBuyInChange,
+}: {
+  icon: ReactNode;
+  label: string;
+  options: Array<{ value: number; label: string }>;
+  value: number;
+  customBuyIn: string;
+  onChange: (value: number) => void;
+  onCustomBuyInChange: (value: string) => void;
+}) {
+  const isPresetSelected = options.some((option) => option.value === value);
+
+  return (
+    <fieldset className="space-y-2">
+      <legend className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
+        <span className="[&_svg]:size-4">{icon}</span>
+        {label}
+      </legend>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {options.map((option) => {
+          const selected = option.value === value;
+          return (
+            <button
+              key={String(option.value)}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "h-10 rounded-lg border px-3 text-sm font-semibold transition-colors",
+                selected
+                  ? "border-gold-bright bg-gold text-felt-deep"
+                  : "border-cream/15 bg-cream/5 text-cream hover:border-cream/30 hover:bg-cream/10",
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+        <label
+          className={cn(
+            "flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors",
+            isPresetSelected
+              ? "border-cream/15 bg-cream/5 text-cream"
+              : "border-gold-bright bg-gold text-felt-deep",
+          )}
+        >
+          <span>Custom</span>
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={10}
+            step={1}
+            value={customBuyIn}
+            onChange={(event) => onCustomBuyInChange(event.target.value)}
+            className={cn(
+              "h-7 min-w-0 border-0 px-1 py-0 text-right text-base shadow-none [appearance:textfield] focus-visible:ring-1 sm:text-sm [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
+              isPresetSelected
+                ? "bg-transparent text-cream"
+                : "bg-transparent text-felt-deep",
+            )}
+            aria-label="Custom buy-in amount"
+          />
+          <span className="text-xs">coins</span>
         </label>
       </div>
     </fieldset>

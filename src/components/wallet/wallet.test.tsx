@@ -26,7 +26,7 @@ describe("transactionIcons", () => {
     expect(sourceIcon("starter_grant")).toBe("\u{1F381}");
     expect(sourceIcon("playtest_deposit")).toBe("\u{1F4B5}");
     expect(sourceIcon("buy_in")).toBe("\u{1F3B2}");
-    expect(sourceIcon("payout")).toBe("\u{1F3C6}");
+    expect(sourceIcon("payout")).toBe("\u{1F4B0}");
     expect(sourceIcon("reward")).toBe("\u{2B50}");
     expect(sourceIcon("achievement")).toBe("\u{1F3C5}");
     expect(sourceIcon("tutorial")).toBe("\u{1F381}");
@@ -66,7 +66,7 @@ describe("transactionLabels", () => {
   it("formatTransactionSource returns the label", () => {
     expect(formatTransactionSource("starter_grant")).toBe("Starter grant");
     expect(formatTransactionSource("buy_in")).toBe("Game buy-in");
-    expect(formatTransactionSource("payout")).toBe("Game payout");
+    expect(formatTransactionSource("payout")).toBe("Table cash-out");
   });
 
   it("formatTransactionSource falls back to the source key for unknown values", () => {

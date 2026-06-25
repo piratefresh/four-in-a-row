@@ -26,7 +26,7 @@ import {
 import { PLAYER_NAME_MAX_LENGTH } from "../../constants";
 import { requireVerifiedUser } from "../../verifyUser";
 import { AI_DIFFICULTY, type AIDifficulty } from "../../aiBettingConstants";
-import { roomConfigValidator, economyModeValidator, BUY_IN_PRESETS, DEFAULT_BUY_IN, isValidBuyIn, getRoomEconomyMode } from "../../gameConfig";
+import { roomConfigValidator, economyModeValidator, BUY_IN_MIN, BUY_IN_MAX, DEFAULT_BUY_IN, isValidBuyIn, getRoomEconomyMode } from "../../gameConfig";
 import { getWalletBalance } from "../../wallet/ledger";
 
 export const createRoom = mutation({
@@ -51,7 +51,7 @@ export const createRoom = mutation({
       if (!isValidBuyIn(buyIn)) {
         throw new ConvexError({
           code: "INVALID_BUY_IN",
-          message: `Buy-in must be one of: ${BUY_IN_PRESETS.join(", ")}.`,
+          message: `Buy-in must be a whole number between ${BUY_IN_MIN} and ${BUY_IN_MAX.toLocaleString()}.`,
         });
       }
 

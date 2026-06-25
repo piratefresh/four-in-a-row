@@ -272,7 +272,7 @@ export async function settleGameHandler(
         playerId: payout.playerId,
         authUserId: payout.authUserId,
         amount: payout.amount,
-        description: "Pot payout",
+        description: "Table cash-out",
       });
     }
   }

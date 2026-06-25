@@ -133,12 +133,19 @@ export function formatRoomEconomyLabel(
   return "Non-balance";
 }
 
+/** Minimum allowed buy-in amount. */
+export const BUY_IN_MIN = 10;
+
+/** Maximum allowed buy-in amount. */
+export const BUY_IN_MAX = 100_000;
+
 /**
- * Check whether `buyIn` is one of the allowed presets. Backend callers
- * throw `ConvexError({ code: "INVALID_BUY_IN" })` when this returns false.
+ * Check whether `buyIn` is a valid buy-in amount. Must be a positive
+ * integer within [BUY_IN_MIN, BUY_IN_MAX]. Backend callers throw
+ * `ConvexError({ code: "INVALID_BUY_IN" })` when this returns false.
  */
 export function isValidBuyIn(buyIn: number): boolean {
-  return (BUY_IN_PRESETS as readonly number[]).includes(buyIn);
+  return Number.isInteger(buyIn) && buyIn >= BUY_IN_MIN && buyIn <= BUY_IN_MAX;
 }
 
 // ============================================================================

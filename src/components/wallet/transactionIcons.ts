@@ -4,7 +4,7 @@ export const TRANSACTION_SOURCE_ICONS: Record<TransactionSource, string> = {
   starter_grant: "\u{1F381}",
   playtest_deposit: "\u{1F4B5}",
   buy_in: "\u{1F3B2}",
-  payout: "\u{1F3C6}",
+  payout: "\u{1F4B0}",
   reward: "\u{2B50}",
   achievement: "\u{1F3C5}",
   login_streak: "\u{1F381}",
