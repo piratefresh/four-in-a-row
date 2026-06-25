@@ -1,4 +1,3 @@
-import { recordGameCompletion } from "../activityFeed";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -17,6 +16,7 @@ import {
   type PlayerHand,
   sortHandsByTurnOrder,
 } from "./gamesShared";
+import { completeGame } from "./gamesSettlement";
 
 const FIRST_BOT_GAME_TUTORIAL_ID = "first-bot-game" as const;
 
@@ -332,6 +332,32 @@ export async function setRoomUsersActiveGameId(
   }
 }
 
+/**
+ * Mark `activeGameId = gameId` on every active human participant in the room.
+ * Called only after buy-ins, hand creation, and game activation succeed, so
+ * that `activeGameId` always means an active, charged, unsettled game —
+ * never a waiting game.
+ */
+export async function markGameActiveForParticipants(
+  ctx: MutationCtx,
+  roomId: Id<"rooms">,
+  gameId: Id<"games">,
+): Promise<void> {
+  await setRoomUsersActiveGameId(ctx, roomId, String(gameId));
+}
+
+/**
+ * Clear `activeGameId` on every active human participant in the room.
+ * Called only after successful settlement, so that a failed settlement
+ * leaves `activeGameId` set (and blocks new balance-game starts).
+ */
+export async function clearSettledGameForParticipants(
+  ctx: MutationCtx,
+  roomId: Id<"rooms">,
+): Promise<void> {
+  await setRoomUsersActiveGameId(ctx, roomId, undefined);
+}
+
 export async function scheduleBotTurnIfNeeded(
   ctx: MutationCtx,
   gameId: Id<"games">,
@@ -473,13 +499,6 @@ export async function handlePostActionProgression(
     const winner = orderedHands.find((hand) => !hand.hasFolded);
 
     if (!winner) {
-      await ctx.db.patch(game._id, {
-        stage: "showdown",
-        status: "completed",
-        turnStartedAt: undefined,
-        ...getClearedTurnClockFields(),
-        updatedAt: now,
-      });
       await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
         gameId: game._id,
         roomId: game.roomId as Id<"rooms">,
@@ -487,8 +506,15 @@ export async function handlePostActionProgression(
         stage: "showdown",
         metadata: { reason: "no_remaining_players" },
       });
-      await recordGameCompletion(ctx, game._id);
-      // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+      await completeGame(ctx, {
+        gameId: game._id,
+        reason: "no_remaining_players",
+        extraPatch: {
+          stage: "showdown",
+          turnStartedAt: undefined,
+          ...getClearedTurnClockFields(),
+        },
+      });
       return;
     }
 
@@ -508,19 +534,6 @@ export async function handlePostActionProgression(
       }
     }
 
-    await ctx.db.patch(game._id, {
-      stage: "showdown",
-      status: "completed",
-      winnerId: winner.playerId,
-      communityTiles: updatedCommunityTiles,
-      currentBet: 0,
-      raisesThisRound: 0,
-      showdownStartedAt: undefined,
-      turnStartedAt: undefined,
-      ...getClearedTurnClockFields(),
-      updatedAt: now,
-    });
-
     await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
       gameId: game._id,
       roomId: game.roomId as Id<"rooms">,
@@ -536,7 +549,21 @@ export async function handlePostActionProgression(
       },
     });
 
-    await recordGameCompletion(ctx, game._id);
+    await completeGame(ctx, {
+      gameId: game._id,
+      winnerId: winner.playerId,
+      reason: "only_one_player_remains",
+      foldWin: true,
+      extraPatch: {
+        stage: "showdown",
+        communityTiles: updatedCommunityTiles,
+        currentBet: 0,
+        raisesThisRound: 0,
+        showdownStartedAt: undefined,
+        turnStartedAt: undefined,
+        ...getClearedTurnClockFields(),
+      },
+    });
     return;
   }
 
@@ -544,12 +571,6 @@ export async function handlePostActionProgression(
     const advanced = await advanceStage(ctx, game, orderedHands);
 
     if (!advanced) {
-      await ctx.db.patch(game._id, {
-        status: "completed",
-        turnStartedAt: undefined,
-        ...getClearedTurnClockFields(),
-        updatedAt: now,
-      });
       await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
         gameId: game._id,
         roomId: game.roomId as Id<"rooms">,
@@ -557,8 +578,14 @@ export async function handlePostActionProgression(
         stage: game.stage,
         metadata: { reason: "no_next_stage" },
       });
-      await recordGameCompletion(ctx, game._id);
-      // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+      await completeGame(ctx, {
+        gameId: game._id,
+        reason: "no_next_stage",
+        extraPatch: {
+          turnStartedAt: undefined,
+          ...getClearedTurnClockFields(),
+        },
+      });
       return;
     }
   } else {

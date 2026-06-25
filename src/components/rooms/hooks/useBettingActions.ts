@@ -1,7 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+
+interface GameStateForMessages {
+  currentBet?: number;
+  currentPlayerIndex?: number;
+  stage?: string;
+}
 
 export function useBettingActions(
   gameId: Id<"games"> | undefined,
@@ -10,6 +16,7 @@ export function useBettingActions(
   raisesThisRound: number,
   selectedRaiseAmount: number | null,
   clientIsMobile: boolean,
+  gameForMessages?: GameStateForMessages | null,
 ) {
   const [isBetting, setIsBetting] = useState(false);
   const [gameMessage, setGameMessage] = useState<string | null>(null);
@@ -101,6 +108,24 @@ export function useBettingActions(
       setIsBetting(false);
     }
   }, [clientIsMobile, fold, gameId, playerId]);
+
+  // Clear transient action messages when the game state advances
+  useEffect(() => {
+    if (!gameMessage) return;
+    const isTransient =
+      gameMessage === "Checked." ||
+      gameMessage === "Folded." ||
+      gameMessage.startsWith("Matched ") ||
+      gameMessage.startsWith("Raised to ");
+    if (isTransient) {
+      setGameMessage(null);
+    }
+  }, [
+    gameForMessages?.currentBet,
+    gameForMessages?.currentPlayerIndex,
+    gameForMessages?.stage,
+    gameMessage,
+  ]);
 
   return {
     handleCheck,

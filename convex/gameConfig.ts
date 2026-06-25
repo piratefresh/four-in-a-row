@@ -83,6 +83,65 @@ export const bonusStructureValidator = v.union(
 );
 
 // ============================================================================
+// Economy Mode
+// ============================================================================
+
+export const ECONOMY_MODES = ["balance", "nonBalance"] as const;
+
+export type EconomyMode = (typeof ECONOMY_MODES)[number];
+
+export const economyModeValidator = v.union(
+  v.literal("balance"),
+  v.literal("nonBalance"),
+);
+
+export const BUY_IN_PRESETS = [100, 500, 1_000, 5_000] as const;
+
+export type BuyIn = (typeof BUY_IN_PRESETS)[number];
+
+export const DEFAULT_BUY_IN = 500;
+
+// ============================================================================
+// Economy helpers (shared by backend and frontend — STO-232)
+// ============================================================================
+//
+// Missing `economyMode` on a room is treated as `nonBalance` everywhere.
+// These helpers are the single source of truth for that normalization so
+// backend validation, settlement, and frontend labels cannot diverge.
+
+/**
+ * Normalize a room's economy mode. Legacy rooms with `economyMode =
+ * undefined` are treated as `nonBalance`.
+ */
+export function getRoomEconomyMode(
+  room: { economyMode?: EconomyMode | null },
+): EconomyMode {
+  return room.economyMode ?? "nonBalance";
+}
+
+/**
+ * Format the economy label shown on room cards and drawer.
+ * Returns `Balance · {buyIn} buy-in` or `Non-balance`.
+ */
+export function formatRoomEconomyLabel(
+  mode: EconomyMode,
+  buyIn?: number | null,
+): string {
+  if (mode === "balance" && buyIn != null) {
+    return `Balance \u00b7 ${buyIn.toLocaleString()} buy-in`;
+  }
+  return "Non-balance";
+}
+
+/**
+ * Check whether `buyIn` is one of the allowed presets. Backend callers
+ * throw `ConvexError({ code: "INVALID_BUY_IN" })` when this returns false.
+ */
+export function isValidBuyIn(buyIn: number): boolean {
+  return (BUY_IN_PRESETS as readonly number[]).includes(buyIn);
+}
+
+// ============================================================================
 // Room Config (stored on rooms table)
 // ============================================================================
 

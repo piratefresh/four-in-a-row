@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 import { ANTE_AMOUNT, SHOWDOWN_TIMER_MS } from "../../convex/gameState";
 import { INITIAL_CHIPS } from "../../convex/games/gamesShared";
+import { formatRoomEconomyLabel, getRoomEconomyMode, type EconomyMode } from "../../convex/gameConfig";
 import { MATCH_JOIN_TIMEOUT_MS } from "../../convex/constants";
 import { isRoomRejoinDismissed } from "@/lib/room-rejoin-dismissal";
 import {
@@ -88,7 +89,11 @@ export function RoomDrawer({
 
   const maxPlayers = roomData?.room.maxPlayers ?? 4;
   const title = roomData?.room.title || `Room ${roomCode}`;
-  const configSummary = formatRoomConfig(roomData?.room.config);
+  const configSummary = formatRoomConfig(
+    roomData?.room.config,
+    roomData?.room.economyMode,
+    roomData?.room.buyIn,
+  );
   const members = roomData?.members ?? [];
   const hasOpenSeat = members.length < maxPlayers;
   const matchJoinTimeRemainingMs =
@@ -186,12 +191,21 @@ export function RoomDrawer({
   );
 }
 
-function formatRoomConfig(config?: {
-  showdownTimer?: number;
-  bettingStructure?: string;
-  choiceTileFrequency?: string;
-  bonusStructure?: string;
-}) {
+function formatRoomConfig(
+  config?: {
+    showdownTimer?: number;
+    bettingStructure?: string;
+    choiceTileFrequency?: string;
+    bonusStructure?: string;
+  },
+  economyMode?: string | null,
+  buyIn?: number | null,
+) {
+  const mode = getRoomEconomyMode({ economyMode: economyMode as EconomyMode | undefined });
+  if (mode === "balance" || economyMode === "nonBalance") {
+    return formatRoomEconomyLabel(mode, buyIn);
+  }
+  // Legacy rooms with undefined economyMode show the config details.
   const seconds = Math.round(
     (config?.showdownTimer ?? SHOWDOWN_TIMER_MS) / 1000,
   );

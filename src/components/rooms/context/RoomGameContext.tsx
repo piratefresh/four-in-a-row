@@ -1,11 +1,16 @@
 import { createContext, useContext, type ReactNode } from "react";
 
-type RoomGameContextValue = {
+// ---------------------------------------------------------------------------
+// RoomTableContext — phase / timer / ready / tutorial state
+//
+// Components that only need timer or phase info (e.g. RoomHeader) subscribe
+// to this context and avoid re-rendering on betting-action changes.
+// ---------------------------------------------------------------------------
+
+export type RoomTableContextValue = {
   anteAmount: number;
   raisesThisRound: number;
   maxRaisesPerRound: number;
-  actionMessage: string | null;
-  showBettingControls: boolean;
   showReadyButton: boolean;
   onReady?: () => void;
   isReady: boolean;
@@ -14,6 +19,38 @@ type RoomGameContextValue = {
   readyCount: number;
   totalPlayers: number;
   allPlayersReady: boolean;
+  turnClockTimeRemaining: number | null;
+  turnClockTargetName: string | null;
+  isTurnClockTarget: boolean;
+  showdownTimeRemaining: number | null;
+  turnTimeRemaining: number | null;
+  isShowdownSubmissionOpen: boolean;
+  isTutorialBettingPaused: boolean;
+  isTutorialRoom: boolean;
+};
+
+const RoomTableContext = createContext<RoomTableContextValue | null>(null);
+
+export function useRoomTableContext() {
+  const ctx = useContext(RoomTableContext);
+  if (!ctx) {
+    throw new Error(
+      "useRoomTableContext must be used inside RoomGameProvider.",
+    );
+  }
+  return ctx;
+}
+
+// ---------------------------------------------------------------------------
+// RoomBettingContext — betting actions and per-turn state
+//
+// Components that render action controls (check/call/raise/fold) subscribe
+// to this context.  RoomHeader does NOT depend on it.
+// ---------------------------------------------------------------------------
+
+export type RoomBettingContextValue = {
+  actionMessage: string | null;
+  showBettingControls: boolean;
   isBetting: boolean;
   isMyTurn: boolean;
   canCheck: boolean;
@@ -32,36 +69,52 @@ type RoomGameContextValue = {
   raiseLabel: string;
   raiseAmount: number | null;
   raiseOptions: number[];
-  turnClockTimeRemaining: number | null;
-  turnClockTargetName: string | null;
-  isTurnClockTarget: boolean;
-  showdownTimeRemaining: number | null;
-  turnTimeRemaining: number | null;
-  isShowdownSubmissionOpen: boolean;
-  isTutorialBettingPaused: boolean;
-  isTutorialRoom: boolean;
 };
 
-const RoomGameContext = createContext<RoomGameContextValue | null>(null);
+const RoomBettingContext = createContext<RoomBettingContextValue | null>(null);
+
+export function useRoomBettingContext() {
+  const ctx = useContext(RoomBettingContext);
+  if (!ctx) {
+    throw new Error(
+      "useRoomBettingContext must be used inside RoomGameProvider.",
+    );
+  }
+  return ctx;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy combined type and provider
+// ---------------------------------------------------------------------------
+
+export type RoomGameContextValue = RoomTableContextValue &
+  RoomBettingContextValue;
 
 export function RoomGameProvider({
-  value,
+  table,
+  betting,
   children,
 }: {
-  value: RoomGameContextValue;
+  table: RoomTableContextValue;
+  betting: RoomBettingContextValue;
   children: ReactNode;
 }) {
   return (
-    <RoomGameContext.Provider value={value}>{children}</RoomGameContext.Provider>
+    <RoomTableContext.Provider value={table}>
+      <RoomBettingContext.Provider value={betting}>
+        {children}
+      </RoomBettingContext.Provider>
+    </RoomTableContext.Provider>
   );
 }
 
-export function useRoomGameContext() {
-  const context = useContext(RoomGameContext);
-  if (!context) {
-    throw new Error("useRoomGameContext must be used inside RoomGameProvider.");
-  }
-  return context;
+/**
+ * Legacy hook returning the full combined context.
+ * Prefer `useRoomTableContext` or `useRoomBettingContext` for granular
+ * subscriptions to avoid unnecessary re-renders.
+ */
+export function useRoomGameContext(): RoomGameContextValue {
+  const table = useRoomTableContext();
+  const betting = useRoomBettingContext();
+  return { ...table, ...betting };
 }
-
-export type { RoomGameContextValue };

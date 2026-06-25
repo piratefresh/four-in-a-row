@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useBalanceDelta } from "@/components/wallet/useBalanceDelta";
 import { useNextStep } from "nextstepjs";
 import {
   RoomGameProvider,
@@ -82,7 +83,8 @@ function RoomDetailsPage() {
     getPlayerName,
     getPlayerAvatar,
     getPlayerPersonality,
-    roomGameContextValue,
+    roomTableContextValue,
+    roomBettingContextValue,
     roomPageContextValue,
     isDevRejoining,
     isDevFillingBots,
@@ -96,6 +98,12 @@ function RoomDetailsPage() {
     api.userPreferences.getMyPreferences,
     session?.user ? {} : "skip",
   );
+  const walletBalance = useQuery(
+    api.wallet.getMyBalance,
+    session?.user ? {} : "skip",
+  );
+  const coinBalance = walletBalance?.balance ?? null;
+  const { delta, settleId } = useBalanceDelta(coinBalance);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 1441px)");
@@ -284,12 +292,18 @@ function RoomDetailsPage() {
       <TutorialAdapterProvider value={tutorialAdapter}>
         {tutorialAdapter.launcher}
         {tutorialAdapter.phaseSync}
-        <RoomGameProvider value={roomGameContextValue}>
+        <RoomGameProvider
+          table={roomTableContextValue}
+          betting={roomBettingContextValue}
+        >
           <div className="flex min-h-0 flex-1 flex-col">
             <RoomHeader
               roomCode={code}
               gameStatus={game?.status}
               gameStage={game?.stage}
+              coinBalance={coinBalance}
+              delta={delta}
+              settleId={settleId}
             />
             <div
               className="relative flex flex-1 [@media(min-width:1441px)]:pr-[400px]"

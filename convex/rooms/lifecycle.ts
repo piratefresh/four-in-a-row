@@ -29,6 +29,8 @@ export async function createOpenRoom(
     isBotGame: options?.isBotGame,
     difficulty: options?.difficulty,
     config: options?.config,
+    economyMode: options?.economyMode,
+    buyIn: options?.economyMode === "balance" ? options?.buyIn : undefined,
     nextRoomId: undefined,
     sourceRoomId: options?.sourceRoomId,
     createdAt: now,

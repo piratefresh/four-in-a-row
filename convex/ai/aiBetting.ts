@@ -20,12 +20,12 @@ import {
   AI_PERSONALITIES,
   getModelForDifficulty,
   shouldBluff,
-} from "../aiStrategy";
+} from "./strategy";
 import {
   callOpenRouterChat,
   isOpenRouterConfigured,
 } from "../openRouterClient";
-import { PROMPT_BETTING_TOOLUSE } from "../aiPrompts";
+import { PROMPT_BETTING_TOOLUSE } from "./prompts";
 import {
   BETTING_TOOLS,
   type ToolCallResult,
@@ -33,7 +33,7 @@ import {
   parseBettingToolCall,
   parseStructuredTextResponse,
   fixActionForBetState,
-} from "../aiTools";
+} from "./tools";
 import {
   type AIBettingDecision,
   type FallbackBettingDecision,
@@ -44,7 +44,7 @@ import {
   toAIBettingDecision,
   insertAITrace,
 } from "./aiShared";
-import { DIFFICULTY_FUMBLE_RATES } from "../aiBettingConstants";
+import { DIFFICULTY_FUMBLE_RATES } from "./bettingConstants";
 
 const FUMBLE_ACTIONS: Array<AIBettingDecision["action"]> = ["fold", "check", "call"];
 

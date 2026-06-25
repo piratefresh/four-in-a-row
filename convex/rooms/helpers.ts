@@ -8,9 +8,12 @@ import {
 } from "../constants";
 export { ROOM_CODE_LENGTH };
 import { ConvexError } from "convex/values";
-import { authComponent, createAuth } from "../auth";
+import { authComponent } from "../auth";
+import { getAuthenticatedUserId, E2E_USER_ID } from "../identity";
+
+export { getAuthenticatedUserId };
 import type { AIDifficulty } from "../aiBettingConstants";
-import type { RoomConfig } from "../gameConfig";
+import type { EconomyMode, RoomConfig } from "../gameConfig";
 
 // ==================== Constants ====================
 
@@ -34,6 +37,8 @@ export type CreateOpenRoomOptions = {
   isBotGame?: boolean;
   difficulty?: AIDifficulty;
   config?: RoomConfig;
+  economyMode?: EconomyMode;
+  buyIn?: number;
 };
 
 // ==================== String Utilities ====================
@@ -287,25 +292,6 @@ export async function getRoomByCode(ctx: MutationCtx | QueryCtx, rawCode: string
 }
 
 // ==================== Auth Utilities ====================
-
-const IS_E2E = process.env.E2E_TESTING === "true";
-const E2E_USER_ID = "e2e-test-user";
-
-export async function getAuthenticatedUserId(
-  ctx: MutationCtx | QueryCtx,
-): Promise<string | undefined> {
-  if (IS_E2E) {
-    return E2E_USER_ID;
-  }
-  const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-  const session = await auth.api.getSession({ headers });
-  const rawUserId = session?.user?.id ?? session?.session?.userId;
-  if (!rawUserId) {
-    return undefined;
-  }
-
-  return rawUserId;
-}
 
 export function normalizeGuestTutorialAuthUserId(
   guestAuthUserId: string | undefined,

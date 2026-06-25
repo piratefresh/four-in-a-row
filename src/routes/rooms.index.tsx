@@ -130,6 +130,8 @@ function OnlineRoomsRoute() {
         name: displayName,
         roomTitle: values.roomTitle,
         config: values.config,
+        economyMode: values.economyMode,
+        buyIn: values.buyIn,
       });
       setIsCreateRoomOpen(false);
       await navigate({ to: "/rooms/$code", params: { code: result.code } });

@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useRoomPageContext } from "./context/RoomPageContext";
-import { useRoomGameContext } from "./context/RoomGameContext";
+import { useRoomTableContext } from "./context/RoomGameContext";
+import { WalletPill } from "@/components/wallet/WalletPill";
 
 type RoomHeaderProps = {
   roomCode: string;
   gameStatus?: string;
   gameStage?: string;
+  coinBalance?: number | null;
+  delta?: number;
+  settleId?: number;
 };
 
 function getEyebrow(gameStatus?: string, gameStage?: string) {
@@ -50,9 +54,12 @@ export function RoomHeader({
   roomCode,
   gameStatus,
   gameStage,
+  coinBalance,
+  delta = 0,
+  settleId = 0,
 }: RoomHeaderProps) {
   const { actions } = useRoomPageContext();
-  const { turnTimeRemaining, showdownTimeRemaining } = useRoomGameContext();
+  const { turnTimeRemaining, showdownTimeRemaining } = useRoomTableContext();
   const [isLeaving, setIsLeaving] = useState(false);
 
   const timerMs = showdownTimeRemaining ?? turnTimeRemaining;
@@ -93,13 +100,22 @@ export function RoomHeader({
         <div />
       )}
 
-      <div className="min-w-0 text-right" id="phase-title">
-        <h1 className="truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]">
-          {eyebrow}
-        </h1>
-        <p className="truncate text-[8px] font-medium leading-tight text-white">
-          Room {roomCode}
-        </p>
+      <div className="flex items-center justify-end gap-3" id="phase-title">
+        {coinBalance != null && (
+          <WalletPill
+            balance={coinBalance}
+            delta={delta}
+            settleId={settleId}
+          />
+        )}
+        <div className="min-w-0 text-right">
+          <h1 className="truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]">
+            {eyebrow}
+          </h1>
+          <p className="truncate text-[8px] font-medium leading-tight text-white">
+            Room {roomCode}
+          </p>
+        </div>
       </div>
     </header>
   );

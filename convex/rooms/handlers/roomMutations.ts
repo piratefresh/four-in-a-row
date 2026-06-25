@@ -26,7 +26,8 @@ import {
 import { PLAYER_NAME_MAX_LENGTH } from "../../constants";
 import { requireVerifiedUser } from "../../verifyUser";
 import { AI_DIFFICULTY, type AIDifficulty } from "../../aiBettingConstants";
-import { roomConfigValidator } from "../../gameConfig";
+import { roomConfigValidator, economyModeValidator, BUY_IN_PRESETS, DEFAULT_BUY_IN, isValidBuyIn, getRoomEconomyMode } from "../../gameConfig";
+import { getWalletBalance } from "../../wallet/ledger";
 
 export const createRoom = mutation({
   args: {
@@ -39,14 +40,37 @@ export const createRoom = mutation({
     )),
     isBotGame: v.optional(v.boolean()),
     config: v.optional(roomConfigValidator),
+    economyMode: v.optional(economyModeValidator),
+    buyIn: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireVerifiedUser(ctx);
+    const { authUserId } = await requireVerifiedUser(ctx);
+
+    if (args.economyMode === "balance") {
+      const buyIn = args.buyIn ?? DEFAULT_BUY_IN;
+      if (!isValidBuyIn(buyIn)) {
+        throw new ConvexError({
+          code: "INVALID_BUY_IN",
+          message: `Buy-in must be one of: ${BUY_IN_PRESETS.join(", ")}.`,
+        });
+      }
+
+      const balance = await getWalletBalance(ctx, authUserId);
+      if (balance === null || balance < buyIn) {
+        throw new ConvexError({
+          code: "INSUFFICIENT_FUNDS",
+          message: `Insufficient balance. You need ${buyIn} coins to create this room.`,
+        });
+      }
+    }
+
     return createRoomWithHostOptions(ctx, args.name, {
       title: args.roomTitle?.trim() || undefined,
       isBotGame: args.isBotGame ?? args.difficulty !== undefined,
       difficulty: (args.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM,
       config: args.config,
+      economyMode: args.economyMode,
+      buyIn: args.economyMode === "balance" ? (args.buyIn ?? DEFAULT_BUY_IN) : undefined,
     });
   },
 });
@@ -74,6 +98,16 @@ export const joinRoom = mutation({
 
     if (room.status !== "open") {
       throw new ConvexError({ code: "ROOM_CLOSED", message: "Room is closed." });
+    }
+
+    if (getRoomEconomyMode(room) === "balance" && room.buyIn) {
+      const balance = await getWalletBalance(ctx, authUserId);
+      if (balance === null || balance < room.buyIn) {
+        throw new ConvexError({
+          code: "INSUFFICIENT_FUNDS",
+          message: `Insufficient balance. You need ${room.buyIn} coins to join this room.`,
+        });
+      }
     }
 
     if (isTutorialRoom(room)) {
@@ -257,6 +291,8 @@ export const continueToNextRoom = mutation({
         isBotGame: room.isBotGame,
         difficulty: room.difficulty as AIDifficulty | undefined,
         config: room.config,
+        economyMode: room.economyMode,
+        buyIn: room.buyIn,
       });
       await ctx.db.patch(room._id, { status: "closed", nextRoomId, lastActiveAt: Date.now() });
       nextRoom = await ctx.db.get(nextRoomId);

@@ -19,11 +19,37 @@ npm run build
 
 ## Testing
 
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
+This project uses [Vitest](https://vitest.dev/) for unit tests and [Playwright](https://playwright.dev/) for E2E tests.
+
+### Unit tests
 
 ```bash
-npm run test
+bun run test
 ```
+
+### E2E tests
+
+E2E tests run against a local Convex dev backend and record every run for playback.
+
+**Prerequisites:**
+
+1. Start the Convex dev server in a separate terminal (serves `http://127.0.0.1:3210`):
+   ```bash
+   bunx convex dev
+   ```
+2. Add `E2E_TESTING=true` to `.env.local` (disables sign-up emails, enables backend e2e helpers).
+3. Run the tests (Playwright auto-starts the frontend on port 3000):
+   ```bash
+   bun run test:e2e
+   ```
+
+**Playback:** every run records trace + video + screenshots, even when tests pass.
+
+- HTML report: `bun run test:e2e:report`
+- Trace Viewer: `bun run test:e2e:trace`
+- UI mode: `bun run test:e2e:ui`
+
+Artifacts land in `test-results/` and `playwright-report/` (both gitignored).
 
 ## Styling
 

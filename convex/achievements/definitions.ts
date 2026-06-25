@@ -53,6 +53,17 @@ export const ACHIEVEMENT_TYPES = ["instant", "progress"] as const;
 
 export type AchievementType = (typeof ACHIEVEMENT_TYPES)[number];
 
+export const RARITIES = ["common", "rare", "epic", "legendary"] as const;
+
+export type Rarity = (typeof RARITIES)[number];
+
+export const RARITY_CONFIG: Record<Rarity, { label: string; color: string; points: number }> = {
+  common:    { label: "COMMON",    color: "#9aa39d", points: 10 },
+  rare:      { label: "RARE",      color: "#7ec4cf", points: 25 },
+  epic:      { label: "EPIC",      color: "#a78bfa", points: 50 },
+  legendary: { label: "LEGENDARY", color: "#d4af37", points: 100 },
+};
+
 export const MODE_RESTRICTIONS = ["ALL", "CASUAL_ONLY"] as const;
 
 export type ModeRestriction = (typeof MODE_RESTRICTIONS)[number];
@@ -84,6 +95,7 @@ export interface Achievement {
   name: string;
   desc: string;
   type: AchievementType;
+  rarity: Rarity;
   trigger: Trigger;
   condition: AchievementCondition;
   coins: number;
@@ -213,6 +225,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Heavy Hitter",
     desc: "Play a word worth 25+ points.",
     type: "instant",
+    rarity: "epic",
     trigger: "WORD_SUBMITTED",
     condition: { field: "wordScore", op: ">=", value: 25 },
     coins: 75,
@@ -224,6 +237,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Full House",
     desc: "Win 10 hands using all 7 tiles (full-rack bonus).",
     type: "progress",
+    rarity: "rare",
     trigger: "USED_FULL_RACK",
     condition: { field: "count", op: ">=", value: 10 },
     coins: 200,
@@ -239,6 +253,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Double Trouble",
     desc: "Win a hand where a doubled tile pushed your score over the winner.",
     type: "instant",
+    rarity: "rare",
     trigger: "DOUBLED_TILE_DECIDED_WIN",
     condition: { field: "decidedByDoubledTile", op: "==", value: true },
     coins: 100,
@@ -249,6 +264,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Tile Whisperer",
     desc: "Use a two-letter tile in a winning word 25 times.",
     type: "progress",
+    rarity: "common",
     trigger: "USED_TWO_LETTER_TILE",
     condition: { field: "count", op: ">=", value: 25 },
     coins: 150,
@@ -259,6 +275,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Q Without U",
     desc: "Play a valid Q-word with no U (QI, QAT, QOPH...).",
     type: "instant",
+    rarity: "epic",
     trigger: "PLAYED_SPECIFIC_WORD",
     condition: { field: "word", op: "matches", value: "^Q(?!U).*" },
     coins: 120,
@@ -270,6 +287,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Vocabularian",
     desc: "Play 100 unique distinct words across your history.",
     type: "progress",
+    rarity: "legendary",
     trigger: "WORD_SUBMITTED",
     condition: { field: "uniqueWordCount", op: ">=", value: 100 },
     coins: 250,
@@ -283,8 +301,9 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Ice Cold",
     desc: "Win a hand after going all-in pre-flop.",
     type: "instant",
+    rarity: "rare",
     trigger: "ALL_IN_WIN",
-    condition: { field: "allInPhase", op: "==", value: "PRE_FLOP" },
+    condition: { field: "allInPhase", op: "==", value: "preflop" },
     coins: 80,
   },
   {
@@ -293,6 +312,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Read 'Em",
     desc: "Win 5 hands where you raised on the river.",
     type: "progress",
+    rarity: "rare",
     trigger: "RIVER_RAISE_WIN",
     condition: { field: "count", op: ">=", value: 5 },
     coins: 120,
@@ -303,6 +323,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Comeback",
     desc: "Win a hand from below 10% of starting chips.",
     type: "instant",
+    rarity: "epic",
     trigger: "COMEBACK_WIN",
     condition: { field: "stackRatioAtHandStart", op: "<", value: 0.1 },
     coins: 150,
@@ -315,6 +336,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Table Veteran",
     desc: "Play hands. The grind tier.",
     type: "progress",
+    rarity: "legendary",
     trigger: "REACHED_SHOWDOWN",
     condition: { field: "count", op: ">=", value: 10000 },
     coins: 0,
@@ -331,6 +353,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Tournament Regular",
     desc: "Enter tournaments.",
     type: "progress",
+    rarity: "epic",
     trigger: "TOURNAMENT_ENTERED",
     condition: { field: "count", op: ">=", value: 50 },
     coins: 0,
@@ -348,6 +371,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Sit & Go Slayer",
     desc: "Win Sit & Go tournaments.",
     type: "progress",
+    rarity: "legendary",
     trigger: "SNG_WON",
     condition: { field: "count", op: ">=", value: 25 },
     coins: 0,
@@ -367,6 +391,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Brewmaster",
     desc: "Play ALE, IPA, HOPS, and MALT (across any hands).",
     type: "progress",
+    rarity: "epic",
     trigger: "PLAYED_SPECIFIC_WORD",
     condition: { field: "targetWordsPlayed", op: ">=", value: 4 },
     targetWords: ["ALE", "IPA", "HOPS", "MALT"],
@@ -380,6 +405,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "Anticlimax",
     desc: "Win a showdown with a 2-letter word.",
     type: "instant",
+    rarity: "rare",
     trigger: "WON_HAND",
     condition: { field: "wordLength", op: "==", value: 2 },
     coins: 60,

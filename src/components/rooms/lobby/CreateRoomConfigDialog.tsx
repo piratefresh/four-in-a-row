@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { Brain, Clock3, Coins, Dices, Sparkles, Type } from "lucide-react";
+import { Brain, Clock3, Coins, Dices, Sparkles, Type, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,11 +25,15 @@ import { cn } from "@/lib/utils";
 type BettingStructure = "noLimit" | "potLimit" | "fixedLimit";
 type ChoiceTileFrequency = "low" | "high";
 type BonusStructure = "classic" | "noRackBonus" | "bigRackBonus";
+import type { EconomyMode } from "../../../../convex/gameConfig";
+import { DEFAULT_BUY_IN, BUY_IN_PRESETS } from "../../../../convex/gameConfig";
 export type BotDifficulty = "easy" | "medium" | "hard";
 
 export type CreateRoomConfigValues = {
   roomTitle?: string;
   botDifficulty?: BotDifficulty;
+  economyMode?: EconomyMode;
+  buyIn?: number;
   config: {
     showdownTimer: number;
     bettingStructure: BettingStructure;
@@ -81,6 +85,15 @@ const botDifficultyOptions: Array<{ value: BotDifficulty; label: string }> = [
   { value: "medium", label: "Medium" },
   { value: "hard", label: "Hard" },
 ];
+
+const economyModeOptions: Array<{ value: EconomyMode; label: string }> = [
+  { value: "nonBalance", label: "Practice" },
+  { value: "balance", label: "Real coins" },
+];
+
+const buyInOptions: Array<{ value: number; label: string }> = BUY_IN_PRESETS.map(
+  (value) => ({ value, label: value.toLocaleString() }),
+);
 
 export function CreateRoomConfigDialog({
   open,
@@ -177,6 +190,8 @@ function CreateRoomConfigForm({
   const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>(
     defaultBotDifficulty ?? "medium",
   );
+  const [economyMode, setEconomyMode] = useState<EconomyMode>("nonBalance");
+  const [buyIn, setBuyIn] = useState<number>(DEFAULT_BUY_IN);
 
   const generateRoomTitle = () => {
     void getGeneratedRoomTitle().then((title) => {
@@ -203,6 +218,8 @@ function CreateRoomConfigForm({
     onCreateRoom({
       roomTitle: resolvedRoomTitle || undefined,
       botDifficulty: showBotDifficulty ? botDifficulty : undefined,
+      economyMode,
+      buyIn: economyMode === "balance" ? buyIn : undefined,
       config: {
         showdownTimer: resolvedShowdownTimer,
         bettingStructure,
@@ -298,6 +315,26 @@ function CreateRoomConfigForm({
               onChange={setBonusStructure}
             />
           </>
+        ) : null}
+        {showTableRules ? (
+          <div className="space-y-3">
+            <OptionGroup
+              icon={<Wallet />}
+              label="Game type"
+              options={economyModeOptions}
+              value={economyMode}
+              onChange={setEconomyMode}
+            />
+            {economyMode === "balance" ? (
+              <OptionGroup
+                icon={<Coins />}
+                label="Buy-in"
+                options={buyInOptions}
+                value={buyIn}
+                onChange={setBuyIn}
+              />
+            ) : null}
+          </div>
         ) : null}
       </div>
 

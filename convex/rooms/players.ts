@@ -292,6 +292,8 @@ export async function createRoomWithHostOptions(
     isBotGame?: boolean;
     difficulty?: AIDifficulty;
     config?: RoomConfig;
+    economyMode?: "balance" | "nonBalance";
+    buyIn?: number;
   },
 ) {
   const name = normalizeName(rawName);
@@ -321,6 +323,8 @@ export async function createRoomWithHostOptions(
     isBotGame: options.isBotGame,
     difficulty: options.difficulty,
     config: options.config,
+    economyMode: options.economyMode,
+    buyIn: options.buyIn,
   });
   const playerId = await ctx.db.insert("players", {
     roomId,

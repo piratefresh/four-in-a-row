@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from "react";
-import { getBotCharacterForAuthUserId } from "../../../../convex/aiStrategy";
+import { useMemo } from "react";
+import { useMemberLookup } from "./useMemberLookup";
 
 const DEALER_PLAYER_ID = "ai_dealer";
 const INITIAL_CHIPS = 1000;
@@ -11,43 +11,12 @@ export function useRoomDisplay(
   playerId: string | null,
   nameMatchedPlayerId: string | null,
 ) {
-  const memberById = useMemo(
-    () =>
-      new Map(
-        (roomData?.members ?? []).map((member) => [
-          String(member._id),
-          member,
-        ]),
-      ),
-    [roomData?.members],
-  );
-
-  const getPlayerName = useCallback(
-    (targetPlayerId: string, handIndex?: number) => {
-      const member = memberById.get(targetPlayerId);
-      const botCharacter = getBotCharacterForAuthUserId(member?.authUserId);
-      return (
-        botCharacter?.name ??
-        member?.name ??
-        (handIndex !== undefined ? `Player ${handIndex + 1}` : "Player")
-      );
-    },
-    [memberById],
-  );
-
-  const getPlayerAvatar = useCallback(
-    (targetPlayerId: string) => memberById.get(targetPlayerId)?.image ?? null,
-    [memberById],
-  );
-
-  const getPlayerPersonality = useCallback(
-    (targetPlayerId: string): string | null => {
-      const member = memberById.get(targetPlayerId);
-      const botCharacter = getBotCharacterForAuthUserId(member?.authUserId);
-      return botCharacter?.title ?? null;
-    },
-    [memberById],
-  );
+  const {
+    memberById,
+    getPlayerName,
+    getPlayerAvatar,
+    getPlayerPersonality,
+  } = useMemberLookup(roomData?.members);
 
   const nonDealerHands = useMemo(
     () =>

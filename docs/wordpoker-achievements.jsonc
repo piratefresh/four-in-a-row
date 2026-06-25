@@ -1,0 +1,337 @@
+{
+  // ============================================================
+  // WORD POKER — COIN ECONOMY & ACHIEVEMENT SCHEMA
+  // ============================================================
+  // Format: JSONC (JSON with Comments).
+  // Works in TS/JS via VS Code, esbuild, vite, and any json5/jsonc loader.
+  // If you need strict .json, strip comments with a jsonc parser at build time.
+  //
+  // CORE DESIGN RULE — TWO SEPARATE ECONOMIES, NEVER CONVERTIBLE:
+  //   "chips"  = in-hand wagering currency (poker). Lives and dies inside a hand.
+  //   "coins"  = meta progression currency. Earned by playing, spent on
+  //              cosmetics / coin-only entries. NEVER cashes out, NEVER becomes chips.
+  //   Keeping these firewalled is what keeps this a skill game, not gambling.
+  // ============================================================
+
+  "version": "1.0.0",
+  "currency": {
+    "coins": {
+      "id": "coins",
+      "displayName": "Coins",
+      "convertibleToChips": false, // HARD RULE. do not change. legal firewall.
+      "convertibleToCash": false,  // HARD RULE.
+      "icon": "coin_gold"
+    },
+    "chips": {
+      "id": "chips",
+      "displayName": "Chips",
+      "note": "Wagering currency only. Defined here for reference; managed by the betting engine, NOT by this file."
+    }
+  },
+
+  // ============================================================
+  // 1. PASSIVE EARN RULES — the baseline coin loop
+  // ============================================================
+  // These fire automatically off game events. Values are starting points;
+  // tune against your session-length data. Reward ENGAGEMENT and WORD QUALITY,
+  // deliberately NOT pot size (pot size scaling would re-couple coins to chips).
+  "earnRules": [
+    {
+      "id": "hand_complete",
+      "trigger": "REACHED_SHOWDOWN", // player did not fold; reached PHASE 7
+      "coins": 5,
+      "note": "Rewards staying in the hand, not just folding to grind."
+    },
+    {
+      "id": "hand_win",
+      "trigger": "WON_HAND",
+      "coins": 20,
+      "bonus": {
+        // Scales off WORD score (skill), never pot size (money).
+        "perWordPoint": 0.5, // e.g. a 28-pt MONSTER win -> +14 coins
+        "maxBonus": 50       // cap so a single monster word can't farm coins
+      }
+    },
+    {
+      "id": "daily_first_win",
+      "trigger": "WON_HAND",
+      "coins": 100,
+      "oncePerDay": true,
+      "note": "Single most effective retention lever. Resets at local midnight."
+    },
+    {
+      "id": "login_streak",
+      "trigger": "DAILY_LOGIN",
+      "coins": 25,
+      "streakMultiplier": {
+        // Multiplier applied to the day's earned coins. Resets if a day is missed.
+        "day1": 1.0,
+        "day3": 1.25,
+        "day7": 1.5,
+        "day14": 1.75,
+        "day30": 2.0
+      }
+    }
+  ],
+
+  // ============================================================
+  // 2. ACHIEVEMENTS
+  // ============================================================
+  // Each achievement = one coin payout when its condition completes.
+  // "progress" achievements track a counter; "instant" fire on a single event.
+  //
+  // trigger event vocabulary (emit these from your showdown/betting engine):
+  //   WON_HAND, REACHED_SHOWDOWN, WORD_SUBMITTED, ALL_IN_WIN, RIVER_RAISE_WIN,
+  //   USED_FULL_RACK, USED_TWO_LETTER_TILE, DOUBLED_TILE_DECIDED_WIN,
+  //   PLAYED_SPECIFIC_WORD, COMEBACK_WIN, TOURNAMENT_ENTERED, SNG_WON
+  //
+  // Each definition carries a "condition" the achievement engine evaluates
+  // against the event payload. Payload fields referenced are noted inline.
+  "achievements": [
+
+    // ---- WORDCRAFT (signature category — reward the actual word game) ----
+    {
+      "id": "heavy_hitter",
+      "category": "wordcraft",
+      "name": "Heavy Hitter",
+      "desc": "Play a word worth 25+ points.",
+      "type": "instant",
+      "trigger": "WORD_SUBMITTED",
+      "condition": { "field": "wordScore", "op": ">=", "value": 25 }, // final score incl. bonuses
+      "coins": 75,
+      "hidden": false
+    },
+    {
+      "id": "full_house",
+      "category": "wordcraft",
+      "name": "Full House",
+      "desc": "Win 10 hands using all 7 tiles (full-rack bonus).",
+      "type": "progress",
+      "trigger": "USED_FULL_RACK", // emit only when WON_HAND && tilesUsed === 7
+      "condition": { "field": "count", "op": ">=", "value": 10 },
+      "coins": 200,
+      "tiers": [
+        // optional escalating sub-rewards so the bar shows interim wins
+        { "at": 1,  "coins": 20 },
+        { "at": 5,  "coins": 60 },
+        { "at": 10, "coins": 200 }
+      ]
+    },
+    {
+      "id": "double_trouble",
+      "category": "wordcraft",
+      "name": "Double Trouble",
+      "desc": "Win a hand where a doubled tile pushed your score over the winner.",
+      "type": "instant",
+      "trigger": "DOUBLED_TILE_DECIDED_WIN",
+      // engine sets decidedByDoubledTile=true when: won AND
+      // (yourScore - doubledTileBonus) would have lost or tied.
+      "condition": { "field": "decidedByDoubledTile", "op": "==", "value": true },
+      "coins": 100
+    },
+    {
+      "id": "tile_whisperer",
+      "category": "wordcraft",
+      "name": "Tile Whisperer",
+      "desc": "Use a two-letter tile in a winning word 25 times.",
+      "type": "progress",
+      "trigger": "USED_TWO_LETTER_TILE", // emit only on WON_HAND with a 2-letter tile in the word
+      "condition": { "field": "count", "op": ">=", "value": 25 },
+      "coins": 150
+    },
+    {
+      "id": "q_without_u",
+      "category": "wordcraft",
+      "name": "Q Without U",
+      "desc": "Play a valid Q-word with no U (QI, QAT, QOPH...).",
+      "type": "instant",
+      "trigger": "PLAYED_SPECIFIC_WORD",
+      "condition": { "field": "word", "op": "matches", "value": "^Q(?!U).*" }, // regex on uppercased word
+      "coins": 120,
+      "note": "Rewards dictionary depth. Validate against your TWL/SOWPODS list first."
+    },
+    {
+      "id": "vocabularian",
+      "category": "wordcraft",
+      "name": "Vocabularian",
+      "desc": "Play 100 unique distinct words across your history.",
+      "type": "progress",
+      "trigger": "WORD_SUBMITTED",
+      "condition": { "field": "uniqueWordCount", "op": ">=", "value": 100 },
+      // engine must dedupe: only increment when word not in player's seen-set.
+      "coins": 250
+    },
+
+    // ---- POKER SKILL (reward the betting layer) ----
+    {
+      "id": "ice_cold",
+      "category": "poker",
+      "name": "Ice Cold",
+      "desc": "Win a hand after going all-in pre-flop.",
+      "type": "instant",
+      "trigger": "ALL_IN_WIN",
+      "condition": { "field": "allInPhase", "op": "==", "value": "PRE_FLOP" },
+      "coins": 80
+    },
+    {
+      "id": "read_em",
+      "category": "poker",
+      "name": "Read 'Em",
+      "desc": "Win 5 hands where you raised on the river.",
+      "type": "progress",
+      "trigger": "RIVER_RAISE_WIN",
+      "condition": { "field": "count", "op": ">=", "value": 5 },
+      "coins": 120
+    },
+    {
+      "id": "comeback",
+      "category": "poker",
+      "name": "Comeback",
+      "desc": "Win a hand from below 10% of starting chips.",
+      "type": "instant",
+      "trigger": "COMEBACK_WIN",
+      // engine sets stackRatioAtHandStart = stack / startingStack
+      "condition": { "field": "stackRatioAtHandStart", "op": "<", "value": 0.10 },
+      "coins": 150
+    },
+
+    // ---- VOLUME / PROGRESSION (the slow grind that drives retention) ----
+    {
+      "id": "hands_played",
+      "category": "progression",
+      "name": "Table Veteran",
+      "desc": "Play hands. The grind tier.",
+      "type": "progress",
+      "trigger": "REACHED_SHOWDOWN",
+      "condition": { "field": "count", "op": ">=", "value": 10000 },
+      "coins": 0, // payout delivered via tiers below, not the top-level value
+      "tiers": [
+        { "at": 10,    "coins": 25 },
+        { "at": 100,   "coins": 100 },
+        { "at": 1000,  "coins": 500 },
+        { "at": 10000, "coins": 2500 }
+      ]
+    },
+    {
+      "id": "tournament_regular",
+      "category": "progression",
+      "name": "Tournament Regular",
+      "desc": "Enter tournaments.",
+      "type": "progress",
+      "trigger": "TOURNAMENT_ENTERED",
+      "condition": { "field": "count", "op": ">=", "value": 50 },
+      "tiers": [
+        { "at": 1,  "coins": 30 },
+        { "at": 10, "coins": 150 },
+        { "at": 50, "coins": 600 }
+      ]
+    },
+    {
+      "id": "sng_winner",
+      "category": "progression",
+      "name": "Sit & Go Slayer",
+      "desc": "Win Sit & Go tournaments.",
+      "type": "progress",
+      "trigger": "SNG_WON",
+      "condition": { "field": "count", "op": ">=", "value": 25 },
+      "tiers": [
+        { "at": 1,  "coins": 50 },
+        { "at": 5,  "coins": 200 },
+        { "at": 25, "coins": 1000 }
+      ]
+    },
+
+    // ---- HIDDEN / FUN (shareable, viral — revealed only on unlock) ----
+    {
+      "id": "brewmaster",
+      "category": "hidden",
+      "name": "Brewmaster",
+      "desc": "Play ALE, IPA, HOPS, and MALT (across any hands).",
+      "type": "progress",
+      "trigger": "PLAYED_SPECIFIC_WORD",
+      // engine tracks a set; increments when a NEW target word from the list is played.
+      "condition": { "field": "targetWordsPlayed", "op": ">=", "value": 4 },
+      "targetWords": ["ALE", "IPA", "HOPS", "MALT"],
+      "coins": 150,
+      "hidden": true
+    },
+    {
+      "id": "anticlimax",
+      "category": "hidden",
+      "name": "Anticlimax",
+      "desc": "Win a showdown with a 2-letter word.",
+      "type": "instant",
+      "trigger": "WON_HAND",
+      "condition": { "field": "wordLength", "op": "==", "value": 2 },
+      "coins": 60,
+      "hidden": true
+    }
+  ],
+
+  // ============================================================
+  // 3. COIN SINKS — what coins actually buy
+  // ============================================================
+  // Cosmetic = always safe. Entries = coin-only, pay out coins/cosmetics only.
+  // Power-ups = CASUAL/PRACTICE MODE ONLY (see modeRestriction). Never in
+  // ranked/cash tables — that would be pay-to-win AND a gambling-framing risk.
+  "store": [
+    {
+      "id": "tile_skin_marble",
+      "type": "cosmetic",
+      "name": "Marble Tiles",
+      "cost": 500,
+      "modeRestriction": "ALL"
+    },
+    {
+      "id": "felt_midnight",
+      "type": "cosmetic",
+      "name": "Midnight Felt",
+      "cost": 750,
+      "modeRestriction": "ALL"
+    },
+    {
+      "id": "win_anim_goldrush",
+      "type": "cosmetic",
+      "name": "Gold Rush Win Animation",
+      "cost": 1000,
+      "note": "Cosmetic variant of your floating-chips-to-winner effect.",
+      "modeRestriction": "ALL"
+    },
+    {
+      "id": "freeroll_entry_coin",
+      "type": "entry",
+      "name": "Coin Freeroll Entry",
+      "cost": 250,
+      "payoutCurrency": "coins", // CRITICAL: never chips, never cash
+      "modeRestriction": "ALL"
+    },
+    {
+      "id": "powerup_extra_time",
+      "type": "powerup",
+      "name": "+10s Word Builder",
+      "desc": "Adds 10s to the 60s reveal timer.",
+      "cost": 100,
+      "modeRestriction": "CASUAL_ONLY", // NEVER ranked/cash. enforce server-side.
+      "note": "Affects scoring conditions, so it's pay-to-win if allowed in competitive play."
+    },
+    {
+      "id": "powerup_tile_peek",
+      "type": "powerup",
+      "name": "Tile Peek",
+      "desc": "Reveal the next community tile one-time before the flop.",
+      "cost": 200,
+      "modeRestriction": "CASUAL_ONLY"
+    }
+  ],
+
+  // ============================================================
+  // 4. INTEGRATION NOTES (for the engine devs)
+  // ============================================================
+  "_integrationNotes": {
+    "eventEmission": "Emit achievement events from the showdown resolver (PHASE 7) and the betting engine. One event can satisfy multiple achievements; evaluate all.",
+    "idempotency": "Guard WON_HAND-derived coin grants with a hand UUID so replays/reconnects don't double-pay.",
+    "uniqueWordTracking": "Store a per-player set (or bloom filter at scale) of played words for vocabularian + brewmaster.",
+    "serverAuthority": "Award all coins server-side. Never trust the client for word scores or achievement unlocks.",
+    "firewall": "There must be NO code path converting coins->chips or coins->cash. Audit this in review."
+  }
+}

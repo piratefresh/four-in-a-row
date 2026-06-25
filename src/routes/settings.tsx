@@ -1,15 +1,27 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { authClient } from "@/lib/auth-client";
+import { createServerFn } from "@tanstack/react-start";
+import { getToken } from "@/lib/auth-server";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 
 const AVATAR_MAX_FILE_BYTES = 1024 * 1024; // 1MB - Convex limit
 
+const getAuth = createServerFn({ method: "GET" }).handler(async () => {
+  return await getToken();
+});
+
 export const Route = createFileRoute("/settings")({
+  beforeLoad: async () => {
+    const token = await getAuth();
+    if (!token) {
+      throw redirect({ to: "/login" });
+    }
+  },
   component: SettingsPage,
 });
 

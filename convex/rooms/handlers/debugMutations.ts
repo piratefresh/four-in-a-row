@@ -8,7 +8,7 @@ import { normalizeName } from "../helpers";
 import { PLAYER_NAME_MAX_LENGTH } from "../../constants";
 import { createOpenRoom } from "../lifecycle";
 import { AI_DIFFICULTY, type AIDifficulty } from "../../aiBettingConstants";
-import { roomConfigValidator } from "../../gameConfig";
+import { economyModeValidator, roomConfigValidator, DEFAULT_BUY_IN } from "../../gameConfig";
 
 const IS_E2E = process.env.E2E_TESTING === "true";
 const E2E_USER_ID = "e2e-test-user";
@@ -108,6 +108,8 @@ export const e2eCreateTestRoom = mutation({
     )),
     isBotGame: v.optional(v.boolean()),
     config: v.optional(roomConfigValidator),
+    economyMode: v.optional(economyModeValidator),
+    buyIn: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     if (!IS_E2E) {
@@ -140,6 +142,8 @@ export const e2eCreateTestRoom = mutation({
       isBotGame: args.isBotGame ?? args.difficulty !== undefined,
       difficulty: (args.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM,
       config: args.config,
+      economyMode: args.economyMode,
+      buyIn: args.economyMode === "balance" ? (args.buyIn ?? DEFAULT_BUY_IN) : undefined,
     });
 
     const playerId = await ctx.db.insert("players", {

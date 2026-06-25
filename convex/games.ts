@@ -12,6 +12,7 @@ import {
 import { createGameForRoomHandler, internalRedealGameForRoomHandler, internalStartGameHandler, redealGameForRoomHandler, startGameHandler } from "./games/gamesSetup";
 import { getGameByIdHandler, getGameByRoomHandler, getPlayerHandsHandler, internalGetGameRuntimeStateHandler } from "./games/gamesRuntime";
 import { forfeitShowdownHandler, getShowdownResultsHandler, getWordSubmissionsHandler, internalProcessBotShowdownHandler, internalResolveExpiredShowdownHandler, resolveShowdownHandler, submitWordHandler, submitWordInternalHandler } from "./games/gamesShowdown";
+import { settleGameHandler } from "./games/gamesSettlement";
 
 const submitWordTileValidator = v.object({
   letter: v.string(),
@@ -180,4 +181,9 @@ export const getShowdownResults = query({
 export const internalProcessBotShowdown = internalAction({
   args: { gameId: v.id("games"), playerId: v.string() },
   handler: internalProcessBotShowdownHandler,
+});
+
+export const internalSettleGame = internalMutation({
+  args: { gameId: v.id("games") },
+  handler: settleGameHandler,
 });

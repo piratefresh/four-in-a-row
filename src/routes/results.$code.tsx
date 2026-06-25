@@ -1,7 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useBalanceDelta } from "@/components/wallet/useBalanceDelta";
 import type { Id } from "../../convex/_generated/dataModel";
+import { useMemberLookup } from "@/components/rooms/hooks/useMemberLookup";
 import { useRoomPresence } from "@/components/rooms/hooks/useRoomPresence";
 import { ShowdownResultsScreen } from "@/components/rooms/results/ShowdownResultsScreen";
 import { TutorialSignupWall } from "@/components/rooms/results/TutorialSignupWall";
@@ -75,14 +78,39 @@ function ResultsPage() {
     api.games.getShowdownResults,
     resultsGame ? { gameId: resultsGame._id } : "skip",
   );
-
-  const memberById = useMemo(
-    () =>
-      new Map(
-        (roomData?.members ?? []).map((member) => [String(member._id), member]),
-      ),
-    [roomData?.members],
+  const tutorialRewardStatus = useQuery(
+    api.tutorialReward.getTutorialRewardStatus,
+    session?.user ? {} : "skip",
   );
+  // Best-effort toast for tutorial completion reward (STO-239).
+  // (Gameplay reward + achievement toasts are handled globally by
+  // AchievementToastListener in __root.tsx \u2014 no per-page logic needed.)
+  const tutorialToastShownRef = useRef(false);
+  useEffect(() => {
+    if (!session?.user) return;
+    if (tutorialRewardStatus === undefined) return;
+    if (tutorialToastShownRef.current) return;
+    if (!tutorialRewardStatus.hasReceived) return;
+    if (roomData?.room.tutorialId !== "first-bot-game") return;
+    tutorialToastShownRef.current = true;
+    toast.success("+100 coins for completing the tutorial! \uD83C\uDF81");
+  }, [session?.user, tutorialRewardStatus, roomData?.room.tutorialId]);
+
+  const walletBalance = useQuery(
+    api.wallet.getMyBalance,
+    session?.user ? {} : "skip",
+  );
+  const coinBalance = walletBalance?.balance ?? null;
+  const { delta, settleId } = useBalanceDelta(coinBalance);
+  const {
+    memberById,
+    myPlayer,
+    getPlayerName: lookupPlayerName,
+    getPlayerAvatar: lookupPlayerAvatar,
+  } = useMemberLookup(roomData?.members, {
+    sessionUserId: session?.user?.id,
+    viewerPlayerId: roomData?.viewerPlayerId ?? undefined,
+  });
 
   useEffect(() => {
     if (!roomData?.members?.length) return;
@@ -97,26 +125,6 @@ function ResultsPage() {
       return next;
     });
   }, [roomData?.members]);
-
-  const myPlayer = useMemo(() => {
-    if (!roomData?.members) return null;
-
-    if (session?.user) {
-      const authMatched =
-        roomData.members.find((member) => member.authUserId === session.user.id) ??
-        null;
-      if (authMatched) return authMatched;
-    }
-
-    if (roomData.viewerPlayerId) {
-      return (
-        roomData.members.find((member) => member._id === roomData.viewerPlayerId) ??
-        null
-      );
-    }
-
-    return null;
-  }, [roomData, session?.user]);
 
   useEffect(() => {
     if (myPlayer?._id) {
@@ -271,10 +279,12 @@ function ResultsPage() {
   }
 
   const currentPlayerId = resultPlayerId ?? (myPlayer ? String(myPlayer._id) : null);
+  // Layer the snapshot results map on top of the shared lookup for
+  // results that may have been captured before the latest member update.
   const getPlayerName = (id: string) =>
-    resultMembersById.get(id)?.name ?? memberById.get(id)?.name ?? "Player";
+    resultMembersById.get(id)?.name ?? lookupPlayerName(id);
   const getPlayerAvatar = (id: string) =>
-    resultMembersById.get(id)?.image ?? memberById.get(id)?.image ?? null;
+    resultMembersById.get(id)?.image ?? lookupPlayerAvatar(id);
 
   if (showTutorialSignupWall) {
     return (
@@ -308,6 +318,10 @@ function ResultsPage() {
       feedbackRoutePath={`/results/${code}`}
       feedbackRoomId={roomData.room._id}
       feedbackGameId={resultsGame._id}
+      coinBalance={coinBalance}
+      delta={delta}
+      settleId={settleId}
+      roomCode={code.toUpperCase()}
     />
   );
 }

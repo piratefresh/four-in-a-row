@@ -76,7 +76,7 @@ export function FeedbackLauncher({ routePath }: FeedbackLauncherProps) {
         className={`fixed right-[max(1.5rem,env(safe-area-inset-right))] ${bottomOffsetClass} z-40 inline-flex items-center gap-2 rounded-full border border-gold/60 bg-felt-light px-5 py-3 font-display text-sm font-extrabold text-gold shadow-[0_16px_44px_rgba(0,0,0,0.45),0_0_20px_rgba(212,165,74,0.15)] transition-[background-color,border-color,transform] hover:border-gold-bright hover:bg-felt focus-visible:ring-[3px] focus-visible:ring-gold/35 focus-visible:outline-none active:scale-[0.98]`}
       >
         <MessageCircle className="size-4" />
-        Feedback
+        {isDesktop ? "Feedback" : null}
       </button>
 
       {isDesktop ? (
@@ -93,8 +93,8 @@ export function FeedbackLauncher({ routePath }: FeedbackLauncherProps) {
                 How are we playing?
               </DialogTitle>
               <DialogDescription className="max-w-[520px] text-lg leading-8 text-cream/72">
-                A quick note from the felt helps us deal a better game. It
-                takes 20 seconds.
+                A quick note from the felt helps us deal a better game. It takes
+                20 seconds.
               </DialogDescription>
             </div>
             {form}

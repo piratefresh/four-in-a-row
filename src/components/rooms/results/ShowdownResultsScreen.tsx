@@ -1,11 +1,14 @@
 import { motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FeedbackResultsCard } from "@/components/feedback";
 import { getLetterValue } from "@/lib/letterValues";
 import { cn } from "@/lib/utils";
 import { WinSplashOverlay } from "./WinSplashOverlay";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { useCoinFlyPillRef, useTriggerCoinFly } from "@/components/wallet/CoinFly";
+import { WalletPill } from "@/components/wallet/WalletPill";
+import { ArrowLeft } from "lucide-react";
 
 type SubmissionTile = {
   letter: string;
@@ -55,6 +58,10 @@ type ShowdownResultsScreenProps = {
   feedbackRoutePath?: string;
   feedbackRoomId?: Id<"rooms">;
   feedbackGameId?: Id<"games">;
+  coinBalance?: number | null;
+  delta?: number;
+  settleId?: number;
+  roomCode?: string;
 };
 
 const PLAYER_GRADIENTS = [
@@ -65,7 +72,6 @@ const PLAYER_GRADIENTS = [
 ] as const;
 
 type ResultsStep = "scoring" | "win" | "results";
-
 export function ShowdownResultsScreen({
   pot,
   playerId,
@@ -84,6 +90,10 @@ export function ShowdownResultsScreen({
   feedbackRoutePath,
   feedbackRoomId,
   feedbackGameId,
+  coinBalance,
+  delta = 0,
+  settleId = 0,
+  roomCode,
 }: ShowdownResultsScreenProps) {
   const submissions = showdownResults.allSubmissions ?? [];
   const currentPlayerSubmission = useMemo(() => {
@@ -132,6 +142,22 @@ export function ShowdownResultsScreen({
           : "results",
   );
 
+  const potRef = useRef<HTMLDivElement>(null);
+  const pillRef = useCoinFlyPillRef();
+  const triggerCoinFly = useTriggerCoinFly();
+  const hasFiredCoinFly = useRef(false);
+
+  useEffect(() => {
+    if (resultsStep !== "results" || !currentPlayerWon || hasFiredCoinFly.current) return;
+    hasFiredCoinFly.current = true;
+    const timer = window.setTimeout(() => {
+      if (potRef.current) {
+        triggerCoinFly({ fromElement: potRef.current, count: 4 });
+      }
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [resultsStep, currentPlayerWon, triggerCoinFly]);
+
   const advanceFromScoring = useCallback(() => {
     setResultsStep(currentPlayerWon ? "win" : "results");
   }, [currentPlayerWon]);
@@ -165,13 +191,58 @@ export function ShowdownResultsScreen({
       data-testid="results-content"
       className="min-h-[calc(100vh-4rem)] bg-felt text-white"
     >
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[430px] flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]">
+      {/* Header bar — matches RoomHeader style */}
+      <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-white/5 bg-felt-deep px-3 text-white backdrop-blur-sm sm:px-4">
+        {/* Left: back button */}
+        <button
+          type="button"
+          onClick={onReturnToMainMenu}
+          aria-label="Return to main menu"
+          className="grid h-8 w-8 flex-none place-items-center rounded-full bg-white/6 text-white transition-colors hover:bg-white/12"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+
+        {/* Center: room code or empty */}
+        <div className="min-w-0 text-center">
+          {roomCode ? (
+            <>
+              <h1 className="truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]">
+                RESULTS
+              </h1>
+              <p className="truncate text-[8px] font-medium leading-tight text-white/60">
+                Room {roomCode}
+              </p>
+            </>
+          ) : (
+            <h1 className="truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]">
+              RESULTS
+            </h1>
+          )}
+        </div>
+
+        {/* Right: wallet pill */}
+        <div className="flex items-center gap-3">
+          {coinBalance != null && (
+            <WalletPill
+              balance={coinBalance}
+              delta={delta}
+              settleId={settleId}
+              pillRef={pillRef}
+            />
+          )}
+        </div>
+      </header>
+      <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-[430px] flex-col px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))]">
         <header className="pt-6 text-center">
-          <div
-            data-testid="pot-amount"
-            className="text-5xl font-semibold tracking-tight text-[#e2bd46]"
-          >
-            ${pot}
+          <div className="relative inline-block" ref={potRef}>
+            <div
+              data-testid="pot-amount"
+              className="text-5xl font-semibold tracking-tight text-[#e2bd46]"
+            >
+              ${pot}
+            </div>
+            {currentPlayerWon && <Sparks />}
           </div>
           <p
             data-testid="winner-name"
@@ -225,15 +296,6 @@ export function ShowdownResultsScreen({
                 className="flex-1 rounded-[14px] border border-[#f3d66f]/55 bg-[linear-gradient(180deg,#f7da61_0%,#d6ac24_100%)] px-6 py-4 text-base font-semibold text-[#241700] shadow-[0_0_0_1px_rgba(255,235,163,0.12),0_12px_28px_rgba(0,0,0,0.45),0_0_22px_rgba(243,214,111,0.22)] transition-transform duration-200 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isStartingPlayAgain ? "Starting..." : "Play Again"}
-              </button>
-
-              <button
-                type="button"
-                onClick={onReturnToOnlineRooms}
-                data-testid="lobby-button"
-                className="flex-1 rounded-[14px] border border-white/20 bg-[linear-gradient(180deg,rgba(40,40,40,0.96),rgba(28,28,28,0.96))] px-4 py-4 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.01]"
-              >
-                Lobby
               </button>
 
               <button
@@ -583,6 +645,42 @@ function ShowdownLetterTile({
         {tile.baseValue}
       </span>
     </div>
+  );
+}
+
+function Sparks() {
+  const dots = useMemo(
+    () =>
+      Array.from({ length: 10 }, (_, k) => {
+        const ang = (Math.PI * 2 * k) / 10 + Math.random() * 0.5;
+        const dist = 34 + Math.random() * 22;
+        return {
+          id: k,
+          dx: Math.cos(ang) * dist,
+          dy: Math.sin(ang) * dist - 8,
+          delay: Math.random() * 0.12,
+        };
+      }),
+    [],
+  );
+  return (
+    <span className="pointer-events-none absolute inset-0">
+      {dots.map((d) => (
+        <motion.span
+          key={d.id}
+          initial={{ x: 0, y: 0, scale: 0.2, opacity: 0 }}
+          animate={{ x: d.dx, y: d.dy, scale: 1, opacity: [0, 1, 0] }}
+          transition={{
+            duration: 0.9,
+            delay: d.delay,
+            ease: "easeOut",
+            times: [0, 0.35, 1],
+          }}
+          className="absolute rounded-full"
+          style={{ left: "50%", top: "50%", width: 6, height: 6, background: "#f5c76a" }}
+        />
+      ))}
+    </span>
   );
 }
 

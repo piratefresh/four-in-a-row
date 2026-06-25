@@ -9,8 +9,15 @@
 - Convex dev/codegen server: `bunx convex dev` in a separate terminal; required for generated Convex types/API and local backend behavior.
 - Unit tests: `bun run test`; focused test: `bun run test convex/gameRules.test.ts` or any specific `*.test.ts` path.
 - Build: `bun run build`.
-- E2E: `bun run test:e2e`; Playwright starts the frontend but tests expect a real Convex deployment at `CONVEX_URL` or `http://127.0.0.1:3210`.
+- E2E: see "E2E tests" below.
 - CSW word index generation: `bun run generate:csw24-index` updates generated dictionary/index data.
+
+## E2E tests (Playwright)
+- Config: `playwright.config.ts`. Tests in `e2e/`. Auth global-setup signs in `e2e-test@wordpoker.app` and saves storage state to `.auth/e2e-user.json`.
+- Target: local Convex dev at `http://127.0.0.1:3210`. The `webServer` block runs `bun run dev` and forces `VITE_CONVEX_URL`/`VITE_CONVEX_SITE_URL` to the local Convex URL (ignores `.env.local`'s cloud URL).
+- Prerequisites to run: (1) `bunx convex dev` running in a separate terminal; (2) `E2E_TESTING=true` in `.env.local` so the Convex deployment disables sign-up emails and enables `e2eCreateTestRoom`; (3) `bun run test:e2e`.
+- Recording: `trace`/`video`/`screenshot` are all `"on"` — every run is recorded, even on green. Playback via `bun run test:e2e:report` (HTML report with embedded traces) or `bun run test:e2e:trace` (Trace Viewer). Artifacts in `test-results/` and `playwright-report/` (gitignored).
+- Backend e2e gates (`e2eCreateTestRoom`, `E2E_USER_ID`, `IS_E2E` branches in `convex/`) are dormant unless `E2E_TESTING=true` is set on the Convex deployment.
 
 ## Environment
 - Frontend startup requires `VITE_CONVEX_URL`; `src/router.tsx` throws if missing.

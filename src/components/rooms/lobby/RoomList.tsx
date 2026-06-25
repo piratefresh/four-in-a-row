@@ -22,6 +22,8 @@ type RoomListItem = {
     choiceTileFrequency?: string;
     bonusStructure?: string;
   };
+  economyMode?: string | null;
+  buyIn?: number | null;
   activePlayers: number;
   maxPlayers: number;
   lastActiveAt: number;
@@ -59,6 +61,8 @@ export function RoomList({
               roomCode={room.code}
               roomTitle={room.title}
               config={room.config}
+              economyMode={room.economyMode}
+              buyIn={room.buyIn}
               activePlayers={room.activePlayers}
               maxPlayers={room.maxPlayers}
               lastActiveAt={room.lastActiveAt}

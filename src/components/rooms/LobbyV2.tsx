@@ -13,6 +13,8 @@ type RoomListItem = {
     choiceTileFrequency?: string;
     bonusStructure?: string;
   };
+  economyMode?: string | null;
+  buyIn?: number | null;
   activePlayers: number;
   maxPlayers: number;
   lastActiveAt: number;

@@ -22,6 +22,8 @@ import { authClient } from "@/lib/auth-client";
 import { Toaster } from "@/components/ui/sonner";
 import { AppTourProvider } from "@/components/onboarding/AppTourProvider";
 import { FeedbackLauncher } from "@/components/feedback";
+import { AchievementToastListener } from "@/components/achievements/AchievementToastListener";
+import { CoinFlyProvider } from "@/components/wallet/CoinFly";
 
 // Get auth information for SSR using available cookies
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
@@ -130,9 +132,11 @@ function RootComponent() {
       authClient={authClient}
       initialToken={context.token}
     >
-      <RootDocument>
-        <Outlet />
-      </RootDocument>
+      <CoinFlyProvider>
+        <RootDocument>
+          <Outlet />
+        </RootDocument>
+      </CoinFlyProvider>
     </ConvexBetterAuthProvider>
   );
 }
@@ -153,6 +157,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body className="bg-felt text-cream">
         <AppTourProvider>
+          <AchievementToastListener />
           <div className="flex min-h-dvh flex-col">
             {showHeader && <Header />}
             <VerifyEmailBanner />

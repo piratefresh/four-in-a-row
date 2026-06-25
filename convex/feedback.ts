@@ -128,12 +128,12 @@ export const submit = mutation({
 export const markEmailStatus = internalMutation({
   args: {
     feedbackId: v.id("feedback"),
-    status: v.union(v.literal("sent"), v.literal("skipped"), v.literal("failed")),
+    status: v.string(),
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const patch: {
-      emailStatus: "sent" | "skipped" | "failed";
+      emailStatus: string;
       emailError?: string;
       updatedAt: number;
     } = {

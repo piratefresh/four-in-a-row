@@ -1,19 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
-import { loadEnv } from "vite";
 
-const env = loadEnv(process.env.NODE_ENV ?? "test", process.cwd(), "");
-for (const [key, value] of Object.entries(env)) {
-  process.env[key] ??= value;
-}
-
-// When CONVEX_TEST_URL (preview deployment) is set, make the frontend also
-// connect to that deployment instead of the dev deployment.
-if (process.env.CONVEX_TEST_URL) {
-  process.env.VITE_CONVEX_URL = process.env.CONVEX_TEST_URL;
-}
-if (process.env.CONVEX_TEST_SITE_URL) {
-  process.env.VITE_CONVEX_SITE_URL = process.env.CONVEX_TEST_SITE_URL;
-}
+const E2E_FRONTEND_URL = "http://localhost:3000";
+const E2E_CONVEX_URL = "http://127.0.0.1:3210";
+const E2E_CONVEX_SITE_URL = "http://127.0.0.1:3211";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -24,33 +13,26 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: process.env.BASE_URL ?? `http://localhost:${process.env.E2E_PORT ?? "3000"}`,
-    trace: "on-first-retry",
-    screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    baseURL: E2E_FRONTEND_URL,
+    trace: "on",
+    video: "on",
+    screenshot: "on",
     storageState: ".auth/e2e-user.json",
-    // Propagate Convex URL so convex.setup.ts can reach preview deployments
-    env: {
-      CONVEX_TEST_URL: process.env.CONVEX_TEST_URL ?? "",
-      CONVEX_TEST_SITE_URL: process.env.CONVEX_TEST_SITE_URL ?? "",
-      VITE_CONVEX_URL: process.env.VITE_CONVEX_URL ?? "",
-    },
   },
-  timeout: 90_000,
+  timeout: 30_000,
   expect: {
-    timeout: 15_000,
+    timeout: 10_000,
   },
   webServer: {
-    command: `bun run dev --port ${process.env.E2E_PORT ?? "3000"}`,
-    url: `http://localhost:${process.env.E2E_PORT ?? "3000"}`,
-    // When testing against a preview deployment, we need a fresh server
-    // with the correct VITE_CONVEX_URL/VITE_CONVEX_SITE_URL env vars.
-    // Don't reuse an existing server that might be connected to the dev deployment.
-    reuseExistingServer: !process.env.CONVEX_TEST_URL,
+    command: "bun run dev",
+    url: E2E_FRONTEND_URL,
+    reuseExistingServer: true,
     stdout: "pipe",
+    stderr: "pipe",
     env: {
-      VITE_CONVEX_URL: process.env.VITE_CONVEX_URL ?? "",
-      VITE_CONVEX_SITE_URL: process.env.VITE_CONVEX_SITE_URL ?? "",
+      VITE_CONVEX_URL: E2E_CONVEX_URL,
+      VITE_CONVEX_SITE_URL: E2E_CONVEX_SITE_URL,
+      E2E_TESTING: "true",
     },
   },
   projects: [

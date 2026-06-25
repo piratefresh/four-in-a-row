@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RoomsRouteImport } from './routes/rooms'
@@ -19,6 +20,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as FriendsRouteImport } from './routes/friends'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as AchievementsRouteImport } from './routes/achievements'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoomsIndexRouteImport } from './routes/rooms.index'
 import { Route as RiverRunIndexRouteImport } from './routes/river-run.index'
@@ -40,6 +42,11 @@ import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr
 import { Route as DemoStartSsrFullSsrRouteImport } from './routes/demo/start.ssr.full-ssr'
 import { Route as DemoStartSsrDataOnlyRouteImport } from './routes/demo/start.ssr.data-only'
 
+const WalletRoute = WalletRouteImport.update({
+  id: '/wallet',
+  path: '/wallet',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
   path: '/verify-email',
@@ -88,6 +95,11 @@ const FriendsRoute = FriendsRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AchievementsRoute = AchievementsRouteImport.update({
+  id: '/achievements',
+  path: '/achievements',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -193,6 +205,7 @@ const DemoStartSsrDataOnlyRoute = DemoStartSsrDataOnlyRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/achievements': typeof AchievementsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/friends': typeof FriendsRoute
   '/leaderboard': typeof LeaderboardRoute
@@ -203,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/rooms': typeof RoomsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/wallet': typeof WalletRoute
   '/admin/stats': typeof AdminStatsRoute
   '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
@@ -225,6 +239,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/achievements': typeof AchievementsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/friends': typeof FriendsRoute
   '/leaderboard': typeof LeaderboardRoute
@@ -233,6 +248,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/wallet': typeof WalletRoute
   '/admin/stats': typeof AdminStatsRoute
   '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
@@ -256,6 +272,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/achievements': typeof AchievementsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/friends': typeof FriendsRoute
   '/leaderboard': typeof LeaderboardRoute
@@ -266,6 +283,7 @@ export interface FileRoutesById {
   '/rooms': typeof RoomsRouteWithChildren
   '/settings': typeof SettingsRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/wallet': typeof WalletRoute
   '/admin/stats': typeof AdminStatsRoute
   '/admin/traces': typeof AdminTracesRoute
   '/demo/better-auth': typeof DemoBetterAuthRoute
@@ -290,6 +308,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/achievements'
     | '/forgot-password'
     | '/friends'
     | '/leaderboard'
@@ -300,6 +319,7 @@ export interface FileRouteTypes {
     | '/rooms'
     | '/settings'
     | '/verify-email'
+    | '/wallet'
     | '/admin/stats'
     | '/admin/traces'
     | '/demo/better-auth'
@@ -322,6 +342,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/achievements'
     | '/forgot-password'
     | '/friends'
     | '/leaderboard'
@@ -330,6 +351,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/verify-email'
+    | '/wallet'
     | '/admin/stats'
     | '/admin/traces'
     | '/demo/better-auth'
@@ -352,6 +374,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/achievements'
     | '/forgot-password'
     | '/friends'
     | '/leaderboard'
@@ -362,6 +385,7 @@ export interface FileRouteTypes {
     | '/rooms'
     | '/settings'
     | '/verify-email'
+    | '/wallet'
     | '/admin/stats'
     | '/admin/traces'
     | '/demo/better-auth'
@@ -385,6 +409,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AchievementsRoute: typeof AchievementsRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   FriendsRoute: typeof FriendsRoute
   LeaderboardRoute: typeof LeaderboardRoute
@@ -395,6 +420,7 @@ export interface RootRouteChildren {
   RoomsRoute: typeof RoomsRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  WalletRoute: typeof WalletRoute
   AdminStatsRoute: typeof AdminStatsRoute
   AdminTracesRoute: typeof AdminTracesRoute
   DemoBetterAuthRoute: typeof DemoBetterAuthRoute
@@ -414,6 +440,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/wallet': {
+      id: '/wallet'
+      path: '/wallet'
+      fullPath: '/wallet'
+      preLoaderRoute: typeof WalletRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/verify-email': {
       id: '/verify-email'
       path: '/verify-email'
@@ -482,6 +515,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/achievements': {
+      id: '/achievements'
+      path: '/achievements'
+      fullPath: '/achievements'
+      preLoaderRoute: typeof AchievementsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -655,6 +695,7 @@ const RoomsRouteWithChildren = RoomsRoute._addFileChildren(RoomsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AchievementsRoute: AchievementsRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   FriendsRoute: FriendsRoute,
   LeaderboardRoute: LeaderboardRoute,
@@ -665,6 +706,7 @@ const rootRouteChildren: RootRouteChildren = {
   RoomsRoute: RoomsRouteWithChildren,
   SettingsRoute: SettingsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  WalletRoute: WalletRoute,
   AdminStatsRoute: AdminStatsRoute,
   AdminTracesRoute: AdminTracesRoute,
   DemoBetterAuthRoute: DemoBetterAuthRoute,

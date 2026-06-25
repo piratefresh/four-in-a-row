@@ -131,8 +131,8 @@ describe("validateDefinitions — real definitions", () => {
 describe("validateDefinitionsExplicit — duplicate IDs", () => {
   it("rejects duplicate achievement IDs", () => {
     const dup: Achievement[] = [
-      { id: "heavy_hitter", category: "wordcraft", name: "A", desc: "d", type: "instant", trigger: "WORD_SUBMITTED", condition: { field: "x", op: ">=", value: 1 }, coins: 100 },
-      { id: "heavy_hitter", category: "wordcraft", name: "B", desc: "d", type: "instant", trigger: "WORD_SUBMITTED", condition: { field: "x", op: ">=", value: 1 }, coins: 50 },
+      { id: "heavy_hitter", category: "wordcraft", name: "A", desc: "d", type: "instant", rarity: "common", trigger: "WORD_SUBMITTED", condition: { field: "x", op: ">=", value: 1 }, coins: 100 },
+      { id: "heavy_hitter", category: "wordcraft", name: "B", desc: "d", type: "instant", rarity: "common", trigger: "WORD_SUBMITTED", condition: { field: "x", op: ">=", value: 1 }, coins: 50 },
     ];
     const errors = validateDefinitionsExplicit([], dup, []);
     expect(errors.some((e) => e.id === "heavy_hitter")).toBe(true);
@@ -159,7 +159,7 @@ describe("validateDefinitionsExplicit — duplicate IDs", () => {
   it("rejects cross-section duplicate IDs", () => {
     const errors = validateDefinitionsExplicit(
       [],
-      [{ id: "x", category: "wordcraft", name: "A", desc: "d", type: "instant", trigger: "WON_HAND", condition: { field: "x", op: ">=", value: 1 }, coins: 10 }],
+      [{ id: "x", category: "wordcraft", name: "A", desc: "d", type: "instant", rarity: "common", trigger: "WON_HAND", condition: { field: "x", op: ">=", value: 1 }, coins: 10 }],
       [{ id: "x", type: "cosmetic", name: "B", cost: 5, modeRestriction: "ALL" }],
     );
     expect(errors.some((e) => e.id === "x" && e.message.includes("already used"))).toBe(true);
@@ -173,11 +173,12 @@ function ach(id: string, trigger: Achievement["trigger"], op: Achievement["condi
     name: "T",
     desc: "d",
     type: "instant",
+    rarity: "common",
     trigger,
     condition: { field: "x", op, value },
     coins: 10,
     ...overrides,
-  };
+  } as Achievement;
 }
 
 function rule(id: string, trigger: EarnRule["trigger"], coins: number, overrides: Partial<EarnRule> = {}): EarnRule {

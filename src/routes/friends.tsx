@@ -1,9 +1,21 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
+import { createServerFn } from "@tanstack/react-start";
+import { getToken } from "@/lib/auth-server";
 import { FriendsPage } from "@/components/friends/FriendsPage";
 
+const getAuth = createServerFn({ method: "GET" }).handler(async () => {
+  return await getToken();
+});
+
 export const Route = createFileRoute("/friends")({
+  beforeLoad: async () => {
+    const token = await getAuth();
+    if (!token) {
+      throw redirect({ to: "/login" });
+    }
+  },
   component: FriendsRoute,
 });
 

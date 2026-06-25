@@ -3,6 +3,19 @@ import { handlePostActionProgression } from "./gamesProgression";
 import type { Id } from "../_generated/dataModel";
 import type { GameTile } from "../gameState";
 
+function createEmptyQueryResult() {
+  const chain = {
+    withIndex: () => chain,
+    filter: () => chain,
+    order: () => chain,
+    take: async () => [],
+    first: async () => null,
+    unique: async () => null,
+    collect: async () => [],
+  };
+  return chain;
+}
+
 describe("handlePostActionProgression", () => {
   it("completes the game when a fold leaves only one player active", async () => {
     const gameId = "game-id" as Id<"games">;
@@ -37,6 +50,8 @@ describe("handlePostActionProgression", () => {
           if (id === gameId) return persistedGame;
           return null;
         },
+        query: () => createEmptyQueryResult(),
+        normalizeId: (_table: string, id: string) => id as Id<"games">,
       },
       runMutation: async () => null,
     };
@@ -62,9 +77,9 @@ describe("handlePostActionProgression", () => {
       },
     ]);
 
-    const finalGamePatch = gamePatches.at(-1);
+    const completionPatch = gamePatches.find((p) => p.status === "completed");
 
-    expect(finalGamePatch).toMatchObject({
+    expect(completionPatch).toMatchObject({
       stage: "showdown",
       status: "completed",
       winnerId: "player-b",
@@ -73,7 +88,7 @@ describe("handlePostActionProgression", () => {
       turnStartedAt: undefined,
     });
     expect(
-      (finalGamePatch?.communityTiles as GameTile[]).every(
+      (completionPatch?.communityTiles as GameTile[]).every(
         (tile) => tile.revealed,
       ),
     ).toBe(true);

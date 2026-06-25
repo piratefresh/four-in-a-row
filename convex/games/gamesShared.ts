@@ -48,3 +48,49 @@ export function getNewTurnStateFields(turnStartedAt: number) {
     ...getClearedTurnClockFields(),
   } as const;
 }
+
+// --- Redaction helpers (moved from gamesBetting.ts) ---
+
+export function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function redactBracketedCandidateWords(text: string): string {
+  return text.replace(/\{[A-Za-z]{2,7}\}/g, "[hidden word]");
+}
+
+export function getPrivateTileLetters(
+  tiles: Array<{ kind?: string; letter?: string; options?: string[] }>,
+): string[] {
+  const letters = new Set<string>();
+  for (const tile of tiles) {
+    if (tile.kind === "single" && typeof tile.letter === "string") {
+      letters.add(tile.letter.toUpperCase());
+    }
+    if (tile.kind === "choice" && Array.isArray(tile.options)) {
+      for (const option of tile.options) {
+        letters.add(option.toUpperCase());
+      }
+    }
+  }
+  return [...letters].filter((letter) => /^[A-Z]$/.test(letter));
+}
+
+export function redactPrivateTileLetters(
+  text: string,
+  tiles: Array<{ kind?: string; letter?: string; options?: string[] }>,
+): string {
+  let redacted = text;
+  for (const letter of getPrivateTileLetters(tiles)) {
+    const escapedLetter = escapeRegExp(letter);
+    redacted = redacted.replace(
+      new RegExp(`\\b${escapedLetter}\\s*\\(\\s*\\d+\\s*\\)`, "g"),
+      "[hidden tile]",
+    );
+    redacted = redacted.replace(
+      new RegExp(`\\b${escapedLetter}\\b`, "g"),
+      "[hidden tile]",
+    );
+  }
+  return redacted;
+}

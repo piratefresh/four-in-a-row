@@ -9,7 +9,9 @@ import { ResetPasswordEmail } from "../src/emails/reset-password-email";
 import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 
-export const resend = new Resend(components.resend, { testMode: false });
+export const resend = new Resend(components.resend, {
+  testMode: process.env.RESEND_TEST_MODE !== "false",
+});
 
 export const sendVerificationEmail = action({
   args: {

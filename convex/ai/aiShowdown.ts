@@ -14,7 +14,7 @@ import {
   AI_SHOWDOWN_MODE,
   SHOWDOWN_MODE,
   getModelForDifficulty,
-} from "../aiStrategy";
+} from "./strategy";
 import {
   callOpenRouterChat,
   isOpenRouterConfigured,
@@ -28,12 +28,12 @@ import {
   tryBuildWordFromAvailableTiles,
 } from "../showdownSolver";
 import { isValidCsw24Word } from "../csw24";
-import { PROMPT_SHOWDOWN_TOOLUSE, getShowdownStrategyHint } from "../aiPrompts";
+import { PROMPT_SHOWDOWN_TOOLUSE, getShowdownStrategyHint } from "./prompts";
 import {
   SHOWDOWN_TOOLS,
   type ToolCallResult,
   parseStructuredTextResponse,
-} from "../aiTools";
+} from "./tools";
 import {
   type AIWordResult,
   normalizeAiTimeoutMs,

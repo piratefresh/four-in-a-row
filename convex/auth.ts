@@ -82,6 +82,45 @@ export const getCurrentUser = query({
   },
 });
 
+export const e2eForceVerifyUserEmail = mutation({
+  args: { email: v.string() },
+  handler: async (ctx, { email }) => {
+    if (process.env.E2E_TESTING !== "true") {
+      throw new ConvexError("Only available in e2e testing mode");
+    }
+
+    // Find user through the component's internal adapter (component tables
+    // are separate from project-level schema tables).
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user" as const,
+      where: [
+        { field: "email" as const, operator: "eq" as const, value: email.toLowerCase() },
+      ],
+    });
+
+    if (!user) {
+      return { ok: false, reason: "User not found" };
+    }
+
+    const u = user as { emailVerified?: boolean };
+    if (u.emailVerified) {
+      return { ok: true, reason: "already_verified" };
+    }
+
+    await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+      input: {
+        model: "user" as const,
+        where: [
+          { field: "email" as const, operator: "eq" as const, value: email.toLowerCase() },
+        ],
+        update: { emailVerified: true },
+      },
+    });
+
+    return { ok: true };
+  },
+});
+
 export const setActiveGameId = mutation({
   args: {
     activeGameId: v.optional(v.string()),

@@ -66,6 +66,10 @@ http.route({
   }),
 });
 
-authComponent.registerRoutes(http, createAuth);
+try {
+  authComponent.registerRoutes(http, createAuth);
+} catch (error) {
+  console.error("Failed to register auth routes:", error);
+}
 
 export default http;

@@ -8,6 +8,9 @@
  * @module
  */
 
+import type * as achievements from "../achievements.js";
+import type * as achievements_definitions from "../achievements/definitions.js";
+import type * as achievements_engine from "../achievements/engine.js";
 import type * as activityFeed from "../activityFeed.js";
 import type * as ai from "../ai.js";
 import type * as aiActionsCache from "../aiActionsCache.js";
@@ -22,6 +25,12 @@ import type * as aiTracing from "../aiTracing.js";
 import type * as ai_aiBetting from "../ai/aiBetting.js";
 import type * as ai_aiShared from "../ai/aiShared.js";
 import type * as ai_aiShowdown from "../ai/aiShowdown.js";
+import type * as ai_bettingConstants from "../ai/bettingConstants.js";
+import type * as ai_dialogue from "../ai/dialogue.js";
+import type * as ai_personalities from "../ai/personalities.js";
+import type * as ai_prompts from "../ai/prompts.js";
+import type * as ai_strategy from "../ai/strategy.js";
+import type * as ai_tools from "../ai/tools.js";
 import type * as auth from "../auth.js";
 import type * as clearOldGames from "../clearOldGames.js";
 import type * as constants from "../constants.js";
@@ -39,14 +48,23 @@ import type * as gameRules from "../gameRules.js";
 import type * as gameState from "../gameState.js";
 import type * as games from "../games.js";
 import type * as games_gamesBetting from "../games/gamesBetting.js";
+import type * as games_gamesBotDialogue from "../games/gamesBotDialogue.js";
+import type * as games_gamesBotTurn from "../games/gamesBotTurn.js";
 import type * as games_gamesProgression from "../games/gamesProgression.js";
+import type * as games_gamesRewards from "../games/gamesRewards.js";
 import type * as games_gamesRuntime from "../games/gamesRuntime.js";
 import type * as games_gamesScoring from "../games/gamesScoring.js";
+import type * as games_gamesSettlement from "../games/gamesSettlement.js";
 import type * as games_gamesSetup from "../games/gamesSetup.js";
 import type * as games_gamesShared from "../games/gamesShared.js";
 import type * as games_gamesShowdown from "../games/gamesShowdown.js";
+import type * as games_gamesTrace from "../games/gamesTrace.js";
+import type * as games_settlement_context from "../games/settlement/context.js";
+import type * as games_settlement_types from "../games/settlement/types.js";
 import type * as http from "../http.js";
+import type * as identity from "../identity.js";
 import type * as inspectGame from "../inspectGame.js";
+import type * as loginStreaks from "../loginStreaks.js";
 import type * as messages from "../messages.js";
 import type * as openRouterClient from "../openRouterClient.js";
 import type * as playerStats from "../playerStats.js";
@@ -81,9 +99,12 @@ import type * as stickers from "../stickers.js";
 import type * as testDeck from "../testDeck.js";
 import type * as tutorialBots from "../tutorialBots.js";
 import type * as tutorialDeck from "../tutorialDeck.js";
+import type * as tutorialReward from "../tutorialReward.js";
 import type * as userPreferences from "../userPreferences.js";
 import type * as validateWord from "../validateWord.js";
 import type * as verifyUser from "../verifyUser.js";
+import type * as wallet from "../wallet.js";
+import type * as wallet_ledger from "../wallet/ledger.js";
 
 import type {
   ApiFromModules,
@@ -92,6 +113,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  achievements: typeof achievements;
+  "achievements/definitions": typeof achievements_definitions;
+  "achievements/engine": typeof achievements_engine;
   activityFeed: typeof activityFeed;
   ai: typeof ai;
   aiActionsCache: typeof aiActionsCache;
@@ -106,6 +130,12 @@ declare const fullApi: ApiFromModules<{
   "ai/aiBetting": typeof ai_aiBetting;
   "ai/aiShared": typeof ai_aiShared;
   "ai/aiShowdown": typeof ai_aiShowdown;
+  "ai/bettingConstants": typeof ai_bettingConstants;
+  "ai/dialogue": typeof ai_dialogue;
+  "ai/personalities": typeof ai_personalities;
+  "ai/prompts": typeof ai_prompts;
+  "ai/strategy": typeof ai_strategy;
+  "ai/tools": typeof ai_tools;
   auth: typeof auth;
   clearOldGames: typeof clearOldGames;
   constants: typeof constants;
@@ -123,14 +153,23 @@ declare const fullApi: ApiFromModules<{
   gameState: typeof gameState;
   games: typeof games;
   "games/gamesBetting": typeof games_gamesBetting;
+  "games/gamesBotDialogue": typeof games_gamesBotDialogue;
+  "games/gamesBotTurn": typeof games_gamesBotTurn;
   "games/gamesProgression": typeof games_gamesProgression;
+  "games/gamesRewards": typeof games_gamesRewards;
   "games/gamesRuntime": typeof games_gamesRuntime;
   "games/gamesScoring": typeof games_gamesScoring;
+  "games/gamesSettlement": typeof games_gamesSettlement;
   "games/gamesSetup": typeof games_gamesSetup;
   "games/gamesShared": typeof games_gamesShared;
   "games/gamesShowdown": typeof games_gamesShowdown;
+  "games/gamesTrace": typeof games_gamesTrace;
+  "games/settlement/context": typeof games_settlement_context;
+  "games/settlement/types": typeof games_settlement_types;
   http: typeof http;
+  identity: typeof identity;
   inspectGame: typeof inspectGame;
+  loginStreaks: typeof loginStreaks;
   messages: typeof messages;
   openRouterClient: typeof openRouterClient;
   playerStats: typeof playerStats;
@@ -165,9 +204,12 @@ declare const fullApi: ApiFromModules<{
   testDeck: typeof testDeck;
   tutorialBots: typeof tutorialBots;
   tutorialDeck: typeof tutorialDeck;
+  tutorialReward: typeof tutorialReward;
   userPreferences: typeof userPreferences;
   validateWord: typeof validateWord;
   verifyUser: typeof verifyUser;
+  wallet: typeof wallet;
+  "wallet/ledger": typeof wallet_ledger;
 }>;
 
 /**

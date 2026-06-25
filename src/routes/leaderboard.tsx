@@ -1,15 +1,24 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { authClient } from "@/lib/auth-client";
+import { getToken } from "@/lib/auth-server";
 import { LeaderboardPage } from "@/components/leaderboard/LeaderboardPage";
 
 export const Route = createFileRoute("/leaderboard")({
+  ssr: true,
+  beforeLoad: async () => {
+    const token = await getToken();
+    console.log("[leaderboard beforeLoad] getToken returned:", JSON.stringify(token));
+    if (!token) {
+      throw redirect({ to: "/login" });
+    }
+  },
   component: LeaderboardRoute,
 });
 
 function LeaderboardRoute() {
-  const navigate = useNavigate();
   const { data: session, isPending } = authClient.useSession();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!isPending && !session?.user) {

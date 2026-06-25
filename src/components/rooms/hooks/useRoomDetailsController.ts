@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import type { RoomGameContextValue } from "../context/RoomGameContext";
+import type {
+  RoomTableContextValue,
+  RoomBettingContextValue,
+} from "../context/RoomGameContext";
 import type { RoomPageContextValue } from "../context/RoomPageContext";
 import { useRoomQueries } from "./useRoomQueries";
 import { useRoomDisplay } from "./useRoomDisplay";
 import { useRoomTimers } from "./useRoomTimers";
 import { useRoomReady } from "./useRoomReady";
 import { useRoomLeave } from "./useRoomLeave";
-import { useRoomReactions } from "./useRoomReactions";
+import { useAutoRejoin } from "./useAutoRejoin";
+import { useAuthGate } from "./useAuthGate";
+import { useAutoStartGame } from "./useAutoStartGame";
+import { useRoomNavigation } from "./useRoomNavigation";
+import { useAutoForfeit } from "./useAutoForfeit";
 import { useRoomDevTools } from "./useRoomDevTools";
 import { useBettingActions } from "./useBettingActions";
 import { useMediaQuery } from "./useMediaQuery";
@@ -20,10 +27,7 @@ import {
   getMaxRaisesPerRound,
   type BettingInput,
 } from "./bettingDerived";
-import {
-  RAISE_LADDER,
-  SHOWDOWN_TIMER_MS,
-} from "../../../../convex/gameState";
+import { RAISE_LADDER } from "../../../../convex/gameState";
 import { useRoomPresence } from "./useRoomPresence";
 
 const ANTE_AMOUNT = 20;
@@ -145,6 +149,7 @@ export function useRoomDetailsController(
     raisesThisRound,
     selectedRaiseAmount,
     clientIsMobile,
+    game ? { currentBet: game.currentBet, currentPlayerIndex: game.currentPlayerIndex, stage: game.stage } : null,
   );
 
   // --- Ready ---
@@ -161,33 +166,57 @@ export function useRoomDetailsController(
   // --- Presence ---
   useRoomPresence(code, Boolean(session?.user && roomData?.room && myPlayer));
 
-  // --- Reactions (auto-rejoin, redirects, auto-create game, expiry forfeits) ---
-  useRoomReactions({
-    code,
+  // --- Auth gate (redirect unauthenticated users) ---
+  useAuthGate({
     isAuthPending,
     hasSessionUser: Boolean(session?.user),
     allowGuestTutorial: options.allowGuestTutorial === true,
+    roomData: roomData as {
+      room: { tutorialId?: string | null };
+    } | null | undefined,
+  });
+
+  // --- Auto-rejoin (rejoin viewer seat when available) ---
+  useAutoRejoin({
+    code,
+    isAuthPending,
+    hasSessionUser: Boolean(session?.user),
     isEmailVerified: session?.user?.emailVerified === true,
     userEmail: session?.user?.email || "",
+    myPlayer,
     roomData: roomData as {
       room: { _id: string; status: string; tutorialId?: string | null };
+    } | null | undefined,
+    setGameMessage: bettingActions.setGameMessage,
+    resetLeftFlag: leave.resetLeftFlag,
+  });
+
+  // --- Auto-start game (create game when room is full) ---
+  useAutoStartGame(
+    roomData?.room._id,
+    game,
+  );
+
+  // --- Room lifecycle navigation (closure, results, lobby expiry) ---
+  useRoomNavigation({
+    code,
+    roomData: roomData as {
+      room: { _id: string; status: string };
     } | null | undefined,
     game: game as {
       _id: string;
       status: string;
-      currentBet?: number;
-      currentPlayerIndex?: number;
-      stage?: string;
     } | null | undefined,
-    myPlayer,
-    playerId,
-    didShowdownExpire: timers.didShowdownExpire,
     didLobbyExpire: timers.didLobbyExpire,
-    isTutorialRoom,
-    gameMessage: bettingActions.gameMessage,
-    setGameMessage: bettingActions.setGameMessage,
-    resetLeftFlag: leave.resetLeftFlag,
     leaveCurrentRoom: leave.leaveCurrentRoom,
+  });
+
+  // --- Showdown auto-forfeit ---
+  useAutoForfeit({
+    didShowdownExpire: timers.didShowdownExpire,
+    gameId: game?._id,
+    playerId,
+    isTutorialRoom,
   });
 
   // --- Dev tools ---
@@ -198,20 +227,27 @@ export function useRoomDetailsController(
   );
 
   // --- Context value construction ---
-  const showdownTimerMs =
-    game?.config?.showdownTimerMs ?? SHOWDOWN_TIMER_MS;
+  const isShowdownSubmissionOpen = useMemo(
+    () =>
+      !(
+        game?.stage === "showdown" &&
+        game.status === "active" &&
+        game.showdownStartedAt === undefined
+      ),
+    [game?.stage, game?.status, game?.showdownStartedAt],
+  );
 
-  const roomGameContextValue: RoomGameContextValue = useMemo(
+  const showBettingControls =
+    game?.status === "active" &&
+    game.stage !== "final" &&
+    game.stage !== "showdown" &&
+    !isTutorialBettingPaused;
+
+  const roomTableContextValue: RoomTableContextValue = useMemo(
     () => ({
       anteAmount: ANTE_AMOUNT,
       raisesThisRound,
       maxRaisesPerRound,
-      actionMessage: bettingActions.gameMessage,
-      showBettingControls:
-        game?.status === "active" &&
-        game.stage !== "final" &&
-        game.stage !== "showdown" &&
-        !isTutorialBettingPaused,
       showReadyButton: game?.status === "waiting",
       onReady: game?.status === "waiting" ? ready.handleToggleReady : undefined,
       isReady: myPlayer?.readyStatus ?? false,
@@ -223,6 +259,38 @@ export function useRoomDetailsController(
       allPlayersReady:
         (roomData?.members?.length ?? 0) >= 2 &&
         (roomData?.members?.every((member) => member.readyStatus) ?? false),
+      turnClockTimeRemaining: timers.turnClockTimeRemaining,
+      turnClockTargetName: timers.turnClockTargetName,
+      isTurnClockTarget: timers.isTurnClockTarget,
+      showdownTimeRemaining: timers.showdownTimeRemaining,
+      turnTimeRemaining: timers.turnClockTimeRemaining,
+      isShowdownSubmissionOpen,
+      isTutorialBettingPaused,
+      isTutorialRoom,
+    }),
+    [
+      raisesThisRound,
+      maxRaisesPerRound,
+      game?.status,
+      ready.handleToggleReady,
+      ready.isTogglingReady,
+      myPlayer?.readyStatus,
+      timers.lobbyInactivityTimeRemainingMs,
+      timers.turnClockTimeRemaining,
+      timers.turnClockTargetName,
+      timers.isTurnClockTarget,
+      timers.showdownTimeRemaining,
+      roomData?.members,
+      isShowdownSubmissionOpen,
+      isTutorialBettingPaused,
+      isTutorialRoom,
+    ],
+  );
+
+  const roomBettingContextValue: RoomBettingContextValue = useMemo(
+    () => ({
+      actionMessage: bettingActions.gameMessage,
+      showBettingControls,
       isBetting: bettingActions.isBetting,
       isMyTurn: myTurn,
       canCheck: checkable,
@@ -247,19 +315,6 @@ export function useRoomDetailsController(
           : "Maxed",
       raiseAmount: selectedRaiseAmount,
       raiseOptions,
-      turnClockTimeRemaining: timers.turnClockTimeRemaining,
-      turnClockTargetName: timers.turnClockTargetName,
-      isTurnClockTarget: timers.isTurnClockTarget,
-      showdownTimeRemaining: timers.showdownTimeRemaining,
-      turnTimeRemaining: timers.turnClockTimeRemaining,
-      isShowdownSubmissionOpen:
-        !(
-          game?.stage === "showdown" &&
-          game.status === "active" &&
-          game.showdownStartedAt === undefined
-        ),
-      isTutorialBettingPaused,
-      isTutorialRoom,
     }),
     [
       bettingActions.gameMessage,
@@ -268,33 +323,18 @@ export function useRoomDetailsController(
       bettingActions.handleRaise,
       bettingActions.handleFold,
       bettingActions.isBetting,
-      callAmt,
-      callable,
+      showBettingControls,
+      myTurn,
       checkable,
+      callable,
+      raisable,
       currentTurnPlayerId,
       display,
-      game?.stage,
-      game?.status,
-      game?.showdownStartedAt,
-      isTutorialBettingPaused,
-      isTutorialRoom,
-      leave.handleBack,
-      maxRaisesPerRound,
-      myPlayer?.readyStatus,
-      myTurn,
-      raisable,
-      raiseOptions,
-      raisesThisRound,
-      ready.handleToggleReady,
-      ready.isTogglingReady,
-      roomData?.members,
+      callAmt,
       selectedRaiseAmount,
-      showdownTimerMs,
-      timers.lobbyInactivityTimeRemainingMs,
-      timers.turnClockTimeRemaining,
-      timers.turnClockTargetName,
-      timers.isTurnClockTarget,
-      timers.showdownTimeRemaining,
+      raiseOptions,
+      setSelectedRaiseAmount,
+      leave.handleBack,
     ],
   );
 
@@ -394,7 +434,8 @@ export function useRoomDetailsController(
     getPlayerName: display.getPlayerName,
     getPlayerAvatar: display.getPlayerAvatar,
     getPlayerPersonality: display.getPlayerPersonality,
-    roomGameContextValue,
+    roomTableContextValue,
+    roomBettingContextValue,
     roomPageContextValue,
     isDevRejoining: devTools.isDevRejoining,
     isDevFillingBots: devTools.isDevFillingBots,

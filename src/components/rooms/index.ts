@@ -23,7 +23,15 @@ export { Seat } from './phases/Seat'
 export { PhasePlayerBadge } from './phases/PhasePlayerBadge'
 
 // Context and hooks
-export { RoomGameProvider, useRoomGameContext } from './context/RoomGameContext'
+export {
+  RoomGameProvider,
+  useRoomGameContext,
+  useRoomTableContext,
+  useRoomBettingContext,
+  type RoomTableContextValue,
+  type RoomBettingContextValue,
+  type RoomGameContextValue,
+} from './context/RoomGameContext'
 export { RoomPageProvider, useRoomPageContext } from './context/RoomPageContext'
 export { useRoomDetailsController } from './hooks/useRoomDetailsController'
 export { useRoomPresence } from './hooks/useRoomPresence'

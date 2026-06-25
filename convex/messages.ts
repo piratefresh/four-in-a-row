@@ -1,18 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { authComponent, createAuth } from "./auth";
+import { getAuthenticatedUserId } from "./identity";
 
 function normalizeMessageText(text: string) {
   return text.trim().replace(/\s+/g, " ");
-}
-
-async function getAuthenticatedUserId(
-  ctx: MutationCtx | QueryCtx,
-): Promise<string | undefined> {
-  const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-  const session = await auth.api.getSession({ headers });
-  return session?.user?.id ?? session?.session?.userId ?? undefined;
 }
 
 // Send a message to a room

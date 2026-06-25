@@ -1,0 +1,331 @@
+/**
+ * AI Dialogue Generation for Word Poker
+ *
+ * Generates personality-driven in-game dialogue for bot characters.
+ * Uses two LLM calls per bot turn:
+ * 1. Betting/showdown action (tool-use)
+ * 2. Optional dialogue (freeform generation)
+ *
+ * This module handles the dialogue generation — deciding whether to speak
+ * and what to say.
+ */
+
+import {
+  type AIPersonality,
+  AI_PERSONALITIES,
+  type BotCharacterId,
+  BOT_CHARACTERS,
+} from "./strategy";
+import {
+  getDialogueProfile,
+  shouldGenerateDialogue,
+  getTriggerDescription,
+  getRandomReaction,
+  type DialogueTrigger,
+} from "./personalities";
+export type { DialogueTrigger };
+import { PROMPT_DIALOGUE } from "./prompts";
+import {
+  ROOM_STICKERS,
+  getRoomSticker,
+  isRoomStickerKey,
+  type RoomStickerKey,
+} from "../stickerCatalog";
+import { z } from "zod";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** Zod schema for structured LLM dialogue output */
+export const DialogueResponseSchema = z.union([
+  z.object({
+    type: z.optional(z.literal("text")),
+    message: z.string().min(1).max(300),
+  }),
+  z.object({
+    sticker: z.object({
+      key: z.string(),
+      emoji: z.optional(z.string()),
+    }),
+    message: z.optional(z.string().max(300)),
+  }),
+  z.object({
+    type: z.literal("sticker"),
+    stickerKey: z.string(),
+    emoji: z.optional(z.string()),
+    message: z.optional(z.string().max(300)),
+  }),
+]);
+
+export type DialogueResponse =
+  | { type: "text"; message: string }
+  | {
+      type: "sticker";
+      stickerKey: RoomStickerKey;
+      emoji: string;
+      message?: string;
+    };
+
+export type DialogueRequest = {
+  botCharacterId: BotCharacterId;
+  trigger: DialogueTrigger;
+  gameState: string;
+  recentMessages: string;
+  randomFn?: () => number;
+  believesPlayer?: boolean | null;
+  isMobileAudience?: boolean;
+};
+
+export type DialogueResult = {
+  message: string;
+  response: DialogueResponse;
+  trigger: DialogueTrigger;
+  botCharacterId: BotCharacterId;
+  wasTemplateReaction: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// Dialogue generation logic
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine whether the bot should speak and generate a dialogue message.
+ *
+ * This is a pure function that can be called from Convex actions.
+ * The actual LLM call is separate — this module prepares the prompt
+ * and decides whether dialogue should be generated.
+ */
+export function prepareDialoguePrompt(
+  request: DialogueRequest,
+): { shouldSpeak: boolean; prompt: string } {
+  const character = getCharacter(request.botCharacterId);
+  const profile = getDialogueProfile(character.personality);
+  const randomFn = request.randomFn ?? Math.random;
+
+  if (!shouldGenerateDialogue(character.personality, request.trigger, randomFn())) {
+    return { shouldSpeak: false, prompt: "" };
+  }
+
+  const prompt = PROMPT_DIALOGUE.build({
+    botName: character.name,
+    botTitle: character.title,
+    personality: character.personality,
+    personalityDescription: profile.systemPrompt
+      .replace(/^You are /, "")
+      .replace(/. You.*$/, "")
+      .trim(),
+    chattinessDescription: getChattinessDescription(character.personality),
+    trigger: request.trigger,
+    triggerDescription: getTriggerDescription(request.trigger),
+    gameState: request.gameState,
+    recentMessages: request.recentMessages,
+    maxTokens: profile.maxTokens,
+    believesPlayer: request.believesPlayer ?? null,
+    isMobileAudience: request.isMobileAudience === true,
+    availableStickers: ROOM_STICKERS.map(
+      (sticker) => `${sticker.key}=${sticker.label} ${sticker.symbol}`,
+    ).join(", "),
+  });
+
+  return { shouldSpeak: true, prompt };
+}
+
+/**
+ * Try to get a quick template reaction instead of an LLM call.
+ * This saves a network request for common reactions.
+ */
+export function tryTemplateReaction(
+  request: DialogueRequest,
+): DialogueResult | null {
+  const character = getCharacter(request.botCharacterId);
+  const randomFn = request.randomFn ?? Math.random;
+
+  if (!shouldGenerateDialogue(character.personality, request.trigger, randomFn())) {
+    return null;
+  }
+
+  const reaction = getRandomReaction(character.personality, request.trigger, randomFn);
+  if (!reaction) {
+    return null;
+  }
+
+  // Only use templates ~50% of the time when they exist
+  // The other 50% we want the LLM to generate something more contextual
+  if (randomFn() > 0.5) {
+    return null;
+  }
+
+  if (request.isMobileAudience) {
+    const sticker = getTemplateSticker(request.trigger);
+    return {
+      message: sticker.label,
+      response: {
+        type: "sticker",
+        stickerKey: sticker.key,
+        emoji: sticker.symbol,
+        message: reaction,
+      },
+      trigger: request.trigger,
+      botCharacterId: request.botCharacterId,
+      wasTemplateReaction: true,
+    };
+  }
+
+  return {
+    message: reaction,
+    response: { type: "text", message: reaction },
+    trigger: request.trigger,
+    botCharacterId: request.botCharacterId,
+    wasTemplateReaction: true,
+  };
+}
+
+/**
+ * Parse and validate a structured JSON dialogue response from the LLM.
+ * Returns the cleaned message string or null if parsing fails.
+ */
+export function parseDialogueResponse(raw: string): DialogueResponse | null {
+  try {
+    const parsed = JSON.parse(raw);
+    const result = DialogueResponseSchema.safeParse(parsed);
+    if (!result.success) return null;
+    const data = result.data;
+    if ("sticker" in data) {
+      if (!isRoomStickerKey(data.sticker.key)) return null;
+      const sticker = getRoomSticker(data.sticker.key);
+      if (!sticker) return null;
+      const message = data.message?.trim();
+      return {
+        type: "sticker",
+        stickerKey: data.sticker.key,
+        emoji: data.sticker.emoji?.trim() || sticker.symbol,
+        message: message || undefined,
+      };
+    }
+    if (data.type === "sticker") {
+      if (!isRoomStickerKey(data.stickerKey)) return null;
+      const sticker = getRoomSticker(data.stickerKey);
+      if (!sticker) return null;
+      const message = data.message?.trim();
+      return {
+        type: "sticker",
+        stickerKey: data.stickerKey,
+        emoji: data.emoji?.trim() || sticker.symbol,
+        message: message || undefined,
+      };
+    }
+    return { type: "text", message: data.message.trim() };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clean and validate a raw text dialogue response (fallback path).
+ * Strips quotes, truncates to max length, etc.
+ */
+export function cleanDialogueResponse(
+  raw: string,
+  maxTokens: number = 50,
+): string {
+  let cleaned = raw.trim();
+
+  // Strip surrounding quotes if the LLM wrapped the response
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1);
+  }
+
+  // Strip LLM-added name prefix like "Jax:", "Nora Vale:", "JAX:"
+  cleaned = cleaned.replace(/^(?:Jax|Rook|Nora|Vale|Ellis|March|Mira|Quill)[A-Za-z]*(?:\s[A-Za-z]+)*:\s*/i, "");
+
+  // Truncate at first newline (we want one-liners)
+  const newlineIndex = cleaned.indexOf("\n");
+  if (newlineIndex !== -1) {
+    cleaned = cleaned.slice(0, newlineIndex);
+  }
+
+  // Rough character limit based on max tokens (avg ~4 chars per token)
+  const maxChars = maxTokens * 4;
+  if (cleaned.length > maxChars) {
+    cleaned = cleaned.slice(0, maxChars).replace(/\s+\S*$/, "");
+  }
+
+  return cleaned;
+}
+
+export function dialogueResponseToTraceText(response: DialogueResponse): string {
+  if (response.type === "text") return response.message;
+  const sticker = getRoomSticker(response.stickerKey);
+  return `[sticker:${response.stickerKey}:${sticker?.label ?? response.emoji}]`;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getCharacter(botCharacterId: BotCharacterId) {
+  const character = BOT_CHARACTERS.find((c) => c.id === botCharacterId);
+  if (!character) {
+    throw new Error(`Unknown bot character: ${botCharacterId}`);
+  }
+  return character;
+}
+
+function getChattinessDescription(personality: AIPersonality): string {
+  switch (personality) {
+    case AI_PERSONALITIES.CAUTIOUS:
+      return "You speak rarely. When you do, keep it brief and measured.";
+    case AI_PERSONALITIES.BALANCED:
+      return "You speak sometimes. Keep messages friendly and concise.";
+    case AI_PERSONALITIES.AGGRESSIVE:
+      return "You speak often. Keep messages short, bold, and punchy. Trash talk is welcome.";
+    case AI_PERSONALITIES.CREATIVE:
+      return "You speak often. Keep messages playful, witty, and fun. Wordplay and puns are your thing.";
+    default:
+      return "Keep messages brief and relevant.";
+  }
+}
+
+/**
+ * Build a succinct game state description for the dialogue prompt.
+ */
+export function buildGameStateDescription(args: {
+  stage: string;
+  pot: number;
+  botChips: number;
+  currentBet: number;
+  isBotTurn: boolean;
+}): string {
+  const parts: string[] = [];
+
+  parts.push(`Stage: ${args.stage}`);
+  parts.push(`Pot: ${args.pot} chips`);
+  parts.push(`Your chips: ${args.botChips}`);
+
+  if (args.currentBet > 0) {
+    parts.push(`Current bet: ${args.currentBet}`);
+  }
+
+  if (args.isBotTurn) {
+    parts.push("It's your turn");
+  }
+
+  return parts.join(". ") + ".";
+}
+
+function getTemplateSticker(trigger: DialogueTrigger) {
+  const stickerKey: RoomStickerKey =
+    trigger === "botFolds"
+      ? "bye"
+      : trigger === "botRaises"
+        ? "taunt"
+        : trigger === "playerCall"
+          ? "wow"
+          : "follow";
+
+  return getRoomSticker(stickerKey) ?? ROOM_STICKERS[0]!;
+}

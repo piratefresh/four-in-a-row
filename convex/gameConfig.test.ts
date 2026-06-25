@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { resolveConfig, type RoomConfig } from "./gameConfig";
+import {
+  resolveConfig,
+  type RoomConfig,
+  getRoomEconomyMode,
+  formatRoomEconomyLabel,
+  isValidBuyIn,
+  BUY_IN_PRESETS,
+  DEFAULT_BUY_IN,
+} from "./gameConfig";
 import {
   SMALL_BLIND,
   BIG_BLIND,
@@ -158,5 +166,64 @@ describe("resolveConfig", () => {
     expect(resolved.bettingStructure).toBe("noLimit");
     expect(resolved.choiceTileFrequency).toBe("high");
     expect(resolved.bonusStructure).toBe("classic");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// STO-232: Economy normalization helpers
+// ---------------------------------------------------------------------------
+
+describe("getRoomEconomyMode", () => {
+  it("returns the economy mode when explicitly set", () => {
+    expect(getRoomEconomyMode({ economyMode: "balance" })).toBe("balance");
+    expect(getRoomEconomyMode({ economyMode: "nonBalance" })).toBe("nonBalance");
+  });
+
+  it("treats undefined (legacy rooms) as nonBalance", () => {
+    expect(getRoomEconomyMode({ economyMode: undefined })).toBe("nonBalance");
+    expect(getRoomEconomyMode({})).toBe("nonBalance");
+  });
+
+  it("treats null as nonBalance", () => {
+    expect(getRoomEconomyMode({ economyMode: null })).toBe("nonBalance");
+  });
+});
+
+describe("formatRoomEconomyLabel", () => {
+  it("formats balance mode with buy-in", () => {
+    expect(formatRoomEconomyLabel("balance", 500)).toBe("Balance \u00b7 500 buy-in");
+    expect(formatRoomEconomyLabel("balance", 1_000)).toBe("Balance \u00b7 1,000 buy-in");
+  });
+
+  it("formats non-balance mode", () => {
+    expect(formatRoomEconomyLabel("nonBalance")).toBe("Non-balance");
+    expect(formatRoomEconomyLabel("nonBalance", 500)).toBe("Non-balance");
+  });
+
+  it("formats balance mode without buyIn as Non-balance", () => {
+    expect(formatRoomEconomyLabel("balance", null)).toBe("Non-balance");
+    expect(formatRoomEconomyLabel("balance", undefined)).toBe("Non-balance");
+  });
+});
+
+describe("isValidBuyIn", () => {
+  it("accepts all preset values", () => {
+    for (const buyIn of BUY_IN_PRESETS) {
+      expect(isValidBuyIn(buyIn)).toBe(true);
+    }
+  });
+
+  it("rejects non-preset values", () => {
+    expect(isValidBuyIn(0)).toBe(false);
+    expect(isValidBuyIn(200)).toBe(false);
+    expect(isValidBuyIn(750)).toBe(false);
+    expect(isValidBuyIn(10_000)).toBe(false);
+    expect(isValidBuyIn(-100)).toBe(false);
+    expect(isValidBuyIn(1.5)).toBe(false);
+  });
+
+  it("DEFAULT_BUY_IN is a valid preset", () => {
+    expect(isValidBuyIn(DEFAULT_BUY_IN)).toBe(true);
+    expect(DEFAULT_BUY_IN).toBe(500);
   });
 });

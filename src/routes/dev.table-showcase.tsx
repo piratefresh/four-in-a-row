@@ -18,7 +18,8 @@ import { ROOM_BOTTOM_BADGE_POSITION_CLASS } from "@/components/rooms/board/roomB
 import { RoomActionControls } from "@/components/rooms/controls/RoomActionControls";
 import {
   RoomGameProvider,
-  type RoomGameContextValue,
+  type RoomTableContextValue,
+  type RoomBettingContextValue,
 } from "@/components/rooms/context/RoomGameContext";
 import { useMediaQuery } from "@/components/rooms/hooks/useMediaQuery";
 import { PhasePlayerBadge } from "@/components/rooms/phases/PhasePlayerBadge";
@@ -265,12 +266,10 @@ function DevTableShowcaseRoute() {
     [isLobby, opponents],
   );
 
-  const contextValue: RoomGameContextValue = {
+  const tableContextValue: RoomTableContextValue = {
     anteAmount: 25,
     raisesThisRound: 1,
     maxRaisesPerRound: 4,
-    actionMessage: null,
-    showBettingControls: !isLobby,
     showReadyButton: isLobby,
     onReady: () => {},
     isReady: false,
@@ -279,6 +278,19 @@ function DevTableShowcaseRoute() {
     readyCount: 2,
     totalPlayers: 4,
     allPlayersReady: false,
+    turnClockTimeRemaining: scenario === "turn" ? 22_000 : null,
+    turnClockTargetName: scenario === "turn" ? getPlayerName("you") : null,
+    isTurnClockTarget: scenario === "turn",
+    showdownTimeRemaining: isShowdown ? 44_000 : null,
+    turnTimeRemaining: scenario === "turn" ? 22_000 : null,
+    isShowdownSubmissionOpen: isShowdown,
+    isTutorialBettingPaused: false,
+    isTutorialRoom: false,
+  };
+
+  const bettingContextValue: RoomBettingContextValue = {
+    actionMessage: null,
+    showBettingControls: !isLobby,
     isBetting: false,
     isMyTurn: scenario === "turn",
     canCheck: false,
@@ -297,18 +309,13 @@ function DevTableShowcaseRoute() {
     raiseLabel: "Raise",
     raiseAmount: 150,
     raiseOptions: [100, 150, 200, 300],
-    turnClockTimeRemaining: scenario === "turn" ? 22_000 : null,
-    turnClockTargetName: scenario === "turn" ? getPlayerName("you") : null,
-    isTurnClockTarget: scenario === "turn",
-    showdownTimeRemaining: isShowdown ? 44_000 : null,
-    turnTimeRemaining: scenario === "turn" ? 22_000 : null,
-    isShowdownSubmissionOpen: isShowdown,
-    isTutorialBettingPaused: false,
-    isTutorialRoom: false,
   };
 
   return (
-    <RoomGameProvider value={contextValue}>
+    <RoomGameProvider
+      table={tableContextValue}
+      betting={bettingContextValue}
+    >
       <DndContext>
         <div className="relative flex h-[calc(100dvh-4rem)] flex-col overflow-y-auto overflow-x-hidden bg-gradient-felt-table font-serif text-[#f1eee7] md:overflow-hidden">
           <div className="absolute left-3 top-3 z-50 flex max-w-[calc(100vw-1.5rem)] flex-wrap gap-1 sm:left-4 sm:top-4 sm:gap-2">
@@ -436,7 +443,7 @@ function DevTableShowcaseRoute() {
                     isReady: false,
                     isTogglingReady: false,
                     lobbyInactivityTimeRemainingMs:
-                      contextValue.lobbyInactivityTimeRemainingMs,
+                      tableContextValue.lobbyInactivityTimeRemainingMs,
                     onReady: () => {},
                   }}
                 />

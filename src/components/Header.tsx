@@ -4,7 +4,11 @@ import { useMutation, useQuery } from "convex/react";
 import { authClient } from "@/lib/auth-client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { dismissRoomRejoin } from "@/lib/room-rejoin-dismissal";
-import { ArrowLeft, ChevronDown, Users } from "lucide-react";
+import { ArrowLeft, ChevronDown, Coins, Trophy, Users } from "lucide-react";
+import { useWallet } from "@/components/wallet/useWallet";
+import { WalletPill } from "@/components/wallet/WalletPill";
+import { useCoinFlyPillRef } from "@/components/wallet/CoinFly";
+import { useBalanceDelta } from "@/components/wallet/useBalanceDelta";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +55,10 @@ export default function Header() {
   const isResultsView = resultsMatch !== null;
   const isOnlineRoomsView = pathname === "/rooms";
   const isTutorialRoom = roomData?.room.tutorialId === "first-bot-game";
+
+  const { hasWallet, balance: coinBalance } = useWallet(session?.user?.id);
+  const { delta, settleId } = useBalanceDelta(coinBalance);
+  const pillRef = useCoinFlyPillRef();
 
   const eyebrow = isResultsView
     ? "PHASE 7 . RESULTS"
@@ -153,6 +161,19 @@ export default function Header() {
         </div>
       </div>
       <div className="flex items-center gap-3">
+        {hasWallet && coinBalance !== null && (
+          <Link
+            to="/wallet"
+            className="transition-opacity hover:opacity-80"
+          >
+            <WalletPill
+              balance={coinBalance}
+              delta={delta}
+              settleId={settleId}
+              pillRef={pillRef}
+            />
+          </Link>
+        )}
         {session?.user ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -191,6 +212,18 @@ export default function Header() {
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link to="/settings">Settings</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/wallet" className="flex items-center gap-2">
+                  <Coins className="h-4 w-4" />
+                  Wallet
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/achievements" className="flex items-center gap-2">
+                  <Trophy className="h-4 w-4" />
+                  Achievements
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/friends" className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
   INITIAL_HAND_SIZE,
@@ -13,16 +13,18 @@ import {
   type GameDeckTile,
   type GameTile,
 } from "../gameState";
-import { resolveConfig, type ResolvedGameConfig } from "../gameConfig";
+import { resolveConfig, getRoomEconomyMode, type ResolvedGameConfig } from "../gameConfig";
 import { FIRST_BOT_GAME_TUTORIAL_ID } from "../rooms/helpers";
 import { createTutorialDeal } from "../tutorialDeck";
 import { recordGameStart } from "../activityFeed";
-import { scheduleBotTurnIfNeeded, setRoomUsersActiveGameId } from "./gamesProgression";
+import { scheduleBotTurnIfNeeded, markGameActiveForParticipants } from "./gamesProgression";
 import {
   AI_DEALER_PLAYER_ID,
+  DEV_BOT_AUTH_PREFIX,
   getClearedTurnClockFields,
   getNewTurnStateFields,
 } from "./gamesShared";
+import { debitWallet, buildOperationKey, getWalletBalance, OPERATION_NAMESPACES } from "../wallet/ledger";
 
 function randomIndex(maxExclusive: number) {
   const bytes = new Uint32Array(1);
@@ -216,32 +218,6 @@ export function createChoiceTileDeal(
   };
 }
 
-async function getParticipantIds(ctx: MutationCtx, roomId: Id<"rooms">) {
-  const activePlayers = await ctx.db
-    .query("players")
-    .withIndex("roomId_status", (q) =>
-      q.eq("roomId", roomId).eq("status", "active"),
-    )
-    .collect();
-  if (activePlayers.length < 1) return null;
-  activePlayers.sort((a, b) => a.seatIndex - b.seatIndex);
-  const participantIds = activePlayers.map((player) => player._id as string);
-
-  // Only auto-add AI dealer if:
-  // 1. There's only 1 player in the room
-  // 2. That room already has bots (offline mode)
-  if (participantIds.length === 1) {
-    const hasExistingBots = activePlayers.some((player) =>
-      player.authUserId?.startsWith("dev-bot:")
-    );
-    if (hasExistingBots) {
-      participantIds.push(AI_DEALER_PLAYER_ID);
-    }
-  }
-
-  return participantIds;
-}
-
 async function clearHands(ctx: MutationCtx, gameId: Id<"games">) {
   const existingHands = await ctx.db
     .query("playerHands")
@@ -271,6 +247,188 @@ function assertMinimumPlayersToStart(participantIds: string[]) {
       code: "NOT_ENOUGH_PLAYERS",
       message: "At least 2 active players are required to start.",
     });
+  }
+}
+
+async function getActiveRoomPlayers(ctx: MutationCtx, roomId: Id<"rooms">) {
+  const players = await ctx.db
+    .query("players")
+    .withIndex("roomId_status", (q) =>
+      q.eq("roomId", roomId).eq("status", "active"),
+    )
+    .collect();
+  players.sort((a, b) => a.seatIndex - b.seatIndex);
+  return players;
+}
+
+function buildParticipantIds(activePlayers: Doc<"players">[]) {
+  const participantIds = activePlayers.map((player) => player._id as string);
+
+  if (participantIds.length === 1) {
+    const hasExistingBots = activePlayers.some((player) =>
+      player.authUserId?.startsWith(DEV_BOT_AUTH_PREFIX),
+    );
+    if (hasExistingBots) {
+      participantIds.push(AI_DEALER_PLAYER_ID);
+    }
+  }
+
+  return participantIds;
+}
+
+function getHumanPlayers(activePlayers: Doc<"players">[]): Doc<"players">[] {
+  return activePlayers.filter(
+    (p) => !p.authUserId?.startsWith(DEV_BOT_AUTH_PREFIX),
+  );
+}
+
+/**
+ * Validation-only check that the room's active players are eligible to start
+ * a balance game. Performs NO wallet writes. Runs before any buy-in debit so
+ * a validation failure leaves every wallet unchanged.
+ *
+ * `currentGameId` is defensively allowed: if a player's `activeGameId`
+ * happens to point at the game being started (e.g. from a previous
+ * partial-failure attempt), the unsettled-game check treats that as
+ * non-blocking rather than self-blocking the start.
+ */
+export async function assertPlayersCanStartBalanceGame(
+  ctx: MutationCtx,
+  room: Doc<"rooms">,
+  activePlayers: Doc<"players">[],
+  currentGameId?: Id<"games">,
+): Promise<void> {
+  if (getRoomEconomyMode(room) !== "balance" || !room.buyIn) return;
+
+  const buyIn = room.buyIn;
+  const humanPlayers = getHumanPlayers(activePlayers);
+
+  // Guests cannot participate in balance games.
+  for (const player of humanPlayers) {
+    if (!player.authUserId) {
+      throw new ConvexError({
+        code: "GUEST_BALANCE_GAME",
+        message: "Guests cannot participate in balance games.",
+      });
+    }
+  }
+
+  // Unsettled-game check: no human may start a new balance game while their
+  // `activeGameId` references an active, charged, unsettled game. The
+  // current game being started is defensively allowed.
+  await ensureNoUnsettledGames(ctx, humanPlayers, currentGameId);
+
+  // Sufficient-funds check: every human must have at least `buyIn` coins.
+  const insufficient: string[] = [];
+  for (const player of humanPlayers) {
+    const balance = await getWalletBalance(ctx, player.authUserId);
+    if (balance === null || balance < buyIn) {
+      insufficient.push(player.name);
+    }
+  }
+  if (insufficient.length > 0) {
+    const names = insufficient.join(", ");
+    throw new ConvexError({
+      code: "INSUFFICIENT_FUNDS",
+      message: `Insufficient balance for: ${names}. Each player needs ${buyIn} coins.`,
+    });
+  }
+}
+
+/**
+ * Debit the buy-in from every human participant's wallet. Called only after
+ * `assertPlayersCanStartBalanceGame` has passed. The per-player
+ * `INSUFFICIENT_FUNDS` catch is a defensive safety net — it should not fire
+ * after a successful assert, since the whole start runs in one serializable
+ * transaction.
+ */
+export async function reserveBalanceGameBuyIns(
+  ctx: MutationCtx,
+  gameId: Id<"games">,
+  room: Doc<"rooms">,
+  activePlayers: Doc<"players">[],
+): Promise<void> {
+  const humanPlayers = getHumanPlayers(activePlayers);
+  console.log(
+    `[buy-in] economyMode=${room.economyMode}, buyIn=${room.buyIn}, humanCount=${humanPlayers.length}`,
+  );
+  if (getRoomEconomyMode(room) !== "balance" || !room.buyIn) {
+    console.log(`[buy-in] SKIPPED: not a balance game or no buyIn`);
+    return;
+  }
+
+  const buyIn = room.buyIn;
+
+  const insufficient: string[] = [];
+  for (const player of humanPlayers) {
+    const operationKey = buildOperationKey(
+      OPERATION_NAMESPACES.buy_in,
+      player.authUserId,
+      String(gameId),
+    );
+    console.log(
+      `[buy-in] Debiting ${player.name} (${player.authUserId}) ${buyIn} coins`,
+    );
+    try {
+      await debitWallet(ctx, {
+        authUserId: player.authUserId,
+        amount: buyIn,
+        source: "buy_in",
+        operationKey,
+        gameId,
+      });
+    } catch (error) {
+      const code = (error as { data?: { code?: string } })?.data?.code;
+      if (code === "INSUFFICIENT_FUNDS") {
+        insufficient.push(player.name);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  if (insufficient.length > 0) {
+    const names = insufficient.join(", ");
+    throw new ConvexError({
+      code: "INSUFFICIENT_FUNDS",
+      message: `Insufficient balance for: ${names}. Each player needs ${buyIn} coins.`,
+    });
+  }
+}
+
+function resolveGameConfig(room: Doc<"rooms">): ResolvedGameConfig {
+  const config = resolveConfig(room.config);
+  if (getRoomEconomyMode(room) === "balance" && room.buyIn) {
+    return { ...config, startingChips: room.buyIn };
+  }
+  return config;
+}
+
+async function ensureNoUnsettledGames(
+  ctx: MutationCtx,
+  humanPlayers: Doc<"players">[],
+  currentGameId?: Id<"games">,
+) {
+  for (const player of humanPlayers) {
+    const normalizedUserId = ctx.db.normalizeId("user", player.authUserId);
+    if (!normalizedUserId) continue;
+    const userDoc = await ctx.db.get(normalizedUserId);
+    if (!userDoc?.activeGameId) continue;
+    // Defensively allow the game being started: a stale `activeGameId`
+    // pointing at `currentGameId` (e.g. from a previous partial-failure
+    // attempt) must not self-block the start.
+    if (currentGameId && userDoc.activeGameId === String(currentGameId)) continue;
+    const activeGame = await ctx.db.get(userDoc.activeGameId as Id<"games">);
+    if (!activeGame) continue;
+    if (
+      activeGame.status !== "completed" ||
+      activeGame.settlementState !== "settled"
+    ) {
+      throw new ConvexError({
+        code: "UNSETTLED_GAME",
+        message: `${player.name} has an unsettled game. Complete it before starting a new one.`,
+      });
+    }
   }
 }
 
@@ -376,6 +534,146 @@ export async function createGameForRoomHandler(
   );
 }
 
+export type OrchestrateGameStartResult = {
+  ok: true;
+  gameId: Id<"games">;
+  status: "active";
+  dealtHandSize: number;
+  playersDealt: number;
+  includesAiDealer: boolean;
+};
+
+/**
+ * Shared orchestration for starting a waiting game. Both the public
+ * `startGame` mutation and the `internalStartGame` mutation call this
+ * function so they cannot diverge.
+ *
+ * Ordering (per STO-233):
+ *   1. `assertPlayersCanStartBalanceGame` — validation only, no writes.
+ *      Runs the unsettled-game and sufficient-funds checks before any
+ *      wallet is debited, so a validation failure leaves every wallet
+ *      unchanged.
+ *   2. `reserveBalanceGameBuyIns` — debit buy-ins.
+ *   3. Deal hands + activate the game.
+ *   4. `markGameActiveForParticipants` — set `activeGameId` only after
+ *      buy-ins, hand creation, and game activation succeed.
+ *   5. Schedule bot turns + record the game start.
+ */
+async function orchestrateGameStart(
+  ctx: MutationCtx,
+  game: Doc<"games">,
+  room: Doc<"rooms">,
+  options: { source: "public" | "internal" },
+): Promise<OrchestrateGameStartResult> {
+  const config = resolveGameConfig(room);
+
+  const activePlayers = await getActiveRoomPlayers(ctx, room._id);
+  if (activePlayers.length < 1) {
+    throw new ConvexError({
+      code: "NOT_ENOUGH_PLAYERS",
+      message: "At least 1 active player is required to start.",
+    });
+  }
+
+  const participantIds = buildParticipantIds(activePlayers);
+  assertMinimumPlayersToStart(participantIds);
+
+  // 1. Validation (no writes).
+  await assertPlayersCanStartBalanceGame(ctx, room, activePlayers, game._id);
+
+  // 2. Reserve buy-ins (writes).
+  await reserveBalanceGameBuyIns(ctx, game._id, room, activePlayers);
+
+  const isTutorial = room.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
+  const deck = isTutorial ? [] : createShuffledDeck();
+  if (!isTutorial && options.source === "public") {
+    const choiceCards = deck.filter((card) => card.kind === "choice");
+    console.log(`Deck generated: ${deck.length} total cards, ${choiceCards.length} choice cards`);
+  }
+
+  await clearHands(ctx, game._id);
+  const roundDeal = isTutorial
+    ? createTutorialDeal(participantIds.length, config)
+    : createChoiceTileDeal(deck, participantIds.length, config);
+
+  const now = Date.now();
+
+  const dealerButtonIndex = 0;
+  const { smallBlindIndex, bigBlindIndex } = calculateBlindPositions(
+    dealerButtonIndex,
+    participantIds.length,
+  );
+
+  const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
+  const openingCommunityTiles = hideCommunityTiles(roundDeal.communityTiles);
+  const totalBlinds = config.smallBlind + config.bigBlind;
+
+  // 3. Deal hands + activate.
+  await dealHands(
+    ctx,
+    game._id,
+    participantIds,
+    roundDeal.hands,
+    smallBlindIndex,
+    bigBlindIndex,
+    now,
+    config,
+  );
+  await ctx.db.patch(game._id, {
+    status: "active",
+    stage: "preflop",
+    communityTiles: openingCommunityTiles,
+    deck: roundDeal.deck,
+    pot: totalBlinds,
+    currentBet: config.bigBlind,
+    currentPlayerIndex: firstActionIndex,
+    dealerButtonIndex,
+    smallBlindIndex,
+    bigBlindIndex,
+    raisesThisRound: 0,
+    config,
+    ...getNewTurnStateFields(now),
+    updatedAt: now,
+  });
+  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
+    gameId: game._id,
+    roomId: room._id,
+    category: "game_start",
+    stage: "preflop",
+    tilesRevealed: openingCommunityTiles
+      .filter((tile) => tile.revealed)
+      .map((tile) => tile.kind === "single" ? tile.letter : `[${tile.options.join("/")}]`)
+      .join(" "),
+    potAfter: totalBlinds,
+    metadata: {
+      participantIds,
+      playersDealt: participantIds.length,
+      dealerButtonIndex,
+      smallBlindIndex,
+      bigBlindIndex,
+      communityChoiceTileCount: roundDeal.communityChoiceTileCount,
+      handChoiceTileCounts: roundDeal.handChoiceTileCounts,
+      source: options.source,
+    },
+  });
+
+  // 4. Mark active only after buy-ins, hand creation, and activation succeed.
+  await markGameActiveForParticipants(ctx, room._id, game._id);
+
+  // 5. Schedule bot turns + record start.
+  await scheduleBotTurnIfNeeded(ctx, game._id);
+  await recordGameStart(ctx, game._id);
+
+  return {
+    ok: true,
+    gameId: game._id,
+    status: "active",
+    dealtHandSize: config.initialHandSize,
+    playersDealt: participantIds.length,
+    includesAiDealer: participantIds.includes(AI_DEALER_PLAYER_ID),
+  };
+}
+
 export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"games"> }) {
   const game = await ctx.db.get(args.gameId);
   if (!game) throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Game does not exist." });
@@ -390,100 +688,7 @@ export async function startGameHandler(ctx: MutationCtx, args: { gameId: Id<"gam
   const room = await ctx.db.get(roomId);
   if (!room) throw new ConvexError({ code: "ROOM_NOT_FOUND", message: "Room does not exist." });
 
-  const config = resolveConfig(room.config);
-
-  const participantIds = await getParticipantIds(ctx, room._id);
-  if (!participantIds) {
-    throw new ConvexError({
-      code: "NOT_ENOUGH_PLAYERS",
-      message: "At least 1 active player is required to start.",
-    });
-  }
-  assertMinimumPlayersToStart(participantIds);
-
-  const isTutorial = room.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
-  const deck = isTutorial ? [] : createShuffledDeck();
-  if (!isTutorial) {
-    const choiceCards = deck.filter((card) => card.kind === "choice");
-    console.log(`Deck generated: ${deck.length} total cards, ${choiceCards.length} choice cards`);
-  }
-
-  await clearHands(ctx, game._id);
-  const roundDeal = isTutorial
-    ? createTutorialDeal(participantIds.length, config)
-    : createChoiceTileDeal(deck, participantIds.length, config);
-
-  const now = Date.now();
-
-  // Calculate blind positions
-  const dealerButtonIndex = 0; // Start with first player as dealer
-  const { smallBlindIndex, bigBlindIndex } = calculateBlindPositions(
-    dealerButtonIndex,
-    participantIds.length
-  );
-
-  const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
-  const openingCommunityTiles = hideCommunityTiles(roundDeal.communityTiles);
-  const totalBlinds = config.smallBlind + config.bigBlind;
-
-  await dealHands(
-    ctx,
-    game._id,
-    participantIds,
-    roundDeal.hands,
-    smallBlindIndex,
-    bigBlindIndex,
-    now,
-    config,
-  );
-  await ctx.db.patch(game._id, {
-    status: "active",
-    stage: "preflop",
-    communityTiles: openingCommunityTiles,
-    deck: roundDeal.deck,
-    pot: totalBlinds,
-    currentBet: config.bigBlind,
-    currentPlayerIndex: firstActionIndex,
-    dealerButtonIndex,
-    smallBlindIndex,
-    bigBlindIndex,
-    raisesThisRound: 0,
-    config,
-    ...getNewTurnStateFields(now),
-    updatedAt: now,
-  });
-  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
-    gameId: game._id,
-    roomId: room._id,
-    category: "game_start",
-    stage: "preflop",
-    tilesRevealed: openingCommunityTiles
-      .filter((tile) => tile.revealed)
-      .map((tile) => tile.kind === "single" ? tile.letter : `[${tile.options.join("/")}]`)
-      .join(" "),
-    potAfter: totalBlinds,
-    metadata: {
-      participantIds,
-      playersDealt: participantIds.length,
-      dealerButtonIndex,
-      smallBlindIndex,
-      bigBlindIndex,
-      communityChoiceTileCount: roundDeal.communityChoiceTileCount,
-      handChoiceTileCounts: roundDeal.handChoiceTileCounts,
-    },
-  });
-  await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
-  await scheduleBotTurnIfNeeded(ctx, game._id);
-  await recordGameStart(ctx, game._id);
-
-  return {
-    ok: true,
-    gameId: game._id,
-    status: "active" as const,
-    dealtHandSize: config.initialHandSize,
-    playersDealt: participantIds.length,
-    includesAiDealer: participantIds.includes(AI_DEALER_PLAYER_ID),
-  };
+  return await orchestrateGameStart(ctx, game, room, { source: "public" });
 }
 
 export async function internalStartGameHandler(
@@ -492,94 +697,23 @@ export async function internalStartGameHandler(
 ) {
   const game = await ctx.db.get(args.gameId);
   if (!game || game.status !== "waiting") {
-    return { ok: false, reason: "Game not in waiting state" };
+    return { ok: false as const, reason: "Game not in waiting state" };
   }
 
   const roomId = game.roomId as Id<"rooms">;
   const room = await ctx.db.get(roomId);
-  if (!room) return { ok: false, reason: "Room not found" };
+  if (!room) return { ok: false as const, reason: "Room not found" };
 
-  const config = resolveConfig(room.config);
-
-  const participantIds = await getParticipantIds(ctx, room._id);
-  if (!participantIds) return { ok: false, reason: "Not enough players" };
-  if (participantIds.length < 2) {
-    return { ok: false, reason: "At least 2 active players are required" };
+  try {
+    const result = await orchestrateGameStart(ctx, game, room, { source: "internal" });
+    return { ok: true as const, gameId: result.gameId, status: result.status };
+  } catch (error) {
+    // Preserve ConvexError throws (INSUFFICIENT_FUNDS, UNSETTLED_GAME, etc.)
+    // so the scheduler sees the same failure modes as the public path.
+    const code = (error as { data?: { code?: string } })?.data?.code;
+    if (code) throw error;
+    return { ok: false as const, reason: "Start failed" };
   }
-
-  const isTutorial = room.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
-  const deck = isTutorial ? [] : createShuffledDeck();
-
-  await clearHands(ctx, game._id);
-  const roundDeal = isTutorial
-    ? createTutorialDeal(participantIds.length, config)
-    : createChoiceTileDeal(deck, participantIds.length, config);
-
-  const now = Date.now();
-
-  // Calculate blind positions
-  const dealerButtonIndex = 0;
-  const { smallBlindIndex, bigBlindIndex } = calculateBlindPositions(
-    dealerButtonIndex,
-    participantIds.length
-  );
-
-  const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
-  const openingCommunityTiles = hideCommunityTiles(roundDeal.communityTiles);
-  const totalBlinds = config.smallBlind + config.bigBlind;
-
-  await dealHands(
-    ctx,
-    game._id,
-    participantIds,
-    roundDeal.hands,
-    smallBlindIndex,
-    bigBlindIndex,
-    now,
-    config,
-  );
-  await ctx.db.patch(game._id, {
-    status: "active",
-    stage: "preflop",
-    communityTiles: openingCommunityTiles,
-    deck: roundDeal.deck,
-    pot: totalBlinds,
-    currentBet: config.bigBlind,
-    currentPlayerIndex: firstActionIndex,
-    dealerButtonIndex,
-    smallBlindIndex,
-    bigBlindIndex,
-    raisesThisRound: 0,
-    config,
-    ...getNewTurnStateFields(now),
-    updatedAt: now,
-  });
-  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
-    gameId: game._id,
-    roomId: room._id,
-    category: "game_start",
-    stage: "preflop",
-    tilesRevealed: openingCommunityTiles
-      .filter((tile) => tile.revealed)
-      .map((tile) => tile.kind === "single" ? tile.letter : `[${tile.options.join("/")}]`)
-      .join(" "),
-    potAfter: totalBlinds,
-    metadata: {
-      participantIds,
-      playersDealt: participantIds.length,
-      dealerButtonIndex,
-      smallBlindIndex,
-      bigBlindIndex,
-      communityChoiceTileCount: roundDeal.communityChoiceTileCount,
-      handChoiceTileCounts: roundDeal.handChoiceTileCounts,
-      source: "internal_start",
-    },
-  });
-  await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
-  await scheduleBotTurnIfNeeded(ctx, game._id);
-  await recordGameStart(ctx, game._id);
-
-  return { ok: true };
 }
 
 export async function internalRedealGameForRoomHandler(
@@ -643,7 +777,6 @@ export async function internalRedealGameForRoomHandler(
   }
 
   await ctx.db.patch(room._id, { lastActiveAt: now });
-  await setRoomUsersActiveGameId(ctx, room._id, String(nextGameId));
 
   return {
     ok: true,
@@ -742,8 +875,6 @@ export async function resetTutorialGameForRoomHandler(
       readyStatus: player.authUserId?.startsWith("dev-bot:") ?? false,
     });
   }
-
-  await setRoomUsersActiveGameId(ctx, room._id, String(game._id));
 
   return {
     ok: true,

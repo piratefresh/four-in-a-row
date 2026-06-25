@@ -17,3 +17,8 @@ nul
 .auth/
 playwright-report/
 test-results/
+
+# Codex user configuration and credentials
+/.codex/config.toml
+/.codex/auth.json
+/config.toml

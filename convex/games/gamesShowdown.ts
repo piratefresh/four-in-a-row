@@ -9,7 +9,9 @@ import { getBotCharacterForAuthUserId, getBotCharacterForSeed, isBluffLikely, sh
 import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
 import { tutorialBotShowdownWord } from "../tutorialBots";
 import { calculateScore, getHighestScoringTileValue } from "./gamesScoring";
-import { recordGameCompletion, recordPlay } from "../activityFeed";
+import { recordPlay } from "../activityFeed";
+import { completeGame } from "./gamesSettlement";
+import { getTracePlayerInfo, insertGameCompleteTrace } from "./gamesTrace";
 
 export type SubmitWordArgs = {
   gameId: Doc<"games">["_id"];
@@ -35,49 +37,6 @@ function logBotShowdown(
   details: Record<string, unknown>,
 ) {
   console.log(`[bot-showdown] ${message}`, details);
-}
-
-async function getShowdownTracePlayer(
-  ctx: MutationCtx,
-  game: Doc<"games">,
-  playerId: string,
-) {
-  const normalizedPlayerId = ctx.db.normalizeId("players", playerId);
-  if (!normalizedPlayerId) {
-    return { playerName: playerId, isBot: playerId === "ai_dealer", characterId: undefined };
-  }
-
-  const player = await ctx.db.get(normalizedPlayerId);
-  const character = getBotCharacterForAuthUserId(player?.authUserId) ?? undefined;
-  return {
-    playerName: character?.name ?? player?.name ?? playerId,
-    isBot: !!character || playerId === "ai_dealer",
-    characterId: character?.id,
-    roomMatches: player?.roomId === game.roomId,
-  };
-}
-
-async function insertGameCompleteTrace(
-  ctx: MutationCtx,
-  game: Doc<"games">,
-  args: {
-    winnerId?: string;
-    winnerWord?: string;
-    winnerScore?: number;
-    reason: string;
-  },
-) {
-  await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
-    gameId: game._id,
-    roomId: game.roomId as Doc<"rooms">["_id"],
-    category: "game_complete",
-    stage: "showdown",
-    winnerId: args.winnerId,
-    winnerWord: args.winnerWord,
-    winnerScore: args.winnerScore,
-    metadata: { reason: args.reason },
-  });
-  await recordGameCompletion(ctx, game._id);
 }
 
 function getTileIdentityKey(
@@ -303,7 +262,7 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
     },
     createdAt: now,
   });
-  const tracePlayer = await getShowdownTracePlayer(ctx, game, normalizedPlayerId);
+  const tracePlayer = await getTracePlayerInfo(ctx, game, normalizedPlayerId);
   await ctx.runMutation((internal as typeof internal).aiTracing.insertGameTrace, {
     gameId,
     roomId: game.roomId as Doc<"rooms">["_id"],
@@ -340,9 +299,8 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
 
   const eligiblePlayerIds = hands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
   if (eligiblePlayerIds.length === 0) {
-    await ctx.db.patch(game._id, { status: "completed", updatedAt: now });
     await insertGameCompleteTrace(ctx, game, { reason: "no_eligible_players_after_submit" });
-    // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+    await completeGame(ctx, { gameId, reason: "no_eligible_players_after_submit" });
   } else {
     const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", gameId)).collect();
     const submissionsByPlayer = new Map<string, (typeof allSubmissions)[number]>();
@@ -353,14 +311,20 @@ export async function submitWordInternalHandler(ctx: MutationCtx, args: SubmitWo
     }
     if (eligiblePlayerIds.every((id) => submissionsByPlayer.has(id)) && !game.winnerId) {
       const winningSubmission = [...submissionsByPlayer.values()].sort(compareRankedSubmissions)[0];
-      await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
       await insertGameCompleteTrace(ctx, game, {
         winnerId: winningSubmission.playerId,
         winnerWord: winningSubmission.word,
         winnerScore: winningSubmission.score,
         reason: "all_showdown_submissions_received",
       });
-      // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+      await completeGame(ctx, {
+        gameId,
+        winnerId: winningSubmission.playerId,
+        winningWord: winningSubmission.word,
+        winningScore: winningSubmission.score,
+        winningScoreBreakdown: winningSubmission.scoreBreakdown,
+        reason: "all_showdown_submissions_received",
+      });
     }
   }
 
@@ -388,23 +352,28 @@ export async function forfeitShowdownHandler(ctx: MutationCtx, args: ShowdownArg
     if (!existing || submission.createdAt > existing.createdAt) submissionsByPlayer.set(submission.playerId, submission);
   }
   if (eligiblePlayerIds.length === 0) {
-    await ctx.db.patch(game._id, { status: "completed", updatedAt: now });
     await insertGameCompleteTrace(ctx, game, { reason: "all_players_forfeited" });
-    // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+    await completeGame(ctx, { gameId: args.gameId, reason: "all_players_forfeited" });
     return { ok: true, forfeited: true, resolved: true, hasWinner: false };
   }
   if (eligiblePlayerIds.length === 1) {
     const winnerId = eligiblePlayerIds[0];
     const winnerSubmission = submissionsByPlayer.get(winnerId);
     if (winnerSubmission) {
-      await ctx.db.patch(game._id, { winnerId, winningWord: winnerSubmission.word, winningScore: winnerSubmission.score, winningScoreBreakdown: winnerSubmission.scoreBreakdown, status: "completed", updatedAt: now });
       await insertGameCompleteTrace(ctx, game, {
         winnerId,
         winnerWord: winnerSubmission.word,
         winnerScore: winnerSubmission.score,
         reason: "one_player_left_after_forfeit",
       });
-      // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+      await completeGame(ctx, {
+        gameId: args.gameId,
+        winnerId,
+        winningWord: winnerSubmission.word,
+        winningScore: winnerSubmission.score,
+        winningScoreBreakdown: winnerSubmission.scoreBreakdown,
+        reason: "one_player_left_after_forfeit",
+      });
       return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId };
     }
     return { ok: true, forfeited: true, resolved: false, hasWinner: false };
@@ -413,14 +382,20 @@ export async function forfeitShowdownHandler(ctx: MutationCtx, args: ShowdownArg
     return { ok: true, forfeited: true, resolved: false, hasWinner: false };
   }
   const winningSubmission = [...submissionsByPlayer.values()].sort(compareRankedSubmissions)[0];
-  await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
   await insertGameCompleteTrace(ctx, game, {
     winnerId: winningSubmission.playerId,
     winnerWord: winningSubmission.word,
     winnerScore: winningSubmission.score,
     reason: "forfeit_completed_remaining_showdown",
   });
-  // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+  await completeGame(ctx, {
+    gameId: args.gameId,
+    winnerId: winningSubmission.playerId,
+    winningWord: winningSubmission.word,
+    winningScore: winningSubmission.score,
+    winningScoreBreakdown: winningSubmission.scoreBreakdown,
+    reason: "forfeit_completed_remaining_showdown",
+  });
   return { ok: true, forfeited: true, resolved: true, hasWinner: true, winnerId: winningSubmission.playerId };
 }
 
@@ -444,9 +419,8 @@ export async function resolveShowdownHandler(ctx: MutationCtx, args: { gameId: D
   const hands = await ctx.db.query("playerHands").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
   const eligiblePlayerIds = hands.filter((hand) => !hand.hasFolded).map((hand) => hand.playerId);
   if (eligiblePlayerIds.length === 0) {
-    await ctx.db.patch(game._id, { status: "completed", updatedAt: Date.now() });
     await insertGameCompleteTrace(ctx, game, { reason: "resolve_no_eligible_players" });
-    // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+    await completeGame(ctx, { gameId: args.gameId, reason: "resolve_no_eligible_players" });
     return { ok: true, hasWinner: false, message: "No eligible players for showdown." };
   }
   const allSubmissions = await ctx.db.query("wordSubmissions").withIndex("by_game", (q) => q.eq("gameId", args.gameId)).collect();
@@ -458,22 +432,26 @@ export async function resolveShowdownHandler(ctx: MutationCtx, args: { gameId: D
   }
   const eligibleSubmissions = Array.from(submissionsByPlayer.values());
   if (eligibleSubmissions.length === 0) {
-    await ctx.db.patch(game._id, { status: "completed", updatedAt: Date.now() });
     await insertGameCompleteTrace(ctx, game, { reason: "resolve_no_valid_submissions" });
-    // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+    await completeGame(ctx, { gameId: args.gameId, reason: "resolve_no_valid_submissions" });
     return { ok: true, hasWinner: false, message: "No valid submissions for showdown." };
   }
   const sortedSubmissions = [...eligibleSubmissions].sort(compareRankedSubmissions);
   const winningSubmission = sortedSubmissions[0];
-  const now = Date.now();
-  await ctx.db.patch(game._id, { winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, status: "completed", updatedAt: now });
   await insertGameCompleteTrace(ctx, game, {
     winnerId: winningSubmission.playerId,
     winnerWord: winningSubmission.word,
     winnerScore: winningSubmission.score,
     reason: "manual_or_timer_resolution",
   });
-  // DEPRECATED: playerStats are now computed on-the-fly (see STO-185)
+  await completeGame(ctx, {
+    gameId: args.gameId,
+    winnerId: winningSubmission.playerId,
+    winningWord: winningSubmission.word,
+    winningScore: winningSubmission.score,
+    winningScoreBreakdown: winningSubmission.scoreBreakdown,
+    reason: "manual_or_timer_resolution",
+  });
   return { ok: true, hasWinner: true, winnerId: winningSubmission.playerId, winningWord: winningSubmission.word, winningScore: winningSubmission.score, winningScoreBreakdown: winningSubmission.scoreBreakdown, allSubmissions: sortedSubmissions.map((submission) => ({ playerId: submission.playerId, word: submission.word, score: submission.score, scoreBreakdown: submission.scoreBreakdown })) };
 }
 

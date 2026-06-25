@@ -26,7 +26,7 @@ export function TutorialSignupWall({
         </h1>
 
         <div className="mt-3 inline-flex items-center rounded-full bg-[#0d3b2e] px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#f5c76a]">
-          Keep 50 tutorial coins
+          Keep 100 tutorial coins
         </div>
 
         <p className="mx-auto mt-4 max-w-[310px] text-sm leading-6 text-[#4f4a3f]">

@@ -1,6 +1,8 @@
 import { Brain, Globe2, Trophy, WifiOff } from "lucide-react";
 import { Tips } from "./Tips";
 import { ModeCard } from "./components/ModeCard";
+import { startTransition } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 type HomeModeMenuProps = {
   activeRoomCode?: string | null;
@@ -28,6 +30,7 @@ export function HomeModeMenu({
   onResumeRoom,
   onSelectLeaderboard,
 }: HomeModeMenuProps) {
+  const navigate = useNavigate();
   const canResumeActiveRoom = Boolean(activeRoomCode && !activeRoomTutorialId);
 
   return (
@@ -58,7 +61,7 @@ export function HomeModeMenu({
           <ModeCard
             icon={<Brain className="size-5" strokeWidth={2.25} />}
             label="Tutorial"
-            description="Learn in 2 minutes + 50 coins"
+            description="Learn in 2 minutes + 100 coins"
             badge="Recommended"
             tone="recommended"
             disabled={isStartingOffline || isStartingTutorial}
@@ -80,6 +83,21 @@ export function HomeModeMenu({
             tone="warm"
             disabled={isStartingOffline || isStartingTutorial}
             onSelect={onStartOffline}
+          />
+
+          <ModeCard
+            icon={<Trophy className="size-5" strokeWidth={2.25} />}
+            label="Achievements"
+            description="Track your progress and milestones"
+            tone="warm"
+            disabled={isStartingOffline || isStartingTutorial}
+            onSelect={() =>
+              startTransition(() => {
+                void navigate({
+                  to: "/achievements",
+                });
+              })
+            }
           />
 
           {/* <ModeCard

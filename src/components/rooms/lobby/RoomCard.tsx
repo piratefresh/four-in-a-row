@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
+import { formatRoomEconomyLabel, getRoomEconomyMode, type EconomyMode } from "../../../../convex/gameConfig";
 
 interface RoomCardProps {
   roomCode: string;
@@ -9,6 +10,8 @@ interface RoomCardProps {
     choiceTileFrequency?: string;
     bonusStructure?: string;
   };
+  economyMode?: string | null;
+  buyIn?: number | null;
   activePlayers: number;
   maxPlayers: number;
   lastActiveAt: number;
@@ -32,6 +35,8 @@ export function RoomCard({
   roomCode,
   roomTitle,
   config,
+  economyMode,
+  buyIn,
   activePlayers,
   maxPlayers,
   lastActiveAt,
@@ -41,7 +46,7 @@ export function RoomCard({
   onClick,
 }: RoomCardProps) {
   const state = getRoomState({ activePlayers, maxPlayers, isJoining });
-  const configLabel = formatRoomConfig(config);
+  const configLabel = formatRoomConfig(config, economyMode, buyIn);
 
   return (
     <button
@@ -94,7 +99,16 @@ export function RoomCard({
   );
 }
 
-function formatRoomConfig(config: RoomCardProps["config"]) {
+function formatRoomConfig(
+  config: RoomCardProps["config"],
+  economyMode?: string | null,
+  buyIn?: number | null,
+) {
+  const mode = getRoomEconomyMode({ economyMode: economyMode as EconomyMode | undefined });
+  if (mode === "balance" || economyMode === "nonBalance") {
+    return formatRoomEconomyLabel(mode, buyIn);
+  }
+  // Legacy rooms with undefined economyMode show the config details.
   const seconds = Math.round((config?.showdownTimer ?? 60_000) / 1000);
   const betting =
     config?.bettingStructure === "potLimit"

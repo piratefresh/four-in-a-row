@@ -19,6 +19,29 @@ export const EMBEDDING_DIMENSIONS = 1024;
 export const RAG_SIMILARITY_THRESHOLD = 0.9;
 export const RAG_TOP_K = 5;
 
+export const STARTER_GRANT_AMOUNT = 1000;
+
+export const transactionSourceValidator = v.union(
+  v.literal("starter_grant"),
+  v.literal("playtest_deposit"),
+  v.literal("buy_in"),
+  v.literal("payout"),
+  v.literal("reward"),
+  v.literal("achievement"),
+  v.literal("login_streak"),
+  v.literal("tutorial"),
+);
+
+export type TransactionSource =
+  | "starter_grant"
+  | "playtest_deposit"
+  | "buy_in"
+  | "payout"
+  | "reward"
+  | "achievement"
+  | "login_streak"
+  | "tutorial";
+
 export const appTables = {
   rooms: defineTable({
     code: v.string(),
@@ -35,6 +58,8 @@ export const appTables = {
       v.literal("hard"),
     )),
     config: v.optional(roomConfigValidator),
+    economyMode: v.optional(v.union(v.literal("balance"), v.literal("nonBalance"))),
+    buyIn: v.optional(v.number()),
     hostPlayerId: v.optional(v.id("players")),
     nextRoomId: v.optional(v.id("rooms")),
     sourceRoomId: v.optional(v.id("rooms")),
@@ -107,6 +132,10 @@ export const appTables = {
     turnClockTargetPlayerId: v.optional(v.string()),
     lastBotTurnScheduledAt: v.optional(v.number()),
     lastAudienceIsMobile: v.optional(v.boolean()),
+    settlementState: v.optional(
+      v.union(v.literal("settling"), v.literal("settled")),
+    ),
+    settledAt: v.optional(v.number()),
     config: v.optional(resolvedGameConfigValidator),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -260,13 +289,9 @@ export const appTables = {
     roomId: v.optional(v.id("rooms")),
     gameId: v.optional(v.id("games")),
     userAgent: v.optional(v.string()),
-    emailStatus: v.union(
-      v.literal("pending"),
-      v.literal("sent"),
-      v.literal("skipped"),
-      v.literal("failed"),
-    ),
+    emailStatus: v.string(),
     emailError: v.optional(v.string()),
+    resendEmailId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -450,6 +475,44 @@ export const appTables = {
   })
     .index("by_createdAt", ["createdAt"])
     .index("by_roomId_createdAt", ["roomId", "createdAt"]),
+  wallets: defineTable({
+    authUserId: v.string(),
+    balance: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_authUserId", ["authUserId"]),
+  transactions: defineTable({
+    authUserId: v.string(),
+    amount: v.number(),
+    source: transactionSourceValidator,
+    balanceBefore: v.number(),
+    balanceAfter: v.number(),
+    gameId: v.optional(v.id("games")),
+    operationKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_authUserId_createdAt", ["authUserId", "createdAt"])
+    .index("by_operationKey", ["operationKey"])
+    .index("by_authUserId_operationKey", ["authUserId", "operationKey"]),
+  achievementProgress: defineTable({
+    authUserId: v.string(),
+    achievementId: v.string(),
+    progress: v.number(),
+    completedTiers: v.array(v.number()),
+    seenWords: v.optional(v.array(v.string())),
+    targetWordsSeen: v.optional(v.array(v.string())),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_authUserId", ["authUserId"])
+    .index("by_authUserId_achievement", ["authUserId", "achievementId"]),
+  loginStreaks: defineTable({
+    authUserId: v.string(),
+    currentStreak: v.number(),
+    lastLoginDate: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_authUserId", ["authUserId"]),
 };
 
 export const tables = {
