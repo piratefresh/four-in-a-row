@@ -6,7 +6,10 @@ import { getLetterValue } from "@/lib/letterValues";
 import { cn } from "@/lib/utils";
 import { WinSplashOverlay } from "./WinSplashOverlay";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { useCoinFlyPillRef, useTriggerCoinFly } from "@/components/wallet/CoinFly";
+import {
+  useCoinFlyPillRef,
+  useTriggerCoinFly,
+} from "@/components/wallet/CoinFly";
 import { WalletPill } from "@/components/wallet/WalletPill";
 import { ArrowLeft } from "lucide-react";
 
@@ -148,7 +151,12 @@ export function ShowdownResultsScreen({
   const hasFiredCoinFly = useRef(false);
 
   useEffect(() => {
-    if (resultsStep !== "results" || !currentPlayerWon || hasFiredCoinFly.current) return;
+    if (
+      resultsStep !== "results" ||
+      !currentPlayerWon ||
+      hasFiredCoinFly.current
+    )
+      return;
     hasFiredCoinFly.current = true;
     const timer = window.setTimeout(() => {
       if (potRef.current) {
@@ -193,36 +201,8 @@ export function ShowdownResultsScreen({
     >
       {/* Header bar — matches RoomHeader style */}
       <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center justify-between border-b border-white/5 bg-felt-deep px-3 text-white backdrop-blur-sm sm:px-4">
-        {/* Left: back button */}
-        <button
-          type="button"
-          onClick={onReturnToMainMenu}
-          aria-label="Return to main menu"
-          className="grid h-8 w-8 flex-none place-items-center rounded-full bg-white/6 text-white transition-colors hover:bg-white/12"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-
-        {/* Center: room code or empty */}
-        <div className="min-w-0 text-center">
-          {roomCode ? (
-            <>
-              <h1 className="truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]">
-                RESULTS
-              </h1>
-              <p className="truncate text-[8px] font-medium leading-tight text-white/60">
-                Room {roomCode}
-              </p>
-            </>
-          ) : (
-            <h1 className="truncate text-[10px] font-medium uppercase tracking-[0.22em] text-[#d4aa32]">
-              RESULTS
-            </h1>
-          )}
-        </div>
-
         {/* Right: wallet pill */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center ml-auto gap-3">
           {coinBalance != null && (
             <WalletPill
               balance={coinBalance}
@@ -677,7 +657,13 @@ function Sparks() {
             times: [0, 0.35, 1],
           }}
           className="absolute rounded-full"
-          style={{ left: "50%", top: "50%", width: 6, height: 6, background: "#f5c76a" }}
+          style={{
+            left: "50%",
+            top: "50%",
+            width: 6,
+            height: 6,
+            background: "#f5c76a",
+          }}
         />
       ))}
     </span>

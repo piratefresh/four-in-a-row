@@ -11,8 +11,9 @@
     "dev:cloud": "vite dev --port 3000 --mode cloud",
     "dev:local": "cross-env E2E_TESTING=true bun dev",
     "build": "vite build",
-    "start": "bunx srvx --prod --static ../client dist/server/server.js",
     "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-typegen": "wrangler types",
     "convex:dev:e2e": "bunx kill-port 3210 && cross-env E2E_TESTING=true bunx convex dev",
     "test": "vitest run --config vitest.convex.config.ts",
     "test:e2e": "playwright test",
@@ -23,13 +24,11 @@
     "test:e2e:report": "playwright show-report",
     "test:e2e:trace": "playwright show-trace",
     "test:e2e:ui": "playwright test --ui",
-    "generate:csw24-index": "node scripts/generate-csw24-index.mjs",
-    "deploy": "bun run build && wrangler deploy",
-    "cf-typegen": "wrangler types"
+    "generate:csw24-index": "node scripts/generate-csw24-index.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
-    "@cloudflare/vite-plugin": "^1.13.8",
+    "@cloudflare/vite-plugin": "^1.42.2",
     "@convex-dev/better-auth": "^0.10.10",
     "@convex-dev/react-query": "0.1.0",
     "@convex-dev/resend": "^0.2.3",
@@ -99,6 +98,6 @@
     "vite": "^7.1.7",
     "vitest": "^3.0.5",
     "web-vitals": "^5.1.0",
-    "wrangler": "^4.40.3"
+    "wrangler": "^4.104.0"
   }
 }
