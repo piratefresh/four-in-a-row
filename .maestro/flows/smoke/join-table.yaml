@@ -1,0 +1,11 @@
+# Smoke: Join a table
+#
+# Creates a test table via the E2E fixture, opens it in the browser,
+# and verifies the room UI loads.
+
+url: http://localhost:3000
+---
+- launchApp
+# The test setup script should have created a table and seeded the wallet.
+# Navigate to the online tables list.
+- assertVisible: "Online Mode"

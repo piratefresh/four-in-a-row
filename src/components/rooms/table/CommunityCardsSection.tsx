@@ -62,10 +62,12 @@ export function CommunityCardsSection({ tiles, currentBet, betLabel }: Community
           )
         })}
       </div>
-
       {/* Current bet indicator */}
       {currentBet !== undefined && currentBet > 0 && (
-        <div className="mt-2 rounded-lg bg-[#0a0a0a]/80 px-4 py-2 shadow-lg backdrop-blur-sm">
+        <div
+          className="mt-2 rounded-lg bg-[#0a0a0a]/80 px-4 py-2 shadow-lg backdrop-blur-sm"
+          aria-label={`Current bet: ${currentBet.toLocaleString()} coins`}
+        >
           <div className="text-xs font-bold uppercase tracking-wide text-[#9ca3af]">
             {betLabel || 'Current Bet'}
           </div>

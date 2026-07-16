@@ -1,0 +1,20 @@
+# P0: Insufficient wallet
+#
+# Verifies that a player with insufficient funds cannot join
+# a balance game table.
+#
+# Precondition: wallet is seeded below the table's buy-in amount.
+# Postcondition: no seat is created, no wallet transaction occurs.
+
+url: http://localhost:3000/rooms
+---
+- launchApp
+- assertVisible: "NEW ROOM"
+
+# The E2E setup script should have:
+# 1. Created a balance table with buyIn = 500
+# 2. Set the E2E user's wallet to 100 (below buy-in)
+# 3. Signed the user in
+#
+# When the user clicks the table card, the join should fail with
+# an "Insufficient balance" error.

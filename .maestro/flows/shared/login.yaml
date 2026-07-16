@@ -1,0 +1,21 @@
+# Shared: Login as E2E test user
+#
+# Prerequisite: Convex is running with E2E_TESTING=true and the
+# E2E account has been provisioned via `bun run test:maestro:setup`.
+#
+# This subflow navigates to /login, fills credentials, and verifies
+# the user lands on the home page.
+
+url: http://localhost:3000/login
+---
+- launchApp
+- assertVisible: "Email"
+- tapOn:
+    id: "email"
+- inputText: "e2e-test@wordpoker.app"
+- tapOn:
+    id: "password"
+- inputText: "E2eTest1234!"
+- tapOn:
+    text: "Sign in with Email"
+- assertVisible: "Online Mode"

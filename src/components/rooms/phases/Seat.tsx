@@ -334,6 +334,7 @@ export function Seat({
           "mt-[5px] font-serif font-semibold leading-none text-[#d4af37]",
           variant === "mobile" ? "mt-1 text-[12px]" : "text-[13px]",
         )}
+        aria-label={`Player stack: ${chips.toLocaleString()} coins`}
       >
         ${chips.toLocaleString()}
       </div>

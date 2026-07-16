@@ -53,6 +53,7 @@ export function RoomCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-label={`Join table ${roomTitle || `Room ${roomCode}`}, ${activePlayers}/${maxPlayers} players, ${formatRoomEconomyLabel(economyMode as EconomyMode ?? "nonBalance", buyIn)}`}
       className={`group relative grid w-full ${roomCardGridColumnsClassName} items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all duration-200 ${state.cardClassName} ${
         disabled
           ? "cursor-not-allowed opacity-60"

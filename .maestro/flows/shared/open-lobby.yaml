@@ -1,0 +1,9 @@
+# Shared: Open the lobby (Online Rooms page)
+#
+# Assumes the user is signed in and on any page.
+# Navigates to /rooms and verifies the tables list is visible.
+
+url: http://localhost:3000/rooms
+---
+- launchApp
+- assertVisible: "NEW ROOM"

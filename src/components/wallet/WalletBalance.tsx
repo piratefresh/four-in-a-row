@@ -20,8 +20,10 @@ export function WalletBalance({
         <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-game-muted">
           Coin Balance
         </p>
-
-        <p className="font-display text-5xl font-extrabold leading-none text-cream tabular-nums">
+        <p
+          className="font-display text-5xl font-extrabold leading-none text-cream tabular-nums"
+          aria-label={`Wallet balance: ${hasWallet ? (balance ?? 0).toLocaleString() : "unknown"} coins`}
+        >
           {hasWallet ? (balance ?? 0).toLocaleString() : "\u2026"}
         </p>
 
@@ -30,7 +32,6 @@ export function WalletBalance({
             {balance.toLocaleString()} coins
           </p>
         )}
-      </div>
     </div>
   );
 }

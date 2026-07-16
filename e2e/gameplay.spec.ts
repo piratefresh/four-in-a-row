@@ -91,10 +91,12 @@ test.describe("gameplay via browser UI", () => {
     await expect(page).toHaveURL(/\/results\//, { timeout: 30_000 });
   });
 
-  test("fold during balance game deducts buy-in from wallet", async ({
+  test("wallet is unchanged after fold in balance game", async ({
     page,
     request,
   }) => {
+    // In the new economy, buy-in is deducted on join, not at game start.
+    // Wallet stays unchanged through game completion — chips stay on the table.
     await ensureMinBalance(request, 500);
     const balBefore = (
       await convexQuery(request, "wallet:getMyBalance", {})
@@ -106,6 +108,12 @@ test.describe("gameplay via browser UI", () => {
       economyMode: "balance",
       buyIn: 500,
     });
+
+    // Buy-in was deducted on join
+    const balAfterJoin = (
+      await convexQuery(request, "wallet:getMyBalance", {})
+    ).balance as number;
+    expect(balAfterJoin).toBeLessThan(balBefore);
 
     await page.goto(`/rooms/${roomRes.code}`, {
       waitUntil: "domcontentloaded",
@@ -125,22 +133,12 @@ test.describe("gameplay via browser UI", () => {
 
     await expect(page).toHaveURL(/\/results\//, { timeout: 30_000 });
 
-    // Balance should be lower (buy-in deducted)
+    // Wallet should be UNCHANGED after fold — no payout, chips stay on table
     await page.waitForTimeout(3000);
     const balAfter = (
       await convexQuery(request, "wallet:getMyBalance", {})
     ).balance as number;
-    expect(balAfter).toBeLessThan(balBefore);
-
-    // buy_in transaction exists
-    const txnRes = await convexQuery(request, "wallet:getMyTransactions", {
-      paginationOpts: { numItems: 50, cursor: null },
-    });
-    const buyInTxns = (txnRes.page ?? []).filter(
-      (t: { source: string }) => t.source === "buy_in",
-    );
-    expect(buyInTxns.length).toBeGreaterThanOrEqual(1);
-    expect(buyInTxns[buyInTxns.length - 1].amount).toBe(-500);
+    expect(balAfter).toBe(balAfterJoin);
   });
 
   test("check through preflop then fold on flop — multi-round", async ({
@@ -308,7 +306,7 @@ test.describe("gameplay via browser UI", () => {
     }
   });
 
-  test("wallet page shows correct balance before and after balance game", async ({
+  test("wallet stays unchanged through a balance game", async ({
     page,
     request,
   }) => {
@@ -328,13 +326,19 @@ test.describe("gameplay via browser UI", () => {
     await expect(balanceEl).toBeVisible({ timeout: 10_000 });
     expect(parseBalanceText(await balanceEl.textContent())).toBe(balBefore);
 
-    // Play a balance game
+    // Play a balance game — join debits the buy-in
     const roomRes = await convexMutation(request, "rooms:e2eCreateTestRoom", {
       playerName: "WalletGame",
       botCount: 1,
       economyMode: "balance",
       buyIn: 500,
     });
+
+    const balAfterJoin = (
+      await convexQuery(request, "wallet:getMyBalance", {})
+    ).balance as number;
+    // Buy-in deducted on join
+    expect(balAfterJoin).toBe(balBefore - 500);
 
     await page.goto(`/rooms/${roomRes.code}`, {
       waitUntil: "domcontentloaded",
@@ -355,7 +359,8 @@ test.describe("gameplay via browser UI", () => {
     await expect(page).toHaveURL(/\/results\//, { timeout: 30_000 });
     await page.waitForTimeout(3000);
 
-    // Navigate to wallet to verify balance changed
+    // Navigate to wallet — balance should be unchanged from post-join
+    // (no payout at game end — chips stay on the table)
     await page.goto("/wallet", { waitUntil: "networkidle" });
     await expect(
       page.locator("p").filter({ hasText: "Balance" }),
@@ -363,7 +368,7 @@ test.describe("gameplay via browser UI", () => {
     const balAfter = parseBalanceText(
       await page.locator("p.font-serif.text-4xl").textContent(),
     );
-    expect(balAfter).not.toBe(balBefore);
+    expect(balAfter).toBe(balAfterJoin);
   });
 
   test("non-balance game does not change wallet balance", async ({

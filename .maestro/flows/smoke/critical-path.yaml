@@ -1,0 +1,26 @@
+# Smoke: Critical path
+#
+# Verifies the minimal critical path: login → home → lobby.
+# Proves the full stack (auth, Convex, rendering) is alive.
+#
+# Prerequisites:
+#   - Convex dev server running with E2E_TESTING=true (bun run convex:dev:e2e)
+#   - Frontend dev server running on port 3000 (bun run dev:maestro)
+#   - E2E account provisioned (bun run scripts/maestro-setup.ts)
+
+url: http://localhost:3000
+---
+- launchApp
+
+# Step 1: Authenticate as the E2E test user
+- runFlow: ../shared/login.yaml
+
+# Step 2: Verify home page after login
+- assertVisible: "Online Mode"
+
+# Step 3: Navigate to the lobby
+- runFlow: ../shared/open-lobby.yaml
+
+# Step 4: Verify lobby content
+- assertVisible: "ROOM"
+- assertVisible: "NEW ROOM"

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ------------------------------------------------------------------
+  # Unit tests (Convex + Vitest)
+  # ------------------------------------------------------------------
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.8"
+      - run: bun install
+      - run: bun run test
+
+  # ------------------------------------------------------------------
+  # Playwright E2E (multi-browser, required)
+  # ------------------------------------------------------------------
+  playwright:
+    runs-on: ubuntu-latest
+    needs: [unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.8"
+      - run: bun install
+      - name: Start Convex
+        run: bun run convex:dev:e2e &
+      - name: Start dev server
+        run: bun run dev:maestro &
+      - name: Wait for servers
+        run: |
+          bunx wait-on http://127.0.0.1:3210 http://localhost:3000 --timeout 60000
+      - name: Run Playwright tests
+        run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+  # ------------------------------------------------------------------
+  # Maestro smoke (Chromium-only, non-blocking — web support is beta)
+  # ------------------------------------------------------------------
+  maestro-smoke:
+    runs-on: ubuntu-latest
+    needs: [unit]
+    continue-on-error: true  # Non-blocking: Maestro web support is beta
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.8"
+      - run: bun install
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Start Convex
+        run: bun run convex:dev:e2e &
+
+      - name: Start dev server
+        run: bun run dev:maestro &
+
+      - name: Wait for servers
+        run: |
+          bunx wait-on http://127.0.0.1:3210 http://localhost:3000 --timeout 60000
+
+      - name: Provision E2E account
+        run: bun run scripts/maestro-setup.ts
+
+      - name: Run Maestro smoke
+        run: bun run test:maestro:smoke
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: maestro-smoke-report
+          path: |
+            .maestro/screenshots/
+            .maestro/reports/

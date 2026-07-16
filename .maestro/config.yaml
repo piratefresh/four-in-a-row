@@ -1,0 +1,10 @@
+# Maestro configuration for Word Poker e2e flows
+# Web support is Chromium-only and beta; Playwright remains primary for multi-browser.
+
+web:
+  baseUrl: http://localhost:3000
+
+# Flow timeouts (milliseconds)
+timeout:
+  flow: 60000
+  action: 15000

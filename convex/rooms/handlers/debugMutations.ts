@@ -174,3 +174,203 @@ export const e2eCreateTestRoom = mutation({
     };
   },
 });
+
+
+/**
+ * Reset all test state for the E2E user: leave any active room, clear
+ * activeGameId, remove test rooms created by the E2E user, and resolve
+ * any orphaned state. Used at the start of each test run.
+ */
+export const e2eResetTestState = mutation({
+  args: {},
+  handler: async (ctx) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eResetTestState is only available in E2E testing mode.",
+      });
+    }
+
+    // Leave any active room the E2E user is in
+    const activePlayer = await ctx.db
+      .query("players")
+      .withIndex("authUserId_status", (q) =>
+        q.eq("authUserId", E2E_USER_ID).eq("status", "active"),
+      )
+      .first();
+
+    if (activePlayer) {
+      await ctx.db.patch(activePlayer._id, { status: "left", lastSeenAt: Date.now() });
+
+      // If this was the last active player, close the room
+      const remaining = await ctx.db
+        .query("players")
+        .withIndex("roomId_status", (q) =>
+          q.eq("roomId", activePlayer.roomId).eq("status", "active"),
+        )
+        .collect();
+
+      if (remaining.length === 0) {
+        const room = await ctx.db.get(activePlayer.roomId);
+        if (room && room.status === "open") {
+          await ctx.db.patch(room._id, { status: "closed", lastActiveAt: Date.now() });
+        }
+      }
+    }
+
+    return { ok: true };
+  },
+});
+
+/**
+ * Force-complete the current active hand for the E2E user. Used when
+ * a test needs to advance past a hand without playing through it.
+ */
+export const e2eCompleteCurrentHand = mutation({
+  args: { gameId: v.string() },
+  handler: async (ctx, args) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eCompleteCurrentHand is only available in E2E testing mode.",
+      });
+    }
+
+    const gameId = ctx.db.normalizeId("games", args.gameId);
+    if (!gameId) {
+      throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Invalid game ID." });
+    }
+
+    const game = await ctx.db.get(gameId);
+    if (!game) {
+      throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Game does not exist." });
+    }
+
+    // Fold all non-folded players to end the hand
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", gameId))
+      .collect();
+
+    const activeHands = hands.filter((h) => !h.hasFolded);
+    // Keep one player, fold the rest - this ends the hand with a fold-win
+    const [winner, ...folders] = activeHands;
+    if (!winner) {
+      return { ok: true, reason: "no_active_hands" };
+    }
+
+    const now = Date.now();
+    for (const hand of folders) {
+      await ctx.db.patch(hand._id, {
+        hasFolded: true,
+        lastAction: "fold",
+        updatedAt: now,
+      });
+    }
+
+    // Mark game as completed
+    await ctx.db.patch(game._id, {
+      status: "completed",
+      winnerId: winner.playerId,
+      updatedAt: now,
+    });
+
+    return { ok: true, winnerId: winner.playerId, foldedCount: folders.length };
+  },
+});
+
+/**
+ * Set a player's table stack (chips) for testing purposes.
+ */
+export const e2eSetTableStack = mutation({
+  args: {
+    gameId: v.string(),
+    playerId: v.string(),
+    chips: v.number(),
+  },
+  handler: async (ctx, args) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eSetTableStack is only available in E2E testing mode.",
+      });
+    }
+
+    const gameId = ctx.db.normalizeId("games", args.gameId);
+    if (!gameId) {
+      throw new ConvexError({ code: "INVALID_ID", message: "Invalid game ID." });
+    }
+
+    const hand = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", gameId))
+      .filter((q) => q.eq(q.field("playerId"), args.playerId))
+      .first();
+
+    if (!hand) {
+      throw new ConvexError({ code: "HAND_NOT_FOUND", message: "Player hand not found." });
+    }
+
+    await ctx.db.patch(hand._id, { chips: args.chips, updatedAt: Date.now() });
+    return { ok: true, chips: args.chips };
+  },
+});
+
+/**
+ * Mark a player as disconnected by setting lastSeenAt far in the past.
+ */
+export const e2eSetPlayerDisconnected = mutation({
+  args: { playerId: v.string() },
+  handler: async (ctx, args) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eSetPlayerDisconnected is only available in E2E testing mode.",
+      });
+    }
+
+    const playerId = ctx.db.normalizeId("players", args.playerId);
+    if (!playerId) {
+      throw new ConvexError({ code: "PLAYER_NOT_FOUND", message: "Invalid player ID." });
+    }
+
+    const player = await ctx.db.get(playerId);
+    if (!player) {
+      throw new ConvexError({ code: "PLAYER_NOT_FOUND", message: "Player not found." });
+    }
+
+    // Set lastSeenAt to 30 minutes ago (well past the 2-minute timeout)
+    await ctx.db.patch(player._id, { lastSeenAt: Date.now() - 30 * 60 * 1000 });
+    return { ok: true };
+  },
+});
+
+/**
+ * Force-expire a player's presence so the disconnect timeout fires.
+ */
+export const e2eExpirePlayerPresence = mutation({
+  args: { playerId: v.string() },
+  handler: async (ctx, args) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eExpirePlayerPresence is only available in E2E testing mode.",
+      });
+    }
+
+    const playerId = ctx.db.normalizeId("players", args.playerId);
+    if (!playerId) {
+      throw new ConvexError({ code: "PLAYER_NOT_FOUND", message: "Invalid player ID." });
+    }
+
+    const player = await ctx.db.get(playerId);
+    if (!player) {
+      throw new ConvexError({ code: "PLAYER_NOT_FOUND", message: "Player not found." });
+    }
+
+    // Set lastSeenAt far enough in the past that the reaping logic treats them as expired
+    // (reapInactivePlayersForRoom uses a 2-minute threshold)
+    await ctx.db.patch(player._id, { lastSeenAt: 0 });
+    return { ok: true };
+  },
+});

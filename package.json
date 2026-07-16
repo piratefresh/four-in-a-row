@@ -24,7 +24,14 @@
     "test:e2e:report": "playwright show-report",
     "test:e2e:trace": "playwright show-trace",
     "test:e2e:ui": "playwright test --ui",
-    "generate:csw24-index": "node scripts/generate-csw24-index.mjs"
+    "generate:csw24-index": "node scripts/generate-csw24-index.mjs",
+    "dev:maestro": "cross-env E2E_TESTING=true VITE_CONVEX_URL=http://127.0.0.1:3210 VITE_CONVEX_SITE_URL=http://127.0.0.1:3211 vite dev --port 3000",
+    "test:maestro": "maestro test .maestro/flows/shared .maestro/flows/smoke .maestro/flows/economy .maestro/flows/gameplay .maestro/flows/lifecycle",
+    "test:maestro:basic": "maestro test .maestro/flows/gameplay/basic-game-flow.yaml",
+    "test:maestro:smoke": "maestro test .maestro/flows/smoke",
+    "test:maestro:economy": "maestro test .maestro/flows/economy",
+    "test:maestro:gameplay": "maestro test .maestro/flows/gameplay",
+    "test:maestro:lifecycle": "maestro test .maestro/flows/lifecycle"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

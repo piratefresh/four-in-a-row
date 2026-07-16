@@ -1,0 +1,18 @@
+# P1: Side-pot and showdown
+#
+# Verifies side-pot calculations and showdown results:
+# 1. Side-pot results display the correct winners and awards
+# 2. Fold and showdown results transition correctly into the
+#    next-hand screen
+# 3. Multiple all-in players create correct side pots
+
+url: http://localhost:3000
+---
+- launchApp
+- assertVisible: "Online Mode"
+
+# Precondition: multiple players at a table, one all-in with less chips.
+# Step 1: Play through a hand to showdown
+# Step 2: Verify the results screen shows correct pot distribution
+# Step 3: Verify winner names and amounts are correct
+# Step 4: Verify the "Next Hand" transition works

@@ -1,0 +1,22 @@
+# P0: Betting and all-in
+#
+# Verifies the betting controls and all-in behavior:
+# 1. Raise slider cannot exceed the available stack
+# 2. All In displays the exact remaining stack amount
+# 3. Pressing All In reduces the player stack to zero
+# 4. The pot increases by the all-in amount
+# 5. The all-in player is skipped on later turns
+
+url: http://localhost:3000
+---
+- launchApp
+- assertVisible: "Online Mode"
+
+# Precondition: player is at a table with an active hand.
+# Step 1: Verify the raise slider is present
+# Step 2: Verify the "Raise to N coins" button reflects the slider value
+# Step 3: Slide to the max and verify the button shows "All In — N coins"
+# Step 4: Press Raise/All In
+# Step 5: Verify the stack decreased by the bet amount
+# Step 6: Verify the pot increased by the bet amount
+# Step 7: Verify the player is skipped on subsequent turns

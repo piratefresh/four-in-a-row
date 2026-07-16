@@ -115,6 +115,7 @@ export function WalletPill({
           background: "linear-gradient(180deg, rgba(212,165,74,0.18), rgba(212,165,74,0.07))",
           border: "1px solid rgba(212,165,74,0.4)",
         }}
+        aria-label={`Wallet balance: ${balance.toLocaleString()} coins`}
       >
         {/* Coin disc */}
         <span

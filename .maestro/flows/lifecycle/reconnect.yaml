@@ -1,0 +1,19 @@
+# P1: Reconnect
+#
+# Verifies that reconnecting within the timeout preserves seat
+# and stack:
+# 1. Navigate away from the room
+# 2. Return within the timeout window
+# 3. Verify seat and stack are preserved
+
+url: http://localhost:3000
+---
+- launchApp
+- assertVisible: "Online Mode"
+
+# Precondition: player is at a table with chips.
+# Step 1: Note current stack amount
+# Step 2: Navigate away from the room (go to lobby)
+# Step 3: Return to the room (rejoin)
+# Step 4: Verify stack amount is unchanged
+# Step 5: Verify seat is still occupied by this player

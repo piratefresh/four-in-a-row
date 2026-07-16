@@ -173,6 +173,7 @@ export function RoomActionControls({
             size="wide"
             onClick={() => folded.onLeaveRoom?.()}
             disabled={!folded.onLeaveRoom}
+            aria-label="Leave table"
           >
             Leave room
           </ActionButton>
@@ -277,6 +278,7 @@ export function RoomActionControls({
                       className="min-w-[58px] xs:min-w-[64px] sm:min-w-[112px]"
                       onClick={requestFoldConfirmation}
                       disabled={betting.isBetting || !betting.canFold}
+                      aria-label="Fold"
                     >
                       {foldActionState.primaryLabel}
                     </ActionButton>
@@ -294,6 +296,11 @@ export function RoomActionControls({
                       disabled={
                         betting.isBetting ||
                         (!betting.canCheck && !betting.canCall)
+                      }
+                      aria-label={
+                        betting.canCheck
+                          ? "Check"
+                          : `Call ${(betting.callAmount ?? 0).toLocaleString()} coins`
                       }
                     >
                       {betting.isBetting ? (
@@ -314,6 +321,11 @@ export function RoomActionControls({
                         tutorial.onBettingAction();
                       }}
                       disabled={betting.isBetting || !betting.canRaise}
+                      aria-label={
+                        showRaiseChip
+                          ? `Raise to ${(betting.raiseAmount ?? 0).toLocaleString()} coins`
+                          : betting.raiseLabel
+                      }
                     >
                       {betting.isBetting ? (
                         "Betting..."
@@ -365,6 +377,7 @@ export function RoomActionControls({
                         className="min-w-[58px] xs:min-w-[64px] sm:min-w-[112px]"
                         onClick={requestFoldConfirmation}
                         disabled={betting.isBetting || !betting.canFold}
+                        aria-label="Fold"
                       >
                         {foldActionState.primaryLabel}
                       </ActionButton>
@@ -382,6 +395,11 @@ export function RoomActionControls({
                         disabled={
                           betting.isBetting ||
                           (!betting.canCheck && !betting.canCall)
+                        }
+                        aria-label={
+                          betting.canCheck
+                            ? "Check"
+                            : `Call ${(betting.callAmount ?? 0).toLocaleString()} coins`
                         }
                       >
                         {betting.isBetting ? (
@@ -402,6 +420,11 @@ export function RoomActionControls({
                           tutorial.onBettingAction();
                         }}
                         disabled={betting.isBetting || !betting.canRaise}
+                        aria-label={
+                          showRaiseChip
+                            ? `Raise to ${(betting.raiseAmount ?? 0).toLocaleString()} coins`
+                            : betting.raiseLabel
+                        }
                       >
                         {betting.isBetting ? (
                           "Betting..."

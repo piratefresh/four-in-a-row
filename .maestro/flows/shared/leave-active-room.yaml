@@ -1,0 +1,9 @@
+# Shared: Leave any active room the E2E user may be in.
+#
+# Used between test flows to ensure a clean slate.
+# Navigates home then hits the leave-room mutation via the UI.
+
+url: http://localhost:3000
+---
+- launchApp
+- assertVisible: "Online Mode"

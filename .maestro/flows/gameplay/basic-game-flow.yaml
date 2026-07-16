@@ -1,0 +1,46 @@
+# Basic game flow
+#
+# Proves the shortest complete browser journey through a real online hand:
+# authenticate -> open a bot table -> ready up -> start betting -> fold -> results.
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run scripts/maestro-setup.ts
+
+url: http://localhost:3000/login
+name: Basic game flow
+tags:
+  - gameplay
+  - smoke
+env:
+  CONVEX_URL: http://127.0.0.1:3210
+---
+- launchApp
+- runFlow: ../shared/login.yaml
+
+- runScript:
+    file: ../../scripts/create-basic-game.js
+
+- openLink: ${"http://localhost:3000/rooms/" + output.basicGame.code}
+
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- assertVisible: "Maestro Player"
+- tapOn: "I'm Ready!"
+
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 60000
+- extendedWaitUntil:
+    visible: "Fold"
+    timeout: 60000
+- tapOn: "Fold"
+- assertVisible: "Confirm fold"
+- tapOn: "Confirm fold"
+
+- extendedWaitUntil:
+    visible: "Play Another"
+    timeout: 30000
+- assertVisible: ".*wins by fold|You win - everyone else folded"

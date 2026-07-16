@@ -1,0 +1,3 @@
+# Maestro helper scripts — create tables, set wallets, expire presence
+#
+# These are Bun scripts invoked by Maestro flows via `runScript`.

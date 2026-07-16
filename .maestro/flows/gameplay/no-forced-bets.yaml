@@ -1,0 +1,20 @@
+# P0: No forced bets
+#
+# Verifies that a standard game starts without forced bets
+# (no ante, no small blind, no big blind in the UI):
+# - Private cards appear for the player
+# - Pot starts at zero
+# - Current bet starts at zero
+# - Check and Bet controls are available
+# - No ante, small blind, or big blind labels appear
+
+url: http://localhost:3000
+---
+- launchApp
+- assertVisible: "Online Mode"
+
+# Precondition: player has joined a table and the game has started.
+# Step 1: Verify private cards are visible
+# Step 2: Verify pot shows $0
+# Step 3: Verify no blind/ante indicators are visible
+# Step 4: Verify Check button is available

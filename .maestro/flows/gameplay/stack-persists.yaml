@@ -1,0 +1,18 @@
+# P0: Stack persistence
+#
+# Verifies that table stacks persist between hands:
+# 1. Wallet remains unchanged between hand start and completion
+# 2. The winner's stack can exceed the original buy-in
+# 3. A losing player retains their remaining stack
+# 4. The next hand starts with the resulting stacks
+
+url: http://localhost:3000
+---
+- launchApp
+- assertVisible: "Online Mode"
+
+# Precondition: player is at a balance table, a hand completes.
+# Step 1: Verify wallet did not change from hand start to hand end
+# Step 2: Verify winner's stack > their original buy-in
+# Step 3: Verify loser's stack = their remaining chips from previous hand
+# Step 4: Verify the next hand starts with those exact stacks

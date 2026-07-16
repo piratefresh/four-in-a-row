@@ -1,36 +1,42 @@
 import { expect, test } from "@playwright/test";
 import { convexMutation, convexQuery, ensureMinBalance } from "./helpers";
-test.describe("settlement — fold win", () => {
-  test("fold win triggers payout of remaining chips in balance game", async ({
+
+test.describe("settlement — wallet unchanged", () => {
+  test("wallet is unchanged after game completion in balance game", async ({
     request,
   }) => {
+    // In the new economy, chips stay on the table between hands.
+    // Wallet is only debited on join and credited on leave/timeout.
     await ensureMinBalance(request, 500);
 
-    const balBeforeStart = (
+    const balBeforeJoin = (
       await convexQuery(request, "wallet:getMyBalance", {})
     ).balance as number;
 
+    // Join a balance table — buy-in is deducted
     const roomRes = await convexMutation(request, "rooms:e2eCreateTestRoom", {
       playerName: "SettleTest",
       botCount: 1,
       economyMode: "balance",
       buyIn: 500,
     });
+
+    // Create and start a game
     const gameId = await convexMutation(request, "games:createGameForRoom", {
       roomId: roomRes.roomId,
-      deck: [],
     });
     const startRes = await convexMutation(request, "games:startGame", {
       gameId,
     });
     expect(startRes.ok).toBe(true);
 
-    const balAfterBuyin = (
+    const balAfterStart = (
       await convexQuery(request, "wallet:getMyBalance", {})
     ).balance as number;
-    expect(balAfterBuyin).toBeLessThan(balBeforeStart);
+    // Wallet should NOT change at game start (buy-in was already debited on join)
+    expect(balAfterStart).toBe(balBeforeJoin - 500);
 
-    // Fold to trigger settlement
+    // Fold to end the game
     const foldRes = await convexMutation(request, "games:fold", {
       gameId,
       playerId: roomRes.playerId,
@@ -39,13 +45,72 @@ test.describe("settlement — fold win", () => {
 
     await new Promise((r) => setTimeout(r, 2000));
 
-    // Balance should have increased from post-buy-in (payout returned chips)
-    const balAfterSettle = (
+    // Wallet should be UNCHANGED after game completion
+    // (no payout — chips stay on the table)
+    const balAfterGame = (
       await convexQuery(request, "wallet:getMyBalance", {})
     ).balance as number;
-    expect(balAfterSettle).toBeGreaterThan(balAfterBuyin);
+    expect(balAfterGame).toBe(balAfterStart);
 
-    // Verify payout transaction exists
+    // No payout transaction should exist
+    const txnRes = await convexQuery(request, "wallet:getMyTransactions", {
+      paginationOpts: { numItems: 50, cursor: null },
+    });
+    const payouts = (txnRes.page ?? []).filter(
+      (t: { source: string }) => t.source === "payout" && t.amount > 0,
+    );
+    // The payout from this game should NOT exist since payout only happens on leave
+    const gamePayouts = payouts.filter(
+      (t: { gameId?: string }) => t.gameId === String(gameId),
+    );
+    expect(gamePayouts.length).toBe(0);
+  });
+});
+
+test.describe("settlement — leave triggers cash-out", () => {
+  test("leaving a balance game returns remaining stack to wallet", async ({
+    request,
+  }) => {
+    await ensureMinBalance(request, 500);
+
+    // Join a balance table
+    const roomRes = await convexMutation(request, "rooms:e2eCreateTestRoom", {
+      playerName: "CashOutTest",
+      botCount: 1,
+      economyMode: "balance",
+      buyIn: 500,
+    });
+
+    // Create and start a game
+    const gameId = await convexMutation(request, "games:createGameForRoom", {
+      roomId: roomRes.roomId,
+    });
+    const startRes = await convexMutation(request, "games:startGame", {
+      gameId,
+    });
+    expect(startRes.ok).toBe(true);
+
+    // Fold to end the game
+    await convexMutation(request, "games:fold", {
+      gameId,
+      playerId: roomRes.playerId,
+    });
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const balBeforeLeave = (
+      await convexQuery(request, "wallet:getMyBalance", {})
+    ).balance as number;
+
+    // Leave the room — remaining stack should be cashed out to wallet
+    await convexMutation(request, "rooms:leaveRoom", {});
+
+    const balAfterLeave = (
+      await convexQuery(request, "wallet:getMyBalance", {})
+    ).balance as number;
+    // Wallet should increase by the remaining stack amount
+    expect(balAfterLeave).toBeGreaterThan(balBeforeLeave);
+
+    // A payout transaction should now exist
     const txnRes = await convexQuery(request, "wallet:getMyTransactions", {
       paginationOpts: { numItems: 50, cursor: null },
     });
@@ -58,45 +123,32 @@ test.describe("settlement — fold win", () => {
 });
 
 test.describe("settlement — duplicate protection", () => {
-  test("fold on completed game does not create extra payouts", async ({
+  test("leaving twice does not create extra payouts", async ({
     request,
   }) => {
     await ensureMinBalance(request, 500);
 
     const roomRes = await convexMutation(request, "rooms:e2eCreateTestRoom", {
-      playerName: "DupSettle",
+      playerName: "DupLeave",
       botCount: 1,
       economyMode: "balance",
       buyIn: 500,
     });
-    const playerId = roomRes.playerId as string;
-    const gameId = await convexMutation(request, "games:createGameForRoom", {
-      roomId: roomRes.roomId,
-      deck: [],
-    });
-    await convexMutation(request, "games:startGame", { gameId });
-    await convexMutation(request, "games:fold", { gameId, playerId });
-    await new Promise((r) => setTimeout(r, 2000));
 
-    const payoutCountBefore = (
-      await convexQuery(request, "wallet:getMyTransactions", {
-        paginationOpts: { numItems: 50, cursor: null },
-      })
-    ).page.filter((t: { source: string }) => t.source === "payout").length;
+    // Leave once
+    const firstLeave = await convexMutation(request, "rooms:leaveRoom", {});
+    const balAfterFirst = (
+      await convexQuery(request, "wallet:getMyBalance", {})
+    ).balance as number;
 
-    // Second fold on completed game should be harmless
-    try {
-      await convexMutation(request, "games:fold", { gameId, playerId });
-    } catch {
-      // Expected: fold on completed game fails
-    }
+    // Try to leave again — should be a no-op (already left)
+    const secondLeave = await convexMutation(request, "rooms:leaveRoom", {});
 
-    const payoutCountAfter = (
-      await convexQuery(request, "wallet:getMyTransactions", {
-        paginationOpts: { numItems: 50, cursor: null },
-      })
-    ).page.filter((t: { source: string }) => t.source === "payout").length;
-    expect(payoutCountAfter).toBe(payoutCountBefore);
+    const balAfterSecond = (
+      await convexQuery(request, "wallet:getMyBalance", {})
+    ).balance as number;
+    // Balance should not change on second leave
+    expect(balAfterSecond).toBe(balAfterFirst);
   });
 });
 
@@ -104,29 +156,36 @@ test.describe("settlement — non-balance game", () => {
   test("non-balance game completes without wallet changes", async ({
     request,
   }) => {
-    await ensureMinBalance(request, 0);
+    await ensureMinBalance(request, 500);
+
+    const balBefore = (
+      await convexQuery(request, "wallet:getMyBalance", {})
+    ).balance as number;
 
     const roomRes = await convexMutation(request, "rooms:e2eCreateTestRoom", {
       playerName: "NonBalSettle",
       botCount: 1,
+      economyMode: "nonBalance",
     });
-    const playerId = roomRes.playerId as string;
+
     const gameId = await convexMutation(request, "games:createGameForRoom", {
       roomId: roomRes.roomId,
-      deck: [],
     });
     const startRes = await convexMutation(request, "games:startGame", {
       gameId,
     });
     expect(startRes.ok).toBe(true);
 
-    await convexMutation(request, "games:fold", { gameId, playerId });
+    // Fold
+    await convexMutation(request, "games:fold", {
+      gameId,
+      playerId: roomRes.playerId,
+    });
     await new Promise((r) => setTimeout(r, 2000));
 
-    // Game should be completed
-    const gameInfo = await convexQuery(request, "games:getGameById", {
-      gameId,
-    });
-    expect(gameInfo.status).toBe("completed");
+    const balAfter = (
+      await convexQuery(request, "wallet:getMyBalance", {})
+    ).balance as number;
+    expect(balAfter).toBe(balBefore);
   });
 });

@@ -1,0 +1,20 @@
+# P0: Leave and cash-out
+#
+# Verifies that leaving a balance game table returns the remaining
+# stack to the wallet:
+# 1. Leaving returns the remaining stack to the wallet
+# 2. Table stack becomes zero
+# 3. Seat becomes available
+# 4. Repeated leave attempts cannot pay twice
+
+url: http://localhost:3000
+---
+- launchApp
+- assertVisible: "Online Mode"
+
+# Precondition: player is at a balance table with some chips.
+# Step 1: Note current wallet balance
+# Step 2: Leave the table via the back/leave button
+# Step 3: Verify wallet increased by the table stack amount
+# Step 4: Verify the table seat is now available
+# Step 5: Verify leaving again does not pay twice

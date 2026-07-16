@@ -151,7 +151,10 @@ export function PhasePlayerBadge({
           <span className="ml-1 text-[#d7c27a]">(you)</span>
         ) : null}
       </div>
-      <div className="mt-1 text-[10px] font-medium leading-none text-[#f3f1ea] sm:text-[13px]">
+      <div
+        className="mt-1 text-[10px] font-medium leading-none text-[#f3f1ea] sm:text-[13px]"
+        aria-label={`Player stack: ${chips.toLocaleString()} coins`}
+      >
         ${chips}
       </div>
       {isThinking ? (

@@ -27,8 +27,12 @@ export {
   debugFillRoomWithBots,
   clearAllData,
   e2eCreateTestRoom,
+  e2eResetTestState,
+  e2eCompleteCurrentHand,
+  e2eSetTableStack,
+  e2eSetPlayerDisconnected,
+  e2eExpirePlayerPresence,
 } from "./debugMutations";
-
 export {
   runCronCleanup,
 } from "./maintenanceMutations";

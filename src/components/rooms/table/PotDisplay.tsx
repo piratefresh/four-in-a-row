@@ -5,7 +5,10 @@ type PotDisplayProps = {
 export function PotDisplay({ amount }: PotDisplayProps) {
   return (
     <div className="fixed right-8 top-8 z-50 flex flex-col items-end">
-      <div className="flex flex-col items-center gap-0.5 rounded-lg bg-black px-4 py-2">
+      <div
+        className="flex flex-col items-center gap-0.5 rounded-lg bg-black px-4 py-2"
+        aria-label={`Pot: ${amount.toLocaleString()} coins`}
+      >
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
           Pot
         </span>

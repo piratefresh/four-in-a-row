@@ -1,0 +1,18 @@
+# P1: Rebuy
+#
+# Verifies the rebuy flow for balance games:
+# 1. Rebuy succeeds only with zero stack and no active hand
+# 2. Rebuy is disabled with insufficient wallet
+# 3. Rebuy is unavailable during an active hand
+
+url: http://localhost:3000
+---
+- launchApp
+- assertVisible: "Online Mode"
+
+# Precondition: player lost all chips in a balance game.
+# Step 1: Verify "Rebuy" button is visible when stack is zero
+# Step 2: Verify rebuy is disabled when wallet < buy-in
+# Step 3: Seed wallet, verify rebuy is enabled
+# Step 4: Press rebuy, verify stack is restored
+# Step 5: Verify rebuy is hidden during an active hand

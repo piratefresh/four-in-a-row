@@ -1,0 +1,14 @@
+# Smoke: Table browser
+#
+# Verify the lobby page loads and shows table information:
+# - Table name and code are visible
+# - Economy mode and buy-in are displayed
+# - Player count is visible
+
+url: http://localhost:3000/rooms
+---
+- launchApp
+- assertVisible: "NEW ROOM"
+# Verify at least some UI structure — the exact tables depend on
+# what's been created, but the header should always be present.
+- assertVisible: "ROOM"

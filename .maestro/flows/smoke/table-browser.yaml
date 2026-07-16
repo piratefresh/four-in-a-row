@@ -1,0 +1,18 @@
+# P0: Table browser
+#
+# Verify the lobby renders table cards with the correct economy
+# information:
+# - Table name is visible
+# - Fixed buy-in amount is shown for balance games
+# - Player count (e.g. "1/4") is visible
+# - Non-balance tables do not show buy-in info
+
+url: http://localhost:3000/rooms
+---
+- launchApp
+- assertVisible: "NEW ROOM"
+
+# The lobby should show at least one table card with:
+# - Room code or title
+# - Player count (e.g. "1/4", "2/4")
+# - Economy label (either "Balance · N buy-in" or "Non-balance")

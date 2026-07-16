@@ -1,0 +1,3 @@
+# Shared Maestro flows — login, lobby navigation, room cleanup
+#
+# These are composable subflows referenced by test flows via `runFlow`.

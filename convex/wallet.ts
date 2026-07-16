@@ -100,3 +100,60 @@ export const depositPlaytestCoins = mutation({
     return { balance: result.balanceAfter, status: result.status };
   },
 });
+
+// ---------------------------------------------------------------------------
+// E2E test fixtures — only available with E2E_TESTING=true
+// ---------------------------------------------------------------------------
+
+const IS_E2E = process.env.E2E_TESTING === "true";
+
+/**
+ * Remove coins from the E2E user's wallet. Used by the provisioning module
+ * to set an exact target balance (combine with depositPlaytestCoins).
+ * Guarded: only works with E2E_TESTING=true and only for the E2E user.
+ */
+export const e2eDebitCoins = mutation({
+  args: {
+    amount: v.number(),
+    operationId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eDebitCoins is only available in E2E testing mode.",
+      });
+    }
+
+    const { authUserId } = await requireVerifiedUser(ctx);
+    if (authUserId !== "e2e-test-user") {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eDebitCoins is only available for the E2E test user.",
+      });
+    }
+
+    if (!Number.isInteger(args.amount) || args.amount <= 0) {
+      throw new ConvexError({
+        code: "INVALID_AMOUNT",
+        message: "Debit amount must be a positive whole number.",
+      });
+    }
+
+    const operationId = args.operationId?.trim() || crypto.randomUUID();
+    const key = buildOperationKey(
+      OPERATION_NAMESPACES.playtest_deposit,
+      authUserId,
+      `e2e-debit:${operationId}`,
+    );
+
+    const result = await applyLedgerEntry(ctx, {
+      authUserId,
+      amount: -args.amount,
+      source: "playtest_deposit",
+      operationKey: key,
+    });
+
+    return { balance: result.balanceAfter, status: result.status };
+  },
+});
