@@ -2,11 +2,12 @@ import { useQuery } from "convex/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
-import { ANTE_AMOUNT, SHOWDOWN_TIMER_MS } from "../../convex/gameState";
+import { SHOWDOWN_TIMER_MS } from "../../convex/gameState";
 import { INITIAL_CHIPS } from "../../convex/games/gamesShared";
 import { formatRoomEconomyLabel, getRoomEconomyMode, type EconomyMode } from "../../convex/gameConfig";
 import { MATCH_JOIN_TIMEOUT_MS } from "../../convex/constants";
 import { isRoomRejoinDismissed } from "@/lib/room-rejoin-dismissal";
+import { BuyInConfirmation } from "@/components/rooms/lobby/BuyInConfirmation";
 import {
   PokerTable,
   formatStackLabel,
@@ -43,10 +44,12 @@ export function RoomDrawer({
     api.rooms.getRoomMembers,
     roomCode ? { code: roomCode } : "skip",
   );
+  const walletData = useQuery(api.wallet.getMyBalance);
   const [now, setNow] = useState(() => Date.now());
   const [joinPromptStartedAt, setJoinPromptStartedAt] = useState<number | null>(
     null,
   );
+  const [isConfirmingJoin, setIsConfirmingJoin] = useState(false);
 
   const wasDrawerOpenRef = useRef(false);
   useEffect(() => {
@@ -70,6 +73,10 @@ export function RoomDrawer({
 
     wasDrawerOpenRef.current = true;
   }, [roomCode, roomData, onClose]);
+
+  useEffect(() => {
+    setIsConfirmingJoin(false);
+  }, [roomCode]);
 
   useEffect(() => {
     if (!roomCode) {
@@ -96,6 +103,24 @@ export function RoomDrawer({
   );
   const members = roomData?.members ?? [];
   const hasOpenSeat = members.length < maxPlayers;
+
+  // Buy-in confirmation (table-stakes epic M1.7). Balance tables charge a fixed
+  // buy-in on join; the wallet must cover it. Server validation stays
+  // authoritative — this only gates the button and previews the outcome.
+  const economyMode = roomData?.room.economyMode ?? null;
+  const buyIn = roomData?.room.buyIn ?? null;
+  const isBalanceRoom =
+    getRoomEconomyMode({ economyMode: economyMode as EconomyMode | undefined }) ===
+      "balance" && buyIn != null;
+  const walletBalance = walletData?.balance ?? null;
+  const walletLoaded = walletData !== undefined;
+  const canAffordBuyIn =
+    !isBalanceRoom ||
+    (walletBalance != null && buyIn != null && walletBalance >= buyIn);
+  const postJoinBalance =
+    walletBalance != null && buyIn != null
+      ? Math.max(0, walletBalance - buyIn)
+      : null;
   const matchJoinTimeRemainingMs =
     roomCode && joinPromptStartedAt !== null
       ? Math.max(0, joinPromptStartedAt + MATCH_JOIN_TIMEOUT_MS - now)
@@ -117,11 +142,12 @@ export function RoomDrawer({
 
     return !isRoomRejoinDismissed(roomCode);
   }, [roomCode, roomData?.viewerSeatPreview]);
+  const previewStack = isBalanceRoom && buyIn != null ? buyIn : INITIAL_CHIPS;
   const previewPlayers = [
     ...members.map((member) => ({
       seatIndex: member.seatIndex,
       name: member.name,
-      meta: formatStackLabel(INITIAL_CHIPS),
+      meta: formatStackLabel(previewStack),
     })),
     ...(shouldShowRejoinPreview && roomData?.viewerSeatPreview
       ? [
@@ -139,9 +165,24 @@ export function RoomDrawer({
     Boolean(onDevRejoin);
   const joinButtonLabel = isJoining
     ? "Taking seat..."
-    : hasOpenSeat
-      ? `Join Now - Ante $${ANTE_AMOUNT}`
-      : "Room full";
+    : !hasOpenSeat
+      ? "Room full"
+      : isBalanceRoom && walletLoaded && !canAffordBuyIn
+        ? "Insufficient balance"
+        : "Join table";
+  const joinDisabled =
+    isJoining ||
+    !hasOpenSeat ||
+    matchJoinTimeRemainingMs === 0 ||
+    (isBalanceRoom && walletLoaded && !canAffordBuyIn);
+
+  const handleJoinRequest = () => {
+    if (isBalanceRoom) {
+      setIsConfirmingJoin(true);
+      return;
+    }
+    onJoinSeat();
+  };
 
   return (
     <Drawer open={!!roomCode} onOpenChange={(open) => !open && onClose()}>
@@ -151,40 +192,83 @@ export function RoomDrawer({
             {title}
           </DrawerTitle>
           <DrawerDescription className="text-center text-sm text-white/60 sm:text-center">
-            {configSummary} - {maxPlayers} seats - Tap an open seat to join
+            {isConfirmingJoin
+              ? "Review the fixed table stake before taking your seat."
+              : `${configSummary} - ${maxPlayers} seats - Tap an open seat to join`}
           </DrawerDescription>
         </DrawerHeader>
 
         <div className="px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-6">
-          <PokerTable
-            players={previewPlayers}
-            maxPlayers={maxPlayers}
-            onOpenSeatClick={() => onJoinSeat()}
-            isJoining={
-              isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0
-            }
-            className="!h-[296px] !max-w-[216px] xs:!h-[320px] xs:!max-w-[236px] sm:!h-[460px] sm:!max-w-[340px]"
-          />
-
-          {matchJoinTimeRemainingMs !== null ? (
-            <div className="mt-4 flex justify-center">
-              <CountdownTimer
-                label="Join window"
-                timeRemainingMs={matchJoinTimeRemainingMs}
+          {isConfirmingJoin && buyIn != null ? (
+            <BuyInConfirmation
+              walletBalance={walletBalance}
+              buyIn={buyIn}
+              isJoining={isJoining}
+              canAfford={canAffordBuyIn}
+              onBack={() => setIsConfirmingJoin(false)}
+              onConfirm={onJoinSeat}
+            />
+          ) : (
+            <>
+              <PokerTable
+                players={previewPlayers}
+                maxPlayers={maxPlayers}
+                onOpenSeatClick={handleJoinRequest}
+                isJoining={
+                  isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0
+                }
+                className="!h-[296px] !max-w-[216px] xs:!h-[320px] xs:!max-w-[236px] sm:!h-[460px] sm:!max-w-[340px]"
               />
+
+              {matchJoinTimeRemainingMs !== null ? (
+                <div className="mt-4 flex justify-center">
+                  <CountdownTimer
+                    label="Join window"
+                    timeRemainingMs={matchJoinTimeRemainingMs}
+                  />
+                </div>
+              ) : null}
+
+          {isBalanceRoom && buyIn != null ? (
+            <div className="mx-auto mt-5 w-full max-w-[320px] rounded-xl border border-gold/25 bg-felt-deep/50 px-4 py-3">
+              <div className="flex items-center justify-between font-mono text-xs">
+                <span className="text-white/60">Wallet balance</span>
+                <span className="tabular-nums text-white">
+                  {walletLoaded ? `$${(walletBalance ?? 0).toLocaleString()}` : "..."}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between font-mono text-xs">
+                <span className="text-white/60">Buy-in</span>
+                <span className="tabular-nums text-gold">
+                  -${buyIn.toLocaleString()}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2 font-mono text-xs">
+                <span className="text-white/60">Balance after join</span>
+                <span className="tabular-nums text-white">
+                  {postJoinBalance != null
+                    ? `$${postJoinBalance.toLocaleString()}`
+                    : "..."}
+                </span>
+              </div>
+              {walletLoaded && !canAffordBuyIn ? (
+                <p className="mt-2 text-center font-mono text-[11px] text-game-red">
+                  You need ${buyIn.toLocaleString()} to buy in to this table.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
-          <button
-            type="button"
-            onClick={onJoinSeat}
-            disabled={
-              isJoining || !hasOpenSeat || matchJoinTimeRemainingMs === 0
-            }
-            className="mx-auto mt-5 block w-full max-w-[272px] rounded-xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-4 py-3 text-center text-base font-semibold text-[#1f1402] shadow-[0_10px_24px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 sm:mt-6 sm:max-w-[320px] sm:rounded-2xl sm:px-5 sm:py-4 sm:text-lg"
-          >
-            {joinButtonLabel}
-          </button>
+              <button
+                type="button"
+                onClick={handleJoinRequest}
+                disabled={joinDisabled}
+                className="mx-auto mt-5 block w-full max-w-[272px] rounded-xl border border-[#f3d260]/45 bg-[linear-gradient(180deg,#ffd54d_0%,#b68c19_100%)] px-4 py-3 text-center text-base font-semibold text-[#1f1402] shadow-[0_10px_24px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.35)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 sm:mt-6 sm:max-w-[320px] sm:rounded-2xl sm:px-5 sm:py-4 sm:text-lg"
+              >
+                {joinButtonLabel}
+              </button>
+            </>
+          )}
         </div>
       </DrawerContent>
     </Drawer>

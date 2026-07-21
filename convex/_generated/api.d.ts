@@ -61,6 +61,7 @@ import type * as games_gamesShowdown from "../games/gamesShowdown.js";
 import type * as games_gamesTrace from "../games/gamesTrace.js";
 import type * as games_settlement_context from "../games/settlement/context.js";
 import type * as games_settlement_types from "../games/settlement/types.js";
+import type * as games_tableSession from "../games/tableSession.js";
 import type * as http from "../http.js";
 import type * as identity from "../identity.js";
 import type * as inspectGame from "../inspectGame.js";
@@ -166,6 +167,7 @@ declare const fullApi: ApiFromModules<{
   "games/gamesTrace": typeof games_gamesTrace;
   "games/settlement/context": typeof games_settlement_context;
   "games/settlement/types": typeof games_settlement_types;
+  "games/tableSession": typeof games_tableSession;
   http: typeof http;
   identity: typeof identity;
   inspectGame: typeof inspectGame;

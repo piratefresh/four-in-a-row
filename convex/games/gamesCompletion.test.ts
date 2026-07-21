@@ -256,7 +256,23 @@ async function seedHands(
         createdAt: now,
         updatedAt: now,
       });
+      // Mirror the seat-lifecycle invariant: a seat's persistent stack equals
+      // its uncommitted hand chips after betting.
+      const seatId = ctx.db.normalizeId("players", hand.playerId);
+      if (seatId) await ctx.db.patch(seatId, { tableStack: hand.chips });
     }
+  });
+}
+
+async function getStack(
+  t: ReturnType<typeof convexTest>,
+  playerId: string,
+): Promise<number | undefined> {
+  return await t.query(async (ctx) => {
+    const seatId = ctx.db.normalizeId("players", playerId);
+    if (!seatId) return undefined;
+    const seat = await ctx.db.get(seatId);
+    return seat?.tableStack;
   });
 }
 
@@ -384,11 +400,13 @@ describe("completeGame integration (STO-234)", () => {
     expect(r1.ok).toBe(true);
     expect(r2.ok).toBe(true);
 
-    // Balance should not change from the duplicate call.
+    // Wallet gets rewards only (pot goes to the stack) and does not change
+    // from the duplicate call.
     const balance = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, userIds[0]!);
     });
-    expect(balance).toBe(2025); // 1000 starter + 900 payout + 125 rewards
+    expect(balance).toBe(1125); // 1000 starter + 125 rewards
+    expect(await getStack(t, playerIds[0]!)).toBe(900); // 300 chips + 600 pot, not doubled
   });
 
   test("submitted player who forfeits before settlement is not a tied winner", async () => {
@@ -425,12 +443,14 @@ describe("completeGame integration (STO-234)", () => {
       });
     });
 
-    // p1 should get the full pot (600) + their chips (200) = 800.
-    // p2 should get only their chips (200) — no pot share because they folded.
+    // p1's stack = 200 chips + full 600 pot = 800; p2 keeps only their
+    // uncommitted 200 (no pot share — they folded). Wallets get rewards only.
     const bal1 = await t.query(async (ctx) => getWalletBalance(ctx, userIds[0]!));
     const bal2 = await t.query(async (ctx) => getWalletBalance(ctx, userIds[1]!));
-    expect(bal1).toBe(2000); // 1000 + 800 payout + 125 rewards + 75 heavy_hitter
-    expect(bal2).toBe(1275); // 1000 + 200 chips + 75 heavy_hitter (valid word, folded)
+    expect(bal1).toBe(1200); // 1000 + 125 rewards + 75 heavy_hitter
+    expect(bal2).toBe(1075); // 1000 + 75 heavy_hitter (valid word, folded)
+    expect(await getStack(t, playerIds[0]!)).toBe(800);
+    expect(await getStack(t, playerIds[1]!)).toBe(200);
   });
 
   test("all-forfeit / no-winner completion splits pot among humans", async () => {
@@ -463,12 +483,15 @@ describe("completeGame integration (STO-234)", () => {
       });
     });
 
-    // Pot (500) is split among the two humans: 250 + 250 (even split).
-    // p1: 300 chips + 250 pot = 550. p2: 200 chips + 250 pot = 450.
+    // Pot (500) is split among the two humans onto their stacks: 250 + 250.
+    // p1 stack: 300 chips + 250 = 550. p2 stack: 200 chips + 250 = 450.
+    // Wallets get the showdown reward only.
     const bal1 = await t.query(async (ctx) => getWalletBalance(ctx, userIds[0]!));
     const bal2 = await t.query(async (ctx) => getWalletBalance(ctx, userIds[1]!));
-    expect(bal1).toBe(1555); // 1000 + 550 payout + 5 showdown
-    expect(bal2).toBe(1455); // 1000 + 450 payout + 5 showdown
+    expect(bal1).toBe(1005); // 1000 + 5 showdown
+    expect(bal2).toBe(1005); // 1000 + 5 showdown
+    expect(await getStack(t, playerIds[0]!)).toBe(550);
+    expect(await getStack(t, playerIds[1]!)).toBe(450);
   });
 
   test("bot-held chips disappear after settlement", async () => {

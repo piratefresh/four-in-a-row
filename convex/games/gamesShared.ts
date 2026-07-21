@@ -19,7 +19,8 @@ export type PlayerHand = {
   betThisRound: number;
   chips: number;
   totalBet: number;
-  lastAction?: "check" | "call" | "raise" | "fold";
+  isAllIn?: boolean;
+  lastAction?: "check" | "call" | "raise" | "fold" | "allIn";
 };
 
 export function sortHandsByTurnOrder<T extends { createdAt: number; playerId: string }>(

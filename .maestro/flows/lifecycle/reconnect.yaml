@@ -1,19 +1,73 @@
-# P1: Reconnect
+# P1: Reconnect preserves seat and stack
 #
-# Verifies that reconnecting within the timeout preserves seat
-# and stack:
+# Verifies that navigating away from a room and returning within
+# the timeout preserves the player's seat and table stack:
 # 1. Navigate away from the room
 # 2. Return within the timeout window
 # 3. Verify seat and stack are preserved
+# 4. Verify no second buy-in is charged
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run test:maestro:setup
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: Reconnect preserves seat and stack
+tags:
+  - lifecycle
+  - reconnect
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
+- runFlow: ../shared/login.yaml
+
+- runScript:
+    file: ../../scripts/setup-table-stakes.js
+- assertTrue:
+    condition: ${output.tableStakes.initialWallet === 1000}
+    label: Wallet starts at exactly 1,000 coins
+- assertTrue:
+    condition: ${output.tableStakes.buyIn === 500}
+    label: Table has a fixed 500 coin buy-in
+
+# Join and ready up.
+- openLink: ${"http://localhost:3000/rooms/" + output.tableStakes.code}
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- tapOn: "I'm Ready!"
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 60000
+
+# Capture state at the table.
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.tableStack === 500}
+    label: Table stack is 500 before navigating away
+
+# Navigate away from the room.
+- openLink: http://localhost:3000
 - assertVisible: "Online Mode"
 
-# Precondition: player is at a table with chips.
-# Step 1: Note current stack amount
-# Step 2: Navigate away from the room (go to lobby)
-# Step 3: Return to the room (rejoin)
-# Step 4: Verify stack amount is unchanged
-# Step 5: Verify seat is still occupied by this player
+# Return to the room.
+- openLink: ${"http://localhost:3000/rooms/" + output.tableStakes.code}
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 30000
+
+# Verify seat and stack are preserved.
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 500}
+    label: Reconnecting does not charge the wallet again
+- assertTrue:
+    condition: ${output.tableStakesState.tableStack === 500}
+    label: Reconnecting preserves the table stack
+- assertTrue:
+    condition: ${output.tableStakesState.activeRoomCode !== null}
+    label: The player still occupies a seat at the table

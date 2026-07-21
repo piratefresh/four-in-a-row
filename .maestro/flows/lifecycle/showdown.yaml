@@ -1,18 +1,66 @@
-# P1: Side-pot and showdown
+# P1: Showdown results
 #
-# Verifies side-pot calculations and showdown results:
-# 1. Side-pot results display the correct winners and awards
-# 2. Fold and showdown results transition correctly into the
-#    next-hand screen
-# 3. Multiple all-in players create correct side pots
+# Verifies that a completed hand reaches showdown and shows correct results:
+# 1. The results screen displays after a hand completes
+# 2. Winner information is shown
+# 3. "Play Another" offers the next hand
+#
+# Uses the full-game pot distribution pattern: seeds committed wagers,
+# folds through the UI, and verifies the settlement.
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run test:maestro:setup
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: Showdown results display winner and pot
+tags:
+  - lifecycle
+  - settlement
+  - showdown
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
+- runFlow: ../../subflows/join-table-stakes.yaml
 
-# Precondition: multiple players at a table, one all-in with less chips.
-# Step 1: Play through a hand to showdown
-# Step 2: Verify the results screen shows correct pot distribution
-# Step 3: Verify winner names and amounts are correct
-# Step 4: Verify the "Next Hand" transition works
+# Seed committed wagers so there is a meaningful pot to distribute.
+- runScript:
+    file: ../../scripts/seed-full-game-pot.js
+- assertTrue:
+    condition: ${output.fullGamePot.pot === 200}
+    label: Both seats have committed 100 coins to a 200 coin pot
+- assertVisible: ".*200.*"
+
+# Fold through the hand.
+- extendedWaitUntil:
+    visible: "Fold"
+    timeout: 30000
+- tapOn: "Fold"
+- assertVisible: "Confirm fold"
+- tapOn: "Confirm fold"
+
+# Wait for the hand to complete and show results.
+- extendedWaitUntil:
+    visible: "Play Another"
+    timeout: 30000
+- assertVisible: ".*wins by fold|You win - everyone else folded"
+- assertVisible: ".*200.*"
+
+# Verify settlement accounting.
+- runScript:
+    file: ../../scripts/capture-full-game-settlement.js
+- assertTrue:
+    condition: ${output.fullGameSettlement.gameStatus === "completed" && output.fullGameSettlement.settlementState === "settled"}
+    label: The hand completes through the normal settlement pipeline
+- assertTrue:
+    condition: ${output.fullGameSettlement.pot === 200}
+    label: Results preserve the exact 200 coin pot
+- assertTrue:
+    condition: ${output.fullGameSettlement.totalTableStacks === 1000}
+    label: Settlement conserves all table chips
+- assertTrue:
+    condition: ${output.fullGameSettlement.walletBalance === 500}
+    label: Pot settlement stays on the table and does not alter the wallet

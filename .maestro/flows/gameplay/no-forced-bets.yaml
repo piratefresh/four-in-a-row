@@ -2,19 +2,56 @@
 #
 # Verifies that a standard game starts without forced bets
 # (no ante, no small blind, no big blind in the UI):
-# - Private cards appear for the player
+# - Private tiles appear for the player
 # - Pot starts at zero
 # - Current bet starts at zero
-# - Check and Bet controls are available
-# - No ante, small blind, or big blind labels appear
+# - Check and Bet controls are available (no forced call)
+# - No blind/ante UI indicators are visible
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run test:maestro:setup
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: No forced bets — hand starts with zero pot and check available
+tags:
+  - gameplay
+  - betting
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
 
-# Precondition: player has joined a table and the game has started.
-# Step 1: Verify private cards are visible
-# Step 2: Verify pot shows $0
-# Step 3: Verify no blind/ante indicators are visible
-# Step 4: Verify Check button is available
+- runScript:
+    file: ../../scripts/setup-table-stakes.js
+
+- openLink: ${"http://localhost:3000/rooms/" + output.tableStakes.code}
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- assertVisible: "E2E Test Player"
+- tapOn: "I'm Ready!"
+
+# Wait for the first betting round (pre-flop).
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 60000
+
+# Verify the hand starts without forced bets.
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.pot === 0}
+    label: The pot starts at zero (no blinds or antes)
+- assertTrue:
+    condition: ${output.tableStakesState.currentBet === 0}
+    label: There is no current bet to call (no forced opening bet)
+
+# Verify the betting controls reflect the no-forced-bets state.
+- extendedWaitUntil:
+    visible: "CHECK"
+    timeout: 30000
+- assertVisible: "Fold"
+# When no bet exists the raise button reads "Bet", not "Raise to".

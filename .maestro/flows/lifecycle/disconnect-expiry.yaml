@@ -1,23 +1,38 @@
-# P1: Disconnect expiry
-#
-# Verifies that a disconnected player is removed after the
-# timeout period:
-# 1. Player presence expires
-# 2. Remaining stack is cashed out to wallet
-# 3. Seat becomes available
-#
-# Note: Maestro's killApp does not simulate process death.
-# Disconnect expiry is driven by guarded E2E presence fixtures
-# (e2eExpirePlayerPresence), while Playwright covers real page
-# close/reload behavior.
+# STO-249: an expired disconnect lease removes and cashes out the seat.
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: STO-249 disconnect expiry cashes out table stack
+tags:
+  - lifecycle
+  - economy
+  - table-stakes
+  - sto-249
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
+- runFlow: ../../subflows/join-table-stakes.yaml
 
-# Precondition: player is at a table. The provisioning script
-# calls e2eExpirePlayerPresence to simulate timeout.
-# Step 1: Verify the player is removed from the seat
-# Step 2: Verify wallet received the cash-out (remaining stack)
-# Step 3: Verify the seat is available for a new player
+# Leave the room route so its heartbeat cannot refresh the deliberately stale
+# presence before the guarded sweep runs.
+- openLink: http://localhost:3000
+- assertVisible: "Online Mode"
+- runScript:
+    file: ../../scripts/expire-table-stakes.js
+
+- assertTrue:
+    condition: ${output.expiredTableStakes.walletBefore === 500}
+    label: Wallet remains separated while chips are seated
+- assertTrue:
+    condition: ${output.expiredTableStakes.stackBefore === 500}
+    label: The full table stack exists before disconnect expiry
+- assertTrue:
+    condition: ${output.expiredTableStakes.walletAfter === 1000}
+    label: Disconnect expiry returns the remaining stack to the wallet
+- assertTrue:
+    condition: ${output.expiredTableStakes.activeRoomAfter === null}
+    label: Disconnect expiry removes the active seat
+- assertTrue:
+    condition: ${output.expiredTableStakes.sweptCount >= 1}
+    label: The disconnect lease sweep processed the expired seat

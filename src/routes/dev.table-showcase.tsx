@@ -286,6 +286,11 @@ function DevTableShowcaseRoute() {
     isShowdownSubmissionOpen: isShowdown,
     isTutorialBettingPaused: false,
     isTutorialRoom: false,
+    isOutOfChips: false,
+    buyIn: null,
+    canAffordRebuy: true,
+    isRebuying: false,
+    onRebuy: undefined,
   };
 
   const bettingContextValue: RoomBettingContextValue = {
@@ -309,6 +314,7 @@ function DevTableShowcaseRoute() {
     raiseLabel: "Raise",
     raiseAmount: 150,
     raiseOptions: [100, 150, 200, 300],
+    isOpeningBet: false,
   };
 
   return (

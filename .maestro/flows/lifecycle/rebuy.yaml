@@ -1,18 +1,50 @@
-# P1: Rebuy
-#
-# Verifies the rebuy flow for balance games:
-# 1. Rebuy succeeds only with zero stack and no active hand
-# 2. Rebuy is disabled with insufficient wallet
-# 3. Rebuy is unavailable during an active hand
+# STO-249: a busted seat may re-buy the same fixed amount between hands.
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: STO-249 fixed re-buy between hands
+tags:
+  - lifecycle
+  - economy
+  - table-stakes
+  - sto-249
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
+- runFlow: ../../subflows/join-table-stakes.yaml
 
-# Precondition: player lost all chips in a balance game.
-# Step 1: Verify "Rebuy" button is visible when stack is zero
-# Step 2: Verify rebuy is disabled when wallet < buy-in
-# Step 3: Seed wallet, verify rebuy is enabled
-# Step 4: Press rebuy, verify stack is restored
-# Step 5: Verify rebuy is hidden during an active hand
+# During an active hand the table must never expose a re-buy action.
+- assertNotVisible: "You're out of chips"
+- assertNotVisible: 'Re-buy - \$500'
+
+- runScript:
+    file: ../../scripts/bust-table-stakes.js
+
+# The guarded completion fixture deliberately skips settlement rendering, so
+# execute the production re-buy mutation from Maestro after leaving that route.
+- openLink: http://localhost:3000
+- assertVisible: "Online Mode"
+- runScript:
+    file: ../../scripts/rebuy-table-stakes.js
+- assertTrue:
+    condition: ${output.rebuyTableStakes.walletBefore === 500}
+    label: The wallet still holds only the off-table balance before re-buy
+- assertTrue:
+    condition: ${output.rebuyTableStakes.walletAfter === 0}
+    label: Re-buy deducts the same fixed 500 coin amount
+- assertTrue:
+    condition: ${output.rebuyTableStakes.tableStack === 500}
+    label: Re-buy restores the table stack to the fixed buy-in
+- assertTrue:
+    condition: ${output.rebuyTableStakes.rebuyCount === 1}
+    label: Re-buy advances the seat's idempotency counter exactly once
+
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 0}
+    label: Re-buy deducts the same fixed 500 coin amount
+- assertTrue:
+    condition: ${output.tableStakesState.tableStack === 500}
+    label: Re-buy restores the table stack to the fixed buy-in

@@ -7,12 +7,13 @@ import {
   getWalletBalance,
   findTransactionByOperationKey,
 } from "../wallet/ledger";
-import { DEV_BOT_AUTH_PREFIX } from "./gamesShared";
+import { DEV_BOT_AUTH_PREFIX, AI_DEALER_PLAYER_ID } from "./gamesShared";
 import { settleGameHandler } from "./gamesSettlement";
 
 const HUMAN_1 = "human-user-1";
 const HUMAN_2 = "human-user-2";
 const BOT_USER = `${DEV_BOT_AUTH_PREFIX}bot:room:1`;
+const AI_DEALER = AI_DEALER_PLAYER_ID;
 
 type SeedOptions = {
   economyMode?: "balance" | "nonBalance";
@@ -99,7 +100,24 @@ async function seedHands(
         createdAt: now,
         updatedAt: now,
       });
+      // Mirror the seat-lifecycle invariant: after betting, a seat's
+      // persistent table stack equals its uncommitted hand chips. Settlement
+      // then adds the pot share on top of this.
+      const seatId = ctx.db.normalizeId("players", hand.playerId);
+      if (seatId) await ctx.db.patch(seatId, { tableStack: hand.chips });
     }
+  });
+}
+
+async function getStack(
+  t: ReturnType<typeof convexTest>,
+  playerId: string,
+): Promise<number | undefined> {
+  return await t.query(async (ctx) => {
+    const seatId = ctx.db.normalizeId("players", playerId);
+    if (!seatId) return undefined;
+    const seat = await ctx.db.get(seatId);
+    return seat?.tableStack;
   });
 }
 
@@ -200,27 +218,73 @@ describe("settleGameHandler", () => {
       return await getWalletBalance(ctx, HUMAN_2);
     });
 
-    expect(bal1).toBe(2025); // 1000 + 900 payout + 125 rewards
-    expect(bal2).toBe(1105); // 1000 + 100 payout + 5 showdown
+    // Pot now stays on the seat's table stack; the wallet only receives the
+    // separate gameplay rewards (not the pot).
+    expect(bal1).toBe(1125); // 1000 + 125 rewards (no wallet payout)
+    expect(bal2).toBe(1005); // 1000 + 5 showdown reward
 
+    // Winner's stack = uncommitted chips (300) + full pot (600); loser keeps
+    // their uncommitted 100.
+    expect(await getStack(t, playerIds[0]!)).toBe(900);
+    expect(await getStack(t, playerIds[1]!)).toBe(100);
+
+    // No wallet payout transactions are written in the seat-lifecycle model.
     const tx1 = await t.query(async (ctx) => {
       return await findTransactionByOperationKey(
         ctx,
         `payout:${HUMAN_1}:${ctx.db.normalizeId("games", gameId)}`,
       );
     });
-    expect(tx1).not.toBeNull();
-    expect(tx1!.amount).toBe(900);
-    expect(tx1!.source).toBe("payout");
+    expect(tx1).toBeNull();
+  });
 
-    const tx2 = await t.query(async (ctx) => {
-      return await findTransactionByOperationKey(
-        ctx,
-        `payout:${HUMAN_2}:${ctx.db.normalizeId("games", gameId)}`,
-      );
+  test("scored (non-fold) win credits the word bonus to the wallet", async () => {
+    const t = convexTest(schema);
+
+    const { gameId, playerIds } = await seedRoomAndGame(
+      t,
+      [
+        { authUserId: HUMAN_1, name: "Human 1" },
+        { authUserId: HUMAN_2, name: "Human 2" },
+      ],
+      { economyMode: "balance", buyIn: 500 },
+    );
+
+    await t.mutation(async (ctx) => {
+      await getOrCreateWallet(ctx, HUMAN_1);
+      await getOrCreateWallet(ctx, HUMAN_2);
     });
-    expect(tx2).not.toBeNull();
-    expect(tx2!.amount).toBe(100);
+
+    await seedHands(t, gameId, [
+      { playerId: playerIds[0]!, chips: 300, totalBet: 200 },
+      { playerId: playerIds[1]!, chips: 100, totalBet: 400 },
+    ]);
+    await seedSubmission(t, gameId, playerIds[0]!, 50, 3, 10);
+
+    // Complete WITH a winning score so the production word-bonus path runs:
+    // wordBonus = min(floor(50 * 0.5), 50) = 25.
+    await t.mutation(async (ctx) => {
+      await ctx.db.patch(ctx.db.normalizeId("games", gameId)!, {
+        status: "completed",
+        winnerId: playerIds[0],
+        winningScore: 50,
+        pot: 600,
+        updatedAt: Date.now(),
+      });
+    });
+
+    await t.mutation(async (ctx) => {
+      return await settleGameHandler(ctx, {
+        gameId: ctx.db.normalizeId("games", gameId)!,
+      });
+    });
+
+    const bal1 = await t.query(async (ctx) => getWalletBalance(ctx, HUMAN_1));
+    // 1000 + 125 base + 75 heavy_hitter (score-50 word) + 25 word bonus.
+    // The word bonus (min(floor(50*0.5), 50) = 25) is the production path this
+    // test exists to cover. Pot stays on the stack.
+    expect(bal1).toBe(1225);
+    expect(await getStack(t, playerIds[0]!)).toBe(900); // 300 chips + 600 pot
   });
 
   test("human losers receive their remaining table chips", async () => {
@@ -257,10 +321,13 @@ describe("settleGameHandler", () => {
       return await getWalletBalance(ctx, HUMAN_2);
     });
 
-    expect(bal2).toBe(1205); // 1000 + 200 payout + 5 showdown
+    // Loser's uncommitted chips stay on the seat, not the wallet.
+    expect(bal2).toBe(1005); // 1000 + 5 showdown reward
+    expect(await getStack(t, playerIds[1]!)).toBe(200); // uncommitted chips
+    expect(await getStack(t, playerIds[0]!)).toBe(800); // 450 chips + 350 pot
   });
 
-  test("bot chips disappear after settlement", async () => {
+  test("bot seats keep chips on their stack, never touch a wallet", async () => {
     const t = convexTest(schema);
 
     const { gameId, playerIds } = await seedRoomAndGame(
@@ -300,7 +367,50 @@ describe("settleGameHandler", () => {
     const humanBalance = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, HUMAN_1);
     });
-    expect(humanBalance).toBe(1725); // 1000 + 600 payout + 125 rewards
+    // Human winner: wallet gets rewards only; the 300 pot goes to the stack.
+    expect(humanBalance).toBe(1125); // 1000 + 125 rewards
+    expect(await getStack(t, playerIds[0]!)).toBe(600); // 300 chips + 300 pot
+    // Bot's uncommitted chips persist on its seat (no wallet involved).
+    expect(await getStack(t, playerIds[1]!)).toBe(400);
+  });
+
+  test("AI_DEALER pot is an intentional house sink (chips burned, no seat)", async () => {
+    // The synthetic AI_DEALER participant has no seat row, so a pot it wins is
+    // burned by awardPotToStack rather than paid out. This documents that
+    // deliberate behavior: conservation holds across real seats + wallets, not
+    // across every hand. Do NOT "fix" this into a credit without a decision.
+    const t = convexTest(schema);
+
+    const { gameId, playerIds } = await seedRoomAndGame(
+      t,
+      [{ authUserId: HUMAN_1, name: "Human 1" }],
+      { economyMode: "balance", buyIn: 500 },
+    );
+
+    await t.mutation(async (ctx) => {
+      await getOrCreateWallet(ctx, HUMAN_1);
+    });
+
+    // Human folds; the seatless AI_DEALER is the sole remaining "winner".
+    await seedHands(t, gameId, [
+      { playerId: playerIds[0]!, chips: 200, totalBet: 300, hasFolded: true },
+      { playerId: AI_DEALER, chips: 0, totalBet: 300 },
+    ]);
+
+    await completeGame(t, gameId, AI_DEALER, 600);
+
+    const result = await t.mutation(async (ctx) => {
+      return await settleGameHandler(ctx, {
+        gameId: ctx.db.normalizeId("games", gameId)!,
+      });
+    });
+    expect(result.ok).toBe(true);
+
+    // The human keeps only their uncommitted stack; the AI_DEALER's 600 pot is
+    // burned (no seat to receive it) and no wallet is credited the pot.
+    expect(await getStack(t, playerIds[0]!)).toBe(200);
+    const bal = await t.query(async (ctx) => getWalletBalance(ctx, HUMAN_1));
+    expect(bal).toBe(1000); // starter only — folded human earns no rewards here
   });
 
   test("duplicate settlement calls are duplicate-safe", async () => {
@@ -345,7 +455,9 @@ describe("settleGameHandler", () => {
     const balance = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, HUMAN_1);
     });
-    expect(balance).toBe(2025); // 1000 + 900 payout + 125 rewards, not doubled
+    expect(balance).toBe(1125); // 1000 + 125 rewards, not doubled
+    // Stack keeps the single pot award (not doubled by the second settle).
+    expect(await getStack(t, playerIds[0]!)).toBe(900);
   });
 
   test("tied winners split the pot equally", async () => {
@@ -388,8 +500,11 @@ describe("settleGameHandler", () => {
       return await getWalletBalance(ctx, HUMAN_2);
     });
 
-    expect(bal1).toBe(1700); // 1000 + 500 payout + 125 rewards + 75 heavy_hitter
-    expect(bal2).toBe(1700);
+    expect(bal1).toBe(1200); // 1000 + 125 rewards + 75 heavy_hitter (no payout)
+    expect(bal2).toBe(1200);
+    // Each tied winner: uncommitted 200 + half the 600 pot.
+    expect(await getStack(t, playerIds[0]!)).toBe(500);
+    expect(await getStack(t, playerIds[1]!)).toBe(500);
   });
 
   test("split-pot remainders use deterministic seat order", async () => {
@@ -441,9 +556,14 @@ describe("settleGameHandler", () => {
       return await getWalletBalance(ctx, HUMAN_3);
     });
 
-    expect(bal1).toBe(1701); // 1000 + 501 payout + 125 rewards + 75 heavy_hitter
-    expect(bal2).toBe(1701);
-    expect(bal3).toBe(1700); // 1000 + 500 payout + 125 rewards + 75 heavy_hitter
+    // Wallet gets rewards only; the pot (with its remainder) lands on stacks.
+    expect(bal1).toBe(1200); // 1000 + 125 rewards + 75 heavy_hitter
+    expect(bal2).toBe(1200);
+    expect(bal3).toBe(1200);
+    // Remainder follows deterministic seat order: seats 0 and 1 get the extra.
+    expect(await getStack(t, playerIds[0]!)).toBe(501);
+    expect(await getStack(t, playerIds[1]!)).toBe(501);
+    expect(await getStack(t, playerIds[2]!)).toBe(500);
   });
 
   test("no winner: refund remaining chips and split pot among humans", async () => {
@@ -483,8 +603,12 @@ describe("settleGameHandler", () => {
       return await getWalletBalance(ctx, HUMAN_2);
     });
 
-    expect(bal1).toBe(1555); // 1000 + 550 payout + 5 showdown
-    expect(bal2).toBe(1455); // 1000 + 450 payout + 5 showdown
+    // No winner: pot is split among humans onto their stacks; wallet gets
+    // only the showdown reward.
+    expect(bal1).toBe(1005); // 1000 + 5 showdown reward
+    expect(bal2).toBe(1005); // 1000 + 5 showdown reward
+    expect(await getStack(t, playerIds[0]!)).toBe(550); // 300 chips + 250 pot
+    expect(await getStack(t, playerIds[1]!)).toBe(450); // 200 chips + 250 pot
   });
 
   test("non-balance game marks settled without wallet transactions", async () => {
@@ -667,7 +791,10 @@ describe("settleGameHandler", () => {
     const winnerBalance = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, HUMAN_1);
     });
-    expect(winnerBalance).toBe(2120); // 2000 payout + 120 (hand_win + daily_first_win, no hand_complete)
+    // Wallet gets rewards only (hand_win + daily_first_win); the pot goes to
+    // the winner's stack.
+    expect(winnerBalance).toBe(1120); // 1000 + 120 rewards
+    expect(await getStack(t, playerIds[0]!)).toBe(1000); // 400 chips + 600 pot
 
     const loserTx = await t.query(async (ctx) => {
       return await findTransactionByOperationKey(
@@ -678,7 +805,7 @@ describe("settleGameHandler", () => {
     expect(loserTx).toBeNull();
   });
 
-  test("every human with positive payout receives a separate transaction", async () => {
+  test("every seat with chips keeps a positive stack; no wallet payout tx", async () => {
     const t = convexTest(schema);
 
     const { gameId, playerIds } = await seedRoomAndGame(
@@ -719,6 +846,12 @@ describe("settleGameHandler", () => {
     expect(payouts.length).toBe(3);
     expect(payouts.every((p) => p.amount > 0)).toBe(true);
 
+    // Winner's stack = 300 chips + 1000 pot; losers keep their uncommitted
+    // chips (150 / 50). None of this touches the wallet.
+    expect(await getStack(t, playerIds[0]!)).toBe(1300);
+    expect(await getStack(t, playerIds[1]!)).toBe(150);
+    expect(await getStack(t, playerIds[2]!)).toBe(50);
+
     for (const authUserId of [HUMAN_1, "human-user-2", "human-user-3"]) {
       const tx = await t.query(async (ctx) => {
         return await findTransactionByOperationKey(
@@ -726,8 +859,7 @@ describe("settleGameHandler", () => {
           `payout:${authUserId}:${ctx.db.normalizeId("games", gameId)}`,
         );
       });
-      expect(tx).not.toBeNull();
-      expect(tx!.source).toBe("payout");
+      expect(tx).toBeNull();
     }
   });
 

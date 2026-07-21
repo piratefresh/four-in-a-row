@@ -8,7 +8,7 @@ export const GAME_RULES = {
   overview: 'A multiplayer word game where players use letter tiles from their hand and shared community tiles to build words.',
 
   gameplay: {
-    initialHand: 'Small and big blinds post, then each player receives 2 private tiles',
+    initialHand: 'Each player receives 2 private tiles before betting begins',
     communityTiles: 'Shared tiles are revealed in stages (flop, turn, river) similar to poker',
     stages: ['preflop', 'flop', 'turn', 'river', 'reveal', 'showdown'],
     revealSchedule: {
@@ -47,7 +47,8 @@ export const GAME_RULES = {
 export function getGameRulesPrompt(): string {
   return `Game Rules Summary:
 - Multiplayer word game combining poker-style betting with Scrabble-style word building
-- Blinds post before each hand, then every player gets 2 private tiles
+- Every player gets 2 private tiles before the first betting action
+- There are no antes, blinds, or other forced bets
 - Pre-flop betting uses only private-tile information
 - Community tiles reveal 3 on the flop, 1 on the turn, and 1 on the river
 - Players build words using private tiles, community tiles, or any mix

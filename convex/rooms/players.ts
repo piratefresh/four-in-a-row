@@ -17,8 +17,55 @@ import { createOpenRoom } from "./lifecycle";
 import { PLAYER_NAME_MAX_LENGTH, ROOM_MAX_PLAYERS } from "../constants";
 import { buildDevBotAuthUserId, getBotCharacterForSeatIndex } from "../aiStrategy";
 import { AI_DIFFICULTY, type AIDifficulty } from "../aiBettingConstants";
-import type { RoomConfig } from "../gameConfig";
+import { getRoomEconomyMode, type RoomConfig } from "../gameConfig";
 import { recordRoomCreated } from "../activityFeed";
+import { openTableSession, cashOutTableSession } from "../games/tableSession";
+import { forfeitHandOnLeave } from "../games/gamesProgression";
+import { DEV_BOT_AUTH_PREFIX } from "../games/gamesShared";
+import { getWalletBalance } from "../wallet/ledger";
+
+/**
+ * Seat-session fields to seed on a brand-new bot seat. Bots have no wallet, so
+ * a balance table seeds their stack directly with no debit; non-balance tables
+ * leave the fields unset (chips are minted per hand). Table-stakes epic M1.
+ */
+function botSeatSessionFields(room: Doc<"rooms">) {
+  if (getRoomEconomyMode(room) === "balance" && room.buyIn) {
+    return { tableStack: room.buyIn, tableSessionVersion: 1, rebuyCount: 0 };
+  }
+  return {};
+}
+
+/**
+ * Charge a freshly-seated human their fixed buy-in and seed the seat's table
+ * stack. No-op for non-balance tables. Throws `INSUFFICIENT_FUNDS` (with a
+ * seat-aware message) before any debit when the wallet cannot cover the buy-in.
+ * Table-stakes epic M1.
+ */
+async function chargeBuyInForNewSeat(
+  ctx: MutationCtx,
+  room: Doc<"rooms">,
+  playerId: Id<"players">,
+  authUserId: string,
+  previousSessionVersion?: number,
+) {
+  if (getRoomEconomyMode(room) !== "balance" || !room.buyIn) return;
+
+  const balance = await getWalletBalance(ctx, authUserId);
+  if (balance === null || balance < room.buyIn) {
+    throw new ConvexError({
+      code: "INSUFFICIENT_FUNDS",
+      message: `You need ${room.buyIn} coins to buy in to this table.`,
+    });
+  }
+
+  await openTableSession(ctx, {
+    playerId,
+    authUserId,
+    buyIn: room.buyIn,
+    previousSessionVersion,
+  });
+}
 
 // ==================== Leave Room ====================
 
@@ -38,6 +85,24 @@ export async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
       wasAlreadyLeft: true,
       roomStatus: room.status,
     };
+  }
+
+  // Table-stakes cash-out (M1.5). Forfeit any live hand (committed bets stay in
+  // the pot), then credit the uncommitted table stack back to the wallet. The
+  // seat is charged again only if it rejoins as a new session. Non-balance
+  // seats have no table stack, so both calls are safe no-ops there.
+  let cashedOut = 0;
+  if (getRoomEconomyMode(room) === "balance") {
+    await forfeitHandOnLeave(ctx, room._id, String(player._id));
+    const fresh = await ctx.db.get(player._id);
+    if (fresh) {
+      const isBot = fresh.authUserId?.startsWith(DEV_BOT_AUTH_PREFIX) ?? false;
+      const { creditedAmount } = await cashOutTableSession(ctx, {
+        player: fresh,
+        isBot,
+      });
+      cashedOut = creditedAmount;
+    }
   }
 
   const now = Date.now();
@@ -66,6 +131,7 @@ export async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
       roomId: room._id,
       wasAlreadyLeft: false,
       roomStatus: "closed",
+      cashedOut,
     };
   }
 
@@ -89,6 +155,7 @@ export async function leavePlayer(ctx: MutationCtx, player: Doc<"players">) {
     roomId: room._id,
     wasAlreadyLeft: false,
     roomStatus: "open",
+    cashedOut,
   };
 }
 
@@ -155,6 +222,10 @@ export async function joinAuthenticatedUserToRoom(
     lastSeenAt: now,
   });
 
+  // Fixed buy-in charged once, on confirmed join (table-stakes epic M1). A
+  // brand-new seat has no prior session version, so this opens session v1.
+  await chargeBuyInForNewSeat(ctx, room, playerId, authUserId);
+
   await ctx.db.patch(room._id, {
     lastActiveAt: now,
     hostPlayerId: isHost ? playerId : room.hostPlayerId,
@@ -212,6 +283,7 @@ export async function syncOfflineBotsToRoom(
       status: "active",
       readyStatus: true,
       lastSeenAt: now,
+      ...botSeatSessionFields(targetRoom),
     });
     botsAdded += 1;
   }
@@ -266,6 +338,7 @@ export async function addDevBotsToRoom(
       status: "active",
       readyStatus: true,
       lastSeenAt: now,
+      ...botSeatSessionFields(room),
     });
     created += 1;
   }
@@ -335,6 +408,13 @@ export async function createRoomWithHostOptions(
     status: "active",
     lastSeenAt: now,
   });
+
+  // Creating a balance table performs the same confirmed buy-in for its host
+  // (table-stakes epic M1).
+  const createdRoom = await ctx.db.get(roomId);
+  if (createdRoom) {
+    await chargeBuyInForNewSeat(ctx, createdRoom, playerId, authUserId);
+  }
 
   await ctx.db.patch(roomId, { hostPlayerId: playerId });
 
@@ -457,6 +537,15 @@ export async function rejoinRoomMember(
       isHost: activePlayers.length === 0 || room.hostPlayerId === reusablePlayer._id,
       lastSeenAt: now,
     });
+    // Reactivating a previously-left seat is a NEW table session → charge the
+    // buy-in again, incrementing the session version (table-stakes epic M1).
+    await chargeBuyInForNewSeat(
+      ctx,
+      room,
+      reusablePlayer._id,
+      authUserId,
+      reusablePlayer.tableSessionVersion,
+    );
     await ctx.db.patch(room._id, {
       status: "open",
       lastActiveAt: now,
@@ -485,6 +574,9 @@ export async function rejoinRoomMember(
     readyStatus: false,
     lastSeenAt: now,
   });
+
+  // Fresh seat via rejoin → confirmed buy-in (table-stakes epic M1).
+  await chargeBuyInForNewSeat(ctx, room, createdPlayerId, authUserId);
 
   await ctx.db.patch(room._id, {
     status: "open",

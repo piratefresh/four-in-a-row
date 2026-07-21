@@ -66,6 +66,12 @@ async function seedBalanceRoomWithGame(
         status: "active",
         readyStatus: true,
         lastSeenAt: Date.now(),
+        // In the seat-lifecycle economy the buy-in is charged on join, seeding
+        // the seat's table stack. These tests seed players directly, so mirror
+        // that here so balance hands have eligible, chipped seats to deal.
+        tableStack: buyIn,
+        tableSessionVersion: 1,
+        rebuyCount: 0,
       });
     });
     playerIds.push(String(playerId));
@@ -227,10 +233,9 @@ describe("game lifecycle integration (STO-233)", () => {
     expect(game!.status).toBe("active");
   });
 
-  test("validation failure leaves every wallet unchanged (assert before debit)", async () => {
+  test("starting a hand never debits wallets (buy-in happens on join)", async () => {
     const t = convexTest(schema);
 
-    // Two humans: HUMAN_1 has enough, HUMAN_2 does not.
     const { gameId, userIds } = await seedBalanceRoomWithGame(
       t,
       [
@@ -240,8 +245,9 @@ describe("game lifecycle integration (STO-233)", () => {
       500,
     );
 
-    await seedWallet(t, userIds[0]!, 1000); // enough
-    await seedWallet(t, userIds[1]!, 200); // not enough for 500 buy-in
+    // Wallets already spent their buy-in on join; chips live on the seat stack.
+    await seedWallet(t, userIds[0]!, 1000);
+    await seedWallet(t, userIds[1]!, 1000);
 
     const balance1Before = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, userIds[0]!);
@@ -251,13 +257,13 @@ describe("game lifecycle integration (STO-233)", () => {
     });
 
     const { internalStartGameHandler } = await import("./gamesSetup");
-    await expect(
-      t.mutation(async (ctx) => {
-        return await internalStartGameHandler(ctx, { gameId });
-      }),
-    ).rejects.toMatchObject({ data: { code: "INSUFFICIENT_FUNDS" } });
+    const result = await t.mutation(async (ctx) => {
+      return await internalStartGameHandler(ctx, { gameId });
+    });
+    expect(result.ok).toBe(true);
 
-    // Neither wallet should be debited — the assert ran before any debit.
+    // Neither wallet is debited at hand start — the hand deals from the seat's
+    // persistent table stack, not the wallet.
     const balance1After = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, userIds[0]!);
     });
@@ -267,21 +273,14 @@ describe("game lifecycle integration (STO-233)", () => {
     expect(balance1After).toBe(balance1Before);
     expect(balance2After).toBe(balance2Before);
 
-    // No buy-in transaction should exist for either player.
+    // No buy-in transaction is written keyed to the game.
     const tx1 = await t.query(async (ctx) => {
       return await findTransactionByOperationKey(
         ctx,
         buildOperationKey(OPERATION_NAMESPACES.buy_in, userIds[0]!, String(gameId)),
       );
     });
-    const tx2 = await t.query(async (ctx) => {
-      return await findTransactionByOperationKey(
-        ctx,
-        buildOperationKey(OPERATION_NAMESPACES.buy_in, userIds[1]!, String(gameId)),
-      );
-    });
     expect(tx1).toBeNull();
-    expect(tx2).toBeNull();
   });
 
   test("previous unsettled game blocks new balance-game start", async () => {
@@ -352,11 +351,12 @@ describe("game lifecycle integration (STO-233)", () => {
     });
     expect(r2.ok).toBe(false);
 
-    // Balance should reflect a single buy-in debit.
+    // Starting a hand never debits the wallet (buy-in is charged on join),
+    // so the wallet is untouched regardless of how many starts are attempted.
     const balance = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, userIds[0]!);
     });
-    expect(balance).toBe(500); // 1000 - 500 buy-in, once
+    expect(balance).toBe(1000);
   });
 
   test("public and internal start paths produce the same result shape", async () => {

@@ -89,8 +89,8 @@ Word Poker is a multiplayer word game combining poker-style betting with strateg
 Players receive private letter tiles and share community tiles, betting on their ability to form high-scoring words.
 
 ## Game Flow
-1. Blinds & Deal: small blind and big blind post forced bets; each player receives 2 private tiles
-2. Pre-Flop: bet using only your 2 private tiles
+1. Deal: each player receives 2 private tiles before any betting occurs
+2. Pre-Flop: the first player may check or bet using only their 2 private tiles
 3. Flop: 3 community tiles revealed -> Betting round
 4. Turn: 1 more community tile (4 total) -> Betting round
 5. River: 1 more community tile (5 total) -> Last betting round
@@ -196,7 +196,7 @@ All available: ${vars.allTilesAvailable}
 ${vars.strategyHint}
 ${vars.believesPlayer === true ? "\n## Mental State\nYou are distracted by the player's bold claims. Your focus is slightly impaired — you might not find the absolute best word." : ""}${vars.believesPlayer === false ? "\n## Mental State\nYou are confident the player is bluffing. You feel energized and focused on finding a strong word." : ""}
 
-Build the best word you can from the available tiles. Prefer common, familiar English words over obscure dictionary words when scores are close. The word must be 2-7 letters and a valid English word (CSW24 dictionary). Using all 7 tiles gives a +10 bonus. If your reasoning mentions candidate words or the submitted word, wrap only the word in curly brackets like {TRAIN}.`;
+Build the best word you can from the available tiles. Prefer common, familiar English words over obscure dictionary words when scores are close. The word must be 2-7 letters and a valid English word (CSW24 dictionary). Using all 7 tiles gives a +10 bonus. In your reasoning, wrap candidate words and the submitted word in curly brackets like {TRAIN}.`;
   },
 };
 
@@ -247,7 +247,7 @@ Do not include any other text, explanations, or markdown. Only the JSON object.`
 function getStageAdvice(stage: GameStage): string {
   switch (stage) {
     case "preflop":
-      return "Only 2 private tiles are visible. This is a betting round with blinds posted; judge whether to call, raise, or fold before seeing community tiles.";
+      return "Only 2 private tiles are visible. No forced bet has been posted; check for free when no opponent has bet, or decide whether to call, raise, or fold after a bet.";
     case "flop":
       return "3 community tiles now visible (5 total). You can start seeing word potential. If you have a reasonable mix, call to see more tiles. Only fold if your tiles are clearly poor.";
     case "turn":

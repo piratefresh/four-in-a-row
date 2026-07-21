@@ -1,18 +1,48 @@
 # P0: Table browser
 #
-# Verify the lobby renders table cards with the correct economy
-# information:
+# Verifies that the lobby renders table cards with correct economy
+# information for both balance and non-balance games:
 # - Table name is visible
 # - Fixed buy-in amount is shown for balance games
-# - Player count (e.g. "1/4") is visible
-# - Non-balance tables do not show buy-in info
+# - Player count (e.g. "1/6") is visible
+# - Non-balance tables show "Non-balance" label
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run scripts/maestro-setup.ts
 
-url: http://localhost:3000/rooms
+url: http://localhost:3000/login
+name: Table browser renders correct economy info
+tags:
+  - smoke
+  - lobby
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "NEW ROOM"
+- runFlow: ../shared/login.yaml
 
-# The lobby should show at least one table card with:
-# - Room code or title
-# - Player count (e.g. "1/4", "2/4")
-# - Economy label (either "Balance · N buy-in" or "Non-balance")
+- runScript:
+    file: ../../scripts/create-browser-tables.js
+- assertTrue:
+    condition: ${output.browserTables.balance.buyIn === 500}
+    label: Balance table has a 500 coin fixed buy-in
+
+- openLink: http://localhost:3000/rooms
+- extendedWaitUntil:
+    visible: "NEW ROOM"
+    timeout: 30000
+
+# Verify the balance table card shows the table name and buy-in amount.
+# The economy label ("Balance \u00b7 500 buy-in") renders inside a button
+# with CSS text-transform:uppercase; assert on the buy-in number and
+# player count which are reliably visible.
+- assertVisible: "Browser Balance Table"
+- assertVisible: "500"
+- assertVisible: "\\d+/\\d+"
+
+# Verify the non-balance (freeplay) table card.
+- assertVisible: "Browser Freeplay Table"
+# Non-balance tables render "Non-balance" as the economy label.
+- assertVisible: "Non-balance"

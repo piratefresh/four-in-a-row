@@ -1,33 +1,105 @@
-# P0: Successful fixed buy-in
+# STO-249: fixed buy-in and table-stakes lifecycle
+# Linear: https://linear.app/magnus-adhd-brain/issue/STO-249/feature-table-buy-in-system-and-table-stakes
 #
-# Verifies the complete buy-in flow for a balance game:
-# 1. Wallet and buy-in are displayed before joining
-# 2. Confirming the join deducts exactly the buy-in amount
-# 3. The initial table stack equals the buy-in
-# 4. Reopening/reconnecting does not charge again
+# Acceptance slice:
+#   table card -> fixed-buy-in confirmation -> exact wallet debit/table stack
+#   -> no forced bets -> reconnect without a second debit -> leave/cash-out.
 #
-# Precondition: wallet is seeded at exactly 1,000 coins.
-# Table buy-in is 500.
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run scripts/maestro-setup.ts
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: STO-249 fixed buy-in and table stakes
+tags:
+  - economy
+  - table-stakes
+  - sto-249
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
 
-# Step 1: Navigate to wallet page and verify pre-join balance
-- tapOn: "Wallet"
+- runScript:
+    file: ../../scripts/setup-table-stakes.js
+- assertTrue:
+    condition: ${output.tableStakes.initialWallet === 1000}
+    label: Wallet fixture starts at exactly 1,000 coins
+- assertTrue:
+    condition: ${output.tableStakes.buyIn === 500}
+    label: Table fixture has one fixed 500 coin buy-in
+
+# The browser card must show a single fixed amount, not a range or blinds.
+- openLink: http://localhost:3000/rooms
+- extendedWaitUntil:
+    visible: "STO-249 Table Stakes"
+    timeout: 30000
+- assertVisible: ".*500.*"
+- tapOn: "STO-249 Table Stakes"
+
+# Joining requires an explicit confirmation with wallet and fixed buy-in.
+- assertVisible: "Wallet balance"
+- assertVisible: "Balance after join"
+- tapOn: "Join table"
+- assertVisible: "Confirm your buy-in"
+- assertVisible: "Fixed buy-in"
 - assertVisible: "1,000 coins"
-- tapOn: "Play"
+- assertVisible: "500 coins"
+- assertVisible: "Confirm & Join"
+- tapOn: "Confirm & Join"
 
-# Step 2: Join a balance table
-# The E2E setup creates a table with buyIn = 500.
-# Click the table card to join.
-# A buy-in confirmation should appear showing the 500 buy-in.
+# The confirmed amount leaves the wallet and becomes the table-only stack.
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- assertVisible: "E2E Test Player"
+- assertVisible: ".*500.*"
+- tapOn: "I'm Ready!"
 
-# Step 3: Confirm buy-in
-# Check that confirm is enabled and pressing it deducts 500.
+# Cards are dealt before action and there are no blinds/antes/forced bets.
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 60000
+- assertVisible: "CHECK"
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 500}
+    label: Joining deducts exactly the fixed buy-in from the wallet
+- assertTrue:
+    condition: ${output.tableStakesState.tableStack === 500}
+    label: The fixed buy-in creates an equal 500 coin table stack
+- assertTrue:
+    condition: ${output.tableStakesState.pot === 0 && output.tableStakesState.currentBet === 0}
+    label: The hand starts without forced bets
 
-# Step 4: Verify post-join state
-# - Wallet should be 500
-# - Table stack should be 500
-# - Reopening should not charge again
+# Reloading/reconnecting to the same seat must not charge a second buy-in.
+- openLink: ${"http://localhost:3000/rooms/" + output.tableStakes.code}
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 30000
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 500}
+    label: Reconnecting does not charge the wallet again
+- assertTrue:
+    condition: ${output.tableStakesState.tableStack === 500}
+    label: Reconnecting preserves the table stack
+
+# Leaving returns the uncommitted stack to the wallet immediately.
+- tapOn:
+    id: "leave-room-button"
+- extendedWaitUntil:
+    visible: "Online Mode|Welcome back"
+    timeout: 30000
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 1000}
+    label: Leaving cashes the remaining table stack back into the wallet
+- assertTrue:
+    condition: ${output.tableStakesState.activeRoomCode === null}
+    label: Leaving frees the player's active table seat

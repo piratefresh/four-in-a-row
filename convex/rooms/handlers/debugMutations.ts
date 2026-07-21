@@ -9,6 +9,8 @@ import { PLAYER_NAME_MAX_LENGTH } from "../../constants";
 import { createOpenRoom } from "../lifecycle";
 import { AI_DIFFICULTY, type AIDifficulty } from "../../aiBettingConstants";
 import { economyModeValidator, roomConfigValidator, DEFAULT_BUY_IN } from "../../gameConfig";
+import { openTableSession, syncSeatStack } from "../../games/tableSession";
+import { scheduleBotTurnIfNeeded } from "../../games/gamesProgression";
 
 const IS_E2E = process.env.E2E_TESTING === "true";
 const E2E_USER_ID = "e2e-test-user";
@@ -137,13 +139,16 @@ export const e2eCreateTestRoom = mutation({
       await ctx.db.patch(existingPlayer._id, { status: "left" });
     }
 
+    const buyIn = args.economyMode === "balance"
+      ? (args.buyIn ?? DEFAULT_BUY_IN)
+      : undefined;
     const { roomId, code, now } = await createOpenRoom(ctx, {
       title: args.roomTitle?.trim() || undefined,
       isBotGame: args.isBotGame ?? args.difficulty !== undefined,
       difficulty: (args.difficulty as AIDifficulty | undefined) ?? AI_DIFFICULTY.MEDIUM,
       config: args.config,
       economyMode: args.economyMode,
-      buyIn: args.economyMode === "balance" ? (args.buyIn ?? DEFAULT_BUY_IN) : undefined,
+      buyIn,
     });
 
     const playerId = await ctx.db.insert("players", {
@@ -157,6 +162,14 @@ export const e2eCreateTestRoom = mutation({
     });
 
     await ctx.db.patch(roomId, { hostPlayerId: playerId });
+
+    if (buyIn !== undefined) {
+      await openTableSession(ctx, {
+        playerId,
+        authUserId,
+        buyIn,
+      });
+    }
 
     const botCount = args.botCount ?? 2;
     const room = await getRoomByCode(ctx, code);
@@ -280,6 +293,93 @@ export const e2eCompleteCurrentHand = mutation({
 });
 
 /**
+ * Commit the same deterministic wager from every active hand. The browser
+ * still completes the hand through the real action API; this helper only
+ * removes bot randomness from the pot amount under test.
+ */
+export const e2eSeedCommittedPot = mutation({
+  args: {
+    gameId: v.string(),
+    amountPerPlayer: v.number(),
+  },
+  handler: async (ctx, args) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eSeedCommittedPot is only available in E2E testing mode.",
+      });
+    }
+
+    const gameId = ctx.db.normalizeId("games", args.gameId);
+    if (!gameId) {
+      throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Invalid game ID." });
+    }
+
+    const game = await ctx.db.get(gameId);
+    if (!game || game.status !== "active") {
+      throw new ConvexError({
+        code: "GAME_NOT_ACTIVE",
+        message: "The game must be in progress before seeding wagers.",
+      });
+    }
+
+    const amount = Math.floor(args.amountPerPlayer);
+    if (!Number.isFinite(args.amountPerPlayer) || amount !== args.amountPerPlayer || amount <= 0) {
+      throw new ConvexError({
+        code: "INVALID_AMOUNT",
+        message: "The committed amount must be a positive whole number.",
+      });
+    }
+
+    if (game.pot !== 0 || game.currentBet !== 0) {
+      throw new ConvexError({
+        code: "POT_NOT_EMPTY",
+        message: "Deterministic wagers can only be seeded before any betting.",
+      });
+    }
+
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", gameId))
+      .collect();
+    const activeHands = hands.filter((hand) => !hand.hasFolded);
+
+    if (activeHands.length !== 2 || activeHands.some((hand) => hand.chips < amount)) {
+      throw new ConvexError({
+        code: "INVALID_HAND_STATE",
+        message: "This fixture requires exactly two funded active hands.",
+      });
+    }
+
+    const now = Date.now();
+    for (const hand of activeHands) {
+      const chips = hand.chips - amount;
+      await ctx.db.patch(hand._id, {
+        chips,
+        betThisRound: amount,
+        totalBet: hand.totalBet + amount,
+        updatedAt: now,
+      });
+      await syncSeatStack(ctx, hand.playerId, chips);
+    }
+
+    const pot = activeHands.length * amount;
+    await ctx.db.patch(gameId, {
+      pot,
+      currentBet: amount,
+      updatedAt: now,
+    });
+
+    return {
+      ok: true,
+      pot,
+      amountPerPlayer: amount,
+      totalTableStacks: activeHands.reduce((sum, hand) => sum + hand.chips - amount, 0),
+    };
+  },
+});
+
+/**
  * Set a player's table stack (chips) for testing purposes.
  */
 export const e2eSetTableStack = mutation({
@@ -311,7 +411,12 @@ export const e2eSetTableStack = mutation({
       throw new ConvexError({ code: "HAND_NOT_FOUND", message: "Player hand not found." });
     }
 
+    // Preserve the seat-lifecycle invariant: during an active balance hand,
+    // players.tableStack === playerHands.chips. Patch both together so this
+    // test helper cannot desync the seat stack from the in-hand chips.
     await ctx.db.patch(hand._id, { chips: args.chips, updatedAt: Date.now() });
+    const seatId = ctx.db.normalizeId("players", args.playerId);
+    if (seatId) await ctx.db.patch(seatId, { tableStack: args.chips });
     return { ok: true, chips: args.chips };
   },
 });
@@ -372,5 +477,77 @@ export const e2eExpirePlayerPresence = mutation({
     // (reapInactivePlayersForRoom uses a 2-minute threshold)
     await ctx.db.patch(player._id, { lastSeenAt: 0 });
     return { ok: true };
+  },
+});
+
+/**
+ * Fast-forward a game directly to the showdown (word-building) phase.
+ * Reveals all community tiles and resets player action state.
+ * Only available in E2E testing mode.
+ */
+export const e2eAdvanceToShowdown = mutation({
+  args: { gameId: v.string() },
+  handler: async (ctx, args) => {
+    if (!IS_E2E) {
+      throw new ConvexError({
+        code: "FORBIDDEN",
+        message: "e2eAdvanceToShowdown is only available in E2E testing mode.",
+      });
+    }
+
+    const gameId = ctx.db.normalizeId("games", args.gameId);
+    if (!gameId) {
+      throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Invalid game ID." });
+    }
+
+    const game = await ctx.db.get(gameId);
+    if (!game) {
+      throw new ConvexError({ code: "GAME_NOT_FOUND", message: "Game not found." });
+    }
+
+    if (game.status !== "active") {
+      throw new ConvexError({ code: "INVALID_GAME_STATUS", message: "Game is not active." });
+    }
+
+    const hands = await ctx.db
+      .query("playerHands")
+      .withIndex("by_game", (q) => q.eq("gameId", gameId))
+      .collect();
+
+    const now = Date.now();
+
+    // Reveal all community tiles.
+    const communityTiles = game.communityTiles.map((tile) => ({
+      ...tile,
+      revealed: true,
+    }));
+
+    // Reset player action state for the new phase.
+    for (const hand of hands) {
+      if (!hand.hasFolded) {
+        await ctx.db.patch(hand._id, {
+          hasActed: false,
+          betThisRound: 0,
+          lastAction: undefined,
+          updatedAt: now,
+        });
+      }
+    }
+
+    await ctx.db.patch(gameId, {
+      stage: "showdown",
+      communityTiles,
+      currentBet: 0,
+      currentPlayerIndex: 0,
+      raisesThisRound: 0,
+      showdownStartedAt: now,
+      updatedAt: now,
+    });
+
+    // Match the production stage transition so automated participants submit
+    // and the showdown resolution timer is armed.
+    await scheduleBotTurnIfNeeded(ctx, gameId);
+
+    return { ok: true, stage: "showdown" };
   },
 });

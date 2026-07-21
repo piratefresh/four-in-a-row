@@ -78,6 +78,15 @@ export const appTables = {
     status: v.union(v.literal("active"), v.literal("left")),
     readyStatus: v.optional(v.boolean()),
     lastSeenAt: v.number(),
+    // ── Table-stakes seat-lifecycle economy (table-stakes epic, M1) ──
+    // Current uncommitted chips for this seat/table session. Optional for a
+    // safe add; treated as the canonical stack in balance mode.
+    tableStack: v.optional(v.number()),
+    // Increments each time a cashed-out seat buys in again. Feeds
+    // duplicate-safe wallet operation keys.
+    tableSessionVersion: v.optional(v.number()),
+    // Increments on each re-buy. Feeds duplicate-safe wallet operation keys.
+    rebuyCount: v.optional(v.number()),
   })
     .index("roomId", ["roomId"])
     .index("roomId_status", ["roomId", "status"])
@@ -110,6 +119,11 @@ export const appTables = {
     currentBet: v.number(),
     currentPlayerIndex: v.number(),
     dealerButtonIndex: v.optional(v.number()),
+    // Seat index of the dealer for THIS hand, persisted so the next hand can
+    // rotate the button by seat identity (immune to players re-seating on
+    // rejoin). AI dealer / seatless dealer stores a MAX sentinel. Table-stakes
+    // epic M1.
+    dealerSeatIndex: v.optional(v.number()),
     smallBlindIndex: v.optional(v.number()),
     bigBlindIndex: v.optional(v.number()),
     raisesThisRound: v.optional(v.number()),
@@ -151,12 +165,15 @@ export const appTables = {
     totalBet: v.number(),
     hasActed: v.boolean(),
     hasFolded: v.boolean(),
+    // Reserved for M2 (All In + side pots); safe to add now.
+    isAllIn: v.optional(v.boolean()),
     lastAction: v.optional(
       v.union(
         v.literal("check"),
         v.literal("call"),
         v.literal("raise"),
         v.literal("fold"),
+        v.literal("allIn"),
       ),
     ),
     createdAt: v.number(),

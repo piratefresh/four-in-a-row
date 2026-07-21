@@ -21,6 +21,10 @@ export interface E2EProvisioningResult {
   error?: string;
 }
 
+export type E2EPreflightResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
 // ---------------------------------------------------------------------------
 // Convex API helpers
 // ---------------------------------------------------------------------------
@@ -76,6 +80,39 @@ export async function verifyConvexReachable(): Promise<boolean> {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+export async function verifyConvexE2EMode(): Promise<E2EPreflightResult> {
+  try {
+    // This guarded fixture is also the reset we need before provisioning.
+    await convexMutation("rooms:e2eResetTestState", {});
+    return { ok: true };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    const e2eDisabled = /only available in e2e testing mode/i.test(detail);
+    return {
+      ok: false,
+      error: e2eDisabled
+        ? "Convex is running without E2E_TESTING=true. Restart it with: bun run convex:dev:e2e"
+        : `Unable to verify Convex E2E mode: ${detail}`,
+    };
+  }
+}
+
+export async function verifyFrontendReachable(): Promise<E2EPreflightResult> {
+  try {
+    const res = await fetch(`${BASE_URL}/login`);
+    if (res.ok) return { ok: true };
+    return {
+      ok: false,
+      error: `Frontend login page returned HTTP ${res.status}. Restart it with: bun run dev:maestro`,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: `Frontend is not reachable at ${BASE_URL}. Start it with: bun run dev:maestro`,
+    };
   }
 }
 
@@ -239,11 +276,31 @@ export async function provisionE2E(): Promise<E2EProvisioningResult> {
   // 1. Verify Convex
   const reachable = await verifyConvexReachable();
   if (!reachable) {
-    return { ok: false, runId, walletBalance: null, error: "Convex not reachable" };
+    return {
+      ok: false,
+      runId,
+      walletBalance: null,
+      error:
+        "Convex is not reachable at http://127.0.0.1:3210. Start it with: bun run convex:dev:e2e",
+    };
   }
   console.log("[e2e provisioning] Convex reachable");
 
-  // 2. Ensure account
+  // 2. Verify guarded fixtures before making account requests.
+  const e2eMode = await verifyConvexE2EMode();
+  if (!e2eMode.ok) {
+    return { ok: false, runId, walletBalance: null, error: e2eMode.error };
+  }
+  console.log("[e2e provisioning] Convex E2E mode enabled");
+
+  // 3. Verify the frontend/auth server before attempting account requests.
+  const frontend = await verifyFrontendReachable();
+  if (!frontend.ok) {
+    return { ok: false, runId, walletBalance: null, error: frontend.error };
+  }
+  console.log("[e2e provisioning] Frontend reachable");
+
+  // 4. Ensure account
   await ensureE2EAccount();
   console.log("[e2e provisioning] E2E account ready");
 

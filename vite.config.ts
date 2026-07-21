@@ -29,14 +29,13 @@ const config = defineConfig({
   },
   plugins: [
     devtools(),
-    // // Skip Cloudflare SSR sandbox during E2E tests so the server can
-    // // connect to local Convex via WebSocket (Workers sandbox can't reach localhost).
-    // ...(isE2E ? [] : [cloudflare({ viteEnvironment: { name: "ssr" } })]),
+    // Skip Cloudflare SSR sandbox during E2E tests so the server can
+    // connect to local Convex via WebSocket (Workers sandbox can't reach localhost).
+    ...(process.env.E2E_TESTING === "true" ? [] : [cloudflare({ viteEnvironment: { name: "ssr" } })]),
     // this is the plugin that enables path aliases
     viteTsConfigPaths({
       projects: ["./tsconfig.json"],
     }),
-    cloudflare({ viteEnvironment: { name: "ssr" } }),
     tailwindcss(),
     tanstackStart(),
     viteReact(),

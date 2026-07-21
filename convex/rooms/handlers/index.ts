@@ -13,6 +13,7 @@ export {
   heartbeat,
   heartbeatByCode,
   toggleReady,
+  rebuy,
 } from "./playerMutations";
 
 export {
@@ -29,12 +30,16 @@ export {
   e2eCreateTestRoom,
   e2eResetTestState,
   e2eCompleteCurrentHand,
+  e2eSeedCommittedPot,
   e2eSetTableStack,
   e2eSetPlayerDisconnected,
   e2eExpirePlayerPresence,
+  e2eAdvanceToShowdown,
 } from "./debugMutations";
+
 export {
   runCronCleanup,
+  sweepDisconnectedLeases,
 } from "./maintenanceMutations";
 
 export {

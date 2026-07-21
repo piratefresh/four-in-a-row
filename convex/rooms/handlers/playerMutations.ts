@@ -11,6 +11,9 @@ import {
 } from "../helpers";
 import { internalStartGameHandler } from "../../games/gamesSetup";
 import { requireVerifiedUser } from "../../verifyUser";
+import { getRoomEconomyMode } from "../../gameConfig";
+import { rebuyTableSession } from "../../games/tableSession";
+import { getWalletBalance } from "../../wallet/ledger";
 
 export const heartbeat = mutation({
   args: {},
@@ -116,7 +119,17 @@ export const toggleReady = mutation({
       throw new ConvexError({ code: "PLAYER_NOT_FOUND", message: "You are not a member of this room." });
     }
 
+    const isBalance = getRoomEconomyMode(room) === "balance";
     const newReadyStatus = !player.readyStatus;
+
+    // A busted seat cannot ready up until it re-buys (table-stakes epic M1.4).
+    if (newReadyStatus && isBalance && (player.tableStack ?? 0) === 0) {
+      throw new ConvexError({
+        code: "REBUY_REQUIRED",
+        message: "You are out of chips. Re-buy to keep playing.",
+      });
+    }
+
     const now = Date.now();
     await ctx.db.patch(player._id, { readyStatus: newReadyStatus });
     await ctx.db.patch(room._id, { lastActiveAt: now });
@@ -126,7 +139,13 @@ export const toggleReady = mutation({
       .withIndex("roomId_status", (q) => q.eq("roomId", room._id).eq("status", "active"))
       .collect();
 
-    const allReady = allPlayers.length >= 2 && allPlayers.every((p) => p.readyStatus);
+    // Busted seats sit out, so the ready gate only counts seats with chips.
+    // Non-balance tables count every active seat as before.
+    const readyGatePlayers = isBalance
+      ? allPlayers.filter((p) => (p.tableStack ?? 0) > 0)
+      : allPlayers;
+    const allReady =
+      readyGatePlayers.length >= 2 && readyGatePlayers.every((p) => p.readyStatus);
 
     if (allReady && newReadyStatus) {
       const game = await ctx.db
@@ -140,5 +159,87 @@ export const toggleReady = mutation({
     }
 
     return { readyStatus: newReadyStatus };
+  },
+});
+
+/**
+ * Re-buy the fixed buy-in on a balance table (table-stakes epic M1.4). Only a
+ * busted, actively-seated player, between hands, with a wallet that can cover
+ * the full buy-in. The amount is always `room.buyIn` — never a client value.
+ */
+export const rebuy = mutation({
+  args: { code: v.string() },
+  handler: async (ctx, args) => {
+    const code = normalizeRoomCode(args.code);
+
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("code", (q) => q.eq("code", code))
+      .unique();
+    if (!room) {
+      throw new ConvexError({ code: "ROOM_NOT_FOUND", message: "Room not found." });
+    }
+
+    if (getRoomEconomyMode(room) !== "balance" || !room.buyIn) {
+      throw new ConvexError({
+        code: "REBUY_NOT_SUPPORTED",
+        message: "Re-buy is only available on balance tables.",
+      });
+    }
+    const buyIn = room.buyIn;
+
+    const authUserId = (await requireVerifiedUser(ctx)).authUserId;
+    if (!authUserId) {
+      throw new ConvexError({
+        code: "UNAUTHORIZED",
+        message: "Authentication required.",
+      });
+    }
+
+    const player = await getActiveAuthedPlayerInRoom(ctx, room._id, authUserId);
+    if (!player) {
+      throw new ConvexError({
+        code: "PLAYER_NOT_FOUND",
+        message: "You are not a member of this room.",
+      });
+    }
+
+    // Re-buy is only allowed between hands — never mid-hand.
+    const activeGame = await ctx.db
+      .query("games")
+      .withIndex("by_room_status", (q) =>
+        q.eq("roomId", String(room._id)).eq("status", "active"),
+      )
+      .unique();
+    if (activeGame) {
+      throw new ConvexError({
+        code: "REBUY_DURING_HAND",
+        message: "You can only re-buy between hands.",
+      });
+    }
+
+    if ((player.tableStack ?? 0) !== 0) {
+      throw new ConvexError({
+        code: "REBUY_NOT_ALLOWED",
+        message: "Re-buy is only available when you are out of chips.",
+      });
+    }
+
+    const balance = await getWalletBalance(ctx, authUserId);
+    if (balance === null || balance < buyIn) {
+      throw new ConvexError({
+        code: "INSUFFICIENT_FUNDS",
+        message: `You need ${buyIn} coins to re-buy.`,
+      });
+    }
+
+    const result = await rebuyTableSession(ctx, { player, authUserId, buyIn });
+    await ctx.db.patch(room._id, { lastActiveAt: Date.now() });
+
+    return {
+      ok: true,
+      tableStack: result.tableStack,
+      rebuyCount: result.rebuyCount,
+    };
   },
 });

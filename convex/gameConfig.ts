@@ -217,8 +217,8 @@ const DEFAULTS = {
   bettingStructure: "noLimit" as const,
   choiceTileFrequency: "high" as const,
   bonusStructure: "classic" as const,
-  smallBlind: 10,
-  bigBlind: 20,
+  smallBlind: 0,
+  bigBlind: 0,
   startingChips: 1000,
   raiseLadder: [20, 40, 60, 80, 100, 120, 140, 160, 200, 300, 500, 1000],
   maxRaisesPerRound: 99,
@@ -231,8 +231,8 @@ const DEFAULTS = {
 };
 
 const SPEED_OVERRIDES = {
-  smallBlind: 5,
-  bigBlind: 10,
+  smallBlind: 0,
+  bigBlind: 0,
   startingChips: 500,
   raiseLadder: [10, 20, 30, 40, 50, 60, 70, 80, 100],
   turnClockGraceMs: 30_000,

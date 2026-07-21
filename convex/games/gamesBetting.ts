@@ -29,6 +29,7 @@ import {
 import { getBotCharacterForAuthUserId } from "../aiStrategy";
 import { recordAction, recordRaise } from "../activityFeed";
 import { insertGameActionTrace } from "./gamesTrace";
+import { syncSeatStack } from "./tableSession";
 
 // Re-export bot turn handler for the Convex entry point (convex/games.ts).
 export { internalProcessBotTurnHandler } from "./gamesBotTurn";
@@ -160,6 +161,8 @@ export async function callHandler(ctx: MutationCtx, args: PlayerActionArgs) {
     lastAction: "call",
     updatedAt: now,
   });
+  // Keep the seat's persistent table stack in lockstep with the hand chips.
+  await syncSeatStack(ctx, playerId, currentTurnHand.chips - amountToCall);
   await ctx.db.patch(game._id, { pot: game.pot + amountToCall, ...audiencePatch, updatedAt: now });
   await insertGameActionTrace(ctx, {
     game,
@@ -221,6 +224,8 @@ export async function raiseHandler(
   const now = Date.now();
   const audiencePatch = getAudiencePatch(args);
   await ctx.db.patch(currentTurnHand._id, { chips: currentTurnHand.chips - additionalChipsNeeded, betThisRound: raiseToAmount, totalBet: currentTurnHand.totalBet + additionalChipsNeeded, hasActed: true, lastAction: "raise", updatedAt: now });
+  // Keep the seat's persistent table stack in lockstep with the hand chips.
+  await syncSeatStack(ctx, playerId, currentTurnHand.chips - additionalChipsNeeded);
   for (const hand of orderedHands) if (hand._id !== currentTurnHand._id && !hand.hasFolded) await ctx.db.patch(hand._id, { hasActed: false, updatedAt: now });
   await ctx.db.patch(game._id, { pot: game.pot + additionalChipsNeeded, currentBet: raiseToAmount, raisesThisRound: raisesThisRound + 1, ...audiencePatch, updatedAt: now });
   await insertGameActionTrace(ctx, {

@@ -164,6 +164,55 @@ export function isPlayerInactive(
   return now - player.lastSeenAt > INACTIVE_PLAYER_TIMEOUT_MS;
 }
 
+// ==================== Disconnect leases (table stakes M1.6) ====================
+//
+// Two thresholds, both derived from `lastSeenAt`:
+//   - DISCONNECT_THRESHOLD_MS  → the seat is "disconnected": it sits out and its
+//     turns auto-fold near-immediately so the table never waits on it.
+//   - DISCONNECT_LEASE_MS      → the grace period is over: the seat is cashed
+//     out and removed by the sweep.
+// Bots and tutorial guests never disconnect.
+
+/** Missed ~2 heartbeats (30s interval) → treat the seat as disconnected. */
+export const DISCONNECT_THRESHOLD_MS = 60 * 1000;
+
+/** How long a disconnected seat + stack is held before it is cashed out. */
+export const DISCONNECT_LEASE_MS = 3 * 60 * 1000;
+
+function isLeaseTrackedSeat(
+  player: Pick<Doc<"players">, "authUserId">,
+): boolean {
+  return !(
+    player.authUserId?.startsWith("dev-bot:") ||
+    player.authUserId?.startsWith(GUEST_TUTORIAL_AUTH_PREFIX)
+  );
+}
+
+/**
+ * The single seam for "is this seat currently disconnected". The betting engine
+ * asks this and nothing else about presence — it never touches `lastSeenAt`.
+ */
+export function isDisconnected(
+  player: Pick<Doc<"players">, "lastSeenAt" | "authUserId">,
+  now: number,
+): boolean {
+  return (
+    isLeaseTrackedSeat(player) &&
+    now - player.lastSeenAt > DISCONNECT_THRESHOLD_MS
+  );
+}
+
+/** The disconnect grace period has elapsed — the seat should be cashed out. */
+export function isDisconnectLeaseExpired(
+  player: Pick<Doc<"players">, "lastSeenAt" | "authUserId">,
+  now: number,
+): boolean {
+  return (
+    isLeaseTrackedSeat(player) &&
+    now - player.lastSeenAt > DISCONNECT_LEASE_MS
+  );
+}
+
 export function isRoomPastInactivityTimeout(
   room: Pick<Doc<"rooms">, "lastActiveAt">,
   now: number,

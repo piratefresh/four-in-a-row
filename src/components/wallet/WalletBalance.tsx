@@ -32,6 +32,7 @@ export function WalletBalance({
             {balance.toLocaleString()} coins
           </p>
         )}
+      </div>
     </div>
   );
 }

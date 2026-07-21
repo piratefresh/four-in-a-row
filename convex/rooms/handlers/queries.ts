@@ -5,6 +5,7 @@ import {
   normalizeRoomCode,
   isTutorialRoom,
   isPlayerInactive,
+  isDisconnected,
   canListOpenRoom,
   getActivePlayersInRoom,
   getAuthenticatedUserId,
@@ -156,6 +157,10 @@ export const getRoomMembers = query({
           authUserId: player.authUserId,
           image: authUser?.image ?? null,
           readyStatus: player.readyStatus ?? false,
+          // Table-stakes epic M1.7: persistent stack + disconnect marker for
+          // the seated view. `tableStack` is null on non-balance seats.
+          tableStack: player.tableStack ?? null,
+          disconnected: isDisconnected(player, now),
         };
       }),
     );

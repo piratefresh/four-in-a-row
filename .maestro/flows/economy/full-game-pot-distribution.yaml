@@ -1,0 +1,57 @@
+# STO-249: complete balance hand and pot distribution
+#
+# Exercises the browser journey from fixed buy-in through a completed hand.
+# The fixture commits an exact 100 coins from each seat, then the player folds
+# through the real UI so normal completion and settlement award the 200 pot.
+
+url: http://localhost:3000/login
+name: STO-249 full game distributes the pot
+tags:
+  - economy
+  - gameplay
+  - settlement
+  - sto-249
+env:
+  CONVEX_URL: http://127.0.0.1:3210
+---
+- launchApp
+- runFlow: ../shared/login.yaml
+- runFlow: ../../subflows/join-table-stakes.yaml
+
+- runScript:
+    file: ../../scripts/seed-full-game-pot.js
+- assertTrue:
+    condition: ${output.fullGamePot.pot === 200}
+    label: Both seats have committed 100 coins to a 200 coin pot
+- assertVisible: ".*200.*"
+
+- extendedWaitUntil:
+    visible: "Fold"
+    timeout: 30000
+- tapOn: "Fold"
+- assertVisible: "Confirm fold"
+- tapOn: "Confirm fold"
+
+- extendedWaitUntil:
+    visible: "Play Another"
+    timeout: 30000
+- assertVisible: ".*wins by fold|You win - everyone else folded"
+- assertVisible: ".*200.*"
+
+- runScript:
+    file: ../../scripts/capture-full-game-settlement.js
+- assertTrue:
+    condition: ${output.fullGameSettlement.gameStatus === "completed" && output.fullGameSettlement.settlementState === "settled"}
+    label: The hand completes through the normal settlement pipeline
+- assertTrue:
+    condition: ${output.fullGameSettlement.pot === 200}
+    label: Results preserve the exact 200 coin pot
+- assertTrue:
+    condition: ${output.fullGameSettlement.humanStack === 400 && output.fullGameSettlement.winnerStack === 600}
+    label: The winner receives the entire pot and the folder keeps only uncommitted chips
+- assertTrue:
+    condition: ${output.fullGameSettlement.totalTableStacks === 1000}
+    label: Settlement conserves all table chips
+- assertTrue:
+    condition: ${output.fullGameSettlement.walletBalance === 500}
+    label: Pot settlement stays on the table and does not alter the wallet

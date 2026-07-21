@@ -20,9 +20,10 @@ type RoomListItem = {
     choiceTileFrequency?: string;
     bonusStructure?: string;
   };
+  economyMode?: string | null;
+  buyIn?: number | null;
   activePlayers: number;
   maxPlayers: number;
-  pot: number;
   lastActiveAt: number;
   createdAt: number;
   isHot?: boolean;
@@ -64,7 +65,8 @@ export function RoomList({
               configLabel={formatRoomConfig(room.config)}
               activePlayers={room.activePlayers}
               maxPlayers={room.maxPlayers}
-              pot={room.pot}
+              economyMode={room.economyMode}
+              buyIn={room.buyIn}
               status={status}
               lastActiveAt={room.lastActiveAt}
               currentTime={currentTime}
@@ -77,7 +79,7 @@ export function RoomList({
         },
       },
       { accessorKey: "activePlayers", id: "seats", header: "Seats" },
-      { accessorKey: "pot", id: "pot", header: "Pot" },
+      { accessorKey: "buyIn", id: "buyin", header: "Buy-in" },
       { accessorKey: "createdAt", id: "trend", header: "Trend" },
     ],
     [currentTime, joiningRoomCode, onOpenRoom],

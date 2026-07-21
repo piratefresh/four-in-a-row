@@ -24,7 +24,6 @@ import {
   getClearedTurnClockFields,
   getNewTurnStateFields,
 } from "./gamesShared";
-import { debitWallet, buildOperationKey, getWalletBalance, OPERATION_NAMESPACES } from "../wallet/ledger";
 
 function randomIndex(maxExclusive: number) {
   const bytes = new Uint32Array(1);
@@ -226,21 +225,6 @@ async function clearHands(ctx: MutationCtx, gameId: Id<"games">) {
   for (const hand of existingHands) await ctx.db.delete(hand._id);
 }
 
-function calculateBlindPositions(dealerButtonIndex: number, playerCount: number) {
-  if (playerCount === 2) {
-    // Heads-up: dealer is small blind, other player is big blind
-    return {
-      smallBlindIndex: dealerButtonIndex,
-      bigBlindIndex: (dealerButtonIndex + 1) % playerCount,
-    };
-  }
-  // 3+ players: small blind is left of dealer, big blind is left of small blind
-  return {
-    smallBlindIndex: (dealerButtonIndex + 1) % playerCount,
-    bigBlindIndex: (dealerButtonIndex + 2) % playerCount,
-  };
-}
-
 function assertMinimumPlayersToStart(participantIds: string[]) {
   if (participantIds.length < 2) {
     throw new ConvexError({
@@ -300,7 +284,6 @@ export async function assertPlayersCanStartBalanceGame(
 ): Promise<void> {
   if (getRoomEconomyMode(room) !== "balance" || !room.buyIn) return;
 
-  const buyIn = room.buyIn;
   const humanPlayers = getHumanPlayers(activePlayers);
 
   // Guests cannot participate in balance games.
@@ -314,86 +297,12 @@ export async function assertPlayersCanStartBalanceGame(
   }
 
   // Unsettled-game check: no human may start a new balance game while their
-  // `activeGameId` references an active, charged, unsettled game. The
-  // current game being started is defensively allowed.
+  // `activeGameId` references an active, unsettled hand. The current game
+  // being started is defensively allowed.
   await ensureNoUnsettledGames(ctx, humanPlayers, currentGameId);
 
-  // Sufficient-funds check: every human must have at least `buyIn` coins.
-  const insufficient: string[] = [];
-  for (const player of humanPlayers) {
-    const balance = await getWalletBalance(ctx, player.authUserId);
-    if (balance === null || balance < buyIn) {
-      insufficient.push(player.name);
-    }
-  }
-  if (insufficient.length > 0) {
-    const names = insufficient.join(", ");
-    throw new ConvexError({
-      code: "INSUFFICIENT_FUNDS",
-      message: `Insufficient balance for: ${names}. Each player needs ${buyIn} coins.`,
-    });
-  }
-}
-
-/**
- * Debit the buy-in from every human participant's wallet. Called only after
- * `assertPlayersCanStartBalanceGame` has passed. The per-player
- * `INSUFFICIENT_FUNDS` catch is a defensive safety net — it should not fire
- * after a successful assert, since the whole start runs in one serializable
- * transaction.
- */
-export async function reserveBalanceGameBuyIns(
-  ctx: MutationCtx,
-  gameId: Id<"games">,
-  room: Doc<"rooms">,
-  activePlayers: Doc<"players">[],
-): Promise<void> {
-  const humanPlayers = getHumanPlayers(activePlayers);
-  console.log(
-    `[buy-in] economyMode=${room.economyMode}, buyIn=${room.buyIn}, humanCount=${humanPlayers.length}`,
-  );
-  if (getRoomEconomyMode(room) !== "balance" || !room.buyIn) {
-    console.log(`[buy-in] SKIPPED: not a balance game or no buyIn`);
-    return;
-  }
-
-  const buyIn = room.buyIn;
-
-  const insufficient: string[] = [];
-  for (const player of humanPlayers) {
-    const operationKey = buildOperationKey(
-      OPERATION_NAMESPACES.buy_in,
-      player.authUserId,
-      String(gameId),
-    );
-    console.log(
-      `[buy-in] Debiting ${player.name} (${player.authUserId}) ${buyIn} coins`,
-    );
-    try {
-      await debitWallet(ctx, {
-        authUserId: player.authUserId,
-        amount: buyIn,
-        source: "buy_in",
-        operationKey,
-        gameId,
-      });
-    } catch (error) {
-      const code = (error as { data?: { code?: string } })?.data?.code;
-      if (code === "INSUFFICIENT_FUNDS") {
-        insufficient.push(player.name);
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  if (insufficient.length > 0) {
-    const names = insufficient.join(", ");
-    throw new ConvexError({
-      code: "INSUFFICIENT_FUNDS",
-      message: `Insufficient balance for: ${names}. Each player needs ${buyIn} coins.`,
-    });
-  }
+  // Sufficient-funds is enforced at buy-in time (on join), not here — chips
+  // now live on the seat's persistent table stack, not the wallet.
 }
 
 function resolveGameConfig(room: Doc<"rooms">): ResolvedGameConfig {
@@ -432,15 +341,61 @@ async function ensureNoUnsettledGames(
   }
 }
 
+/**
+ * Rotate the dealer button to the next occupied seat *clockwise* from the
+ * previous hand's dealer, tied to seat identity rather than list position
+ * (table-stakes epic M1). Index-based rotation is wrong the moment eligibility
+ * changes — e.g. dealer at seat 1 of [0,1,2], seat 0 busts to [1,2], and
+ * `(1+1)%2 = 0` would hand seat 1 the button twice.
+ *
+ * The previous dealer's seat is read from the persisted `dealerSeatIndex` on
+ * the last completed game — NOT reconstructed from player records, which are
+ * mutable (a player can rejoin into a different seat, which would corrupt any
+ * identity-based lookup). We then pick the first current participant seated
+ * strictly after that seat, wrapping to the lowest seat.
+ *
+ * `participantIds` must be in ascending seat order (as built for the hand).
+ * The first hand of a room (or any completed game predating `dealerSeatIndex`)
+ * starts the button at index 0.
+ */
+async function getNextDealerButtonIndex(
+  ctx: MutationCtx,
+  roomId: Id<"rooms">,
+  participantIds: string[],
+  seatIndexByParticipant: Map<string, number>,
+): Promise<number> {
+  if (participantIds.length === 0) return 0;
+
+  const lastCompleted = await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(roomId)).eq("status", "completed"),
+    )
+    .order("desc")
+    .first();
+  const previousDealerSeatIndex = lastCompleted?.dealerSeatIndex;
+  if (previousDealerSeatIndex === undefined || previousDealerSeatIndex === null) {
+    return 0;
+  }
+
+  // First current participant seated strictly after the previous dealer's
+  // seat; wrap to the lowest seat (index 0) if none sit after it.
+  const nextIndex = participantIds.findIndex(
+    (id) =>
+      (seatIndexByParticipant.get(id) ?? Number.MAX_SAFE_INTEGER) >
+      previousDealerSeatIndex,
+  );
+  return nextIndex === -1 ? 0 : nextIndex;
+}
+
 async function dealHands(
   ctx: MutationCtx,
   gameId: Id<"games">,
   participantIds: string[],
   hands: GameDeckTile[][],
-  smallBlindIndex: number,
-  bigBlindIndex: number,
   now: number,
   config: ResolvedGameConfig,
+  startingChipsByParticipant: Map<string, number>,
 ) {
   for (const [participantIndex, participantId] of participantIds.entries()) {
     const tiles = hands[participantIndex];
@@ -451,28 +406,19 @@ async function dealHands(
       });
     }
 
-    let blindAmount = 0;
-    if (participantIndex === smallBlindIndex) {
-      blindAmount = config.smallBlind;
-    } else if (participantIndex === bigBlindIndex) {
-      blindAmount = config.bigBlind;
-    }
-
-    if (config.startingChips < blindAmount) {
-      throw new ConvexError({
-        code: "INSUFFICIENT_CHIPS_FOR_BLIND",
-        message: `Players must have at least ${blindAmount} chips to post blinds.`,
-      });
-    }
+    // In the seat-lifecycle economy, a hand is dealt from the seat's persistent
+    // table stack. Non-balance / tutorial seats fall back to config chips.
+    const chips =
+      startingChipsByParticipant.get(participantId) ?? config.startingChips;
 
     const handCreatedAt = now + participantIndex;
     await ctx.db.insert("playerHands", {
       gameId,
       playerId: participantId,
       tiles,
-      chips: config.startingChips - blindAmount,
-      betThisRound: blindAmount,
-      totalBet: blindAmount,
+      chips,
+      betThisRound: 0,
+      totalBet: 0,
       hasActed: false,
       hasFolded: false,
       lastAction: undefined,
@@ -566,6 +512,7 @@ async function orchestrateGameStart(
   options: { source: "public" | "internal" },
 ): Promise<OrchestrateGameStartResult> {
   const config = resolveGameConfig(room);
+  const isBalance = getRoomEconomyMode(room) === "balance";
 
   const activePlayers = await getActiveRoomPlayers(ctx, room._id);
   if (activePlayers.length < 1) {
@@ -575,14 +522,53 @@ async function orchestrateGameStart(
     });
   }
 
-  const participantIds = buildParticipantIds(activePlayers);
+  // Balance tables only deal seats that still have chips. Busted seats stay
+  // seated but sit out until they rebuy or leave (table-stakes epic M1).
+  const eligiblePlayers = isBalance
+    ? activePlayers.filter((player) => (player.tableStack ?? 0) > 0)
+    : activePlayers;
+
+  // Distinguish "not enough occupied seats" from "enough seats, but too many
+  // are busted and must re-buy" (table-stakes epic M1.4) so the UI can prompt a
+  // re-buy instead of a dead "waiting for players".
+  if (isBalance && eligiblePlayers.length < 2 && activePlayers.length >= 2) {
+    throw new ConvexError({
+      code: "REBUY_REQUIRED",
+      message: "Not enough players have chips. Out-of-chips players must re-buy.",
+    });
+  }
+
+  const participantIds = buildParticipantIds(eligiblePlayers);
   assertMinimumPlayersToStart(participantIds);
 
-  // 1. Validation (no writes).
-  await assertPlayersCanStartBalanceGame(ctx, room, activePlayers, game._id);
+  // 1. Validation (no writes). Buy-ins were charged on join, so this only
+  //    enforces the guest and unsettled-game rules for balance tables.
+  await assertPlayersCanStartBalanceGame(ctx, room, eligiblePlayers, game._id);
 
-  // 2. Reserve buy-ins (writes).
-  await reserveBalanceGameBuyIns(ctx, game._id, room, activePlayers);
+  // Seat index per participant, used for seat-tied dealer rotation. The AI
+  // dealer has no seat, so it sorts last.
+  const seatIndexByParticipant = new Map<string, number>();
+  for (const player of eligiblePlayers) {
+    seatIndexByParticipant.set(String(player._id), player.seatIndex);
+  }
+  if (participantIds.includes(AI_DEALER_PLAYER_ID)) {
+    seatIndexByParticipant.set(AI_DEALER_PLAYER_ID, Number.MAX_SAFE_INTEGER);
+  }
+
+  // Starting chips per participant: balance deals each seat's persistent table
+  // stack; the AI dealer (no seat) and non-balance seats use config chips.
+  const startingChipsByParticipant = new Map<string, number>();
+  if (isBalance) {
+    for (const player of eligiblePlayers) {
+      startingChipsByParticipant.set(String(player._id), player.tableStack ?? 0);
+    }
+    if (participantIds.includes(AI_DEALER_PLAYER_ID)) {
+      startingChipsByParticipant.set(
+        AI_DEALER_PLAYER_ID,
+        room.buyIn ?? config.startingChips,
+      );
+    }
+  }
 
   const isTutorial = room.tutorialId === FIRST_BOT_GAME_TUTORIAL_ID;
   const deck = isTutorial ? [] : createShuffledDeck();
@@ -598,15 +584,19 @@ async function orchestrateGameStart(
 
   const now = Date.now();
 
-  const dealerButtonIndex = 0;
-  const { smallBlindIndex, bigBlindIndex } = calculateBlindPositions(
-    dealerButtonIndex,
-    participantIds.length,
+  const dealerButtonIndex = await getNextDealerButtonIndex(
+    ctx,
+    room._id,
+    participantIds,
+    seatIndexByParticipant,
   );
-
-  const firstActionIndex = (bigBlindIndex + 1) % participantIds.length;
+  const firstActionIndex = (dealerButtonIndex + 1) % participantIds.length;
+  // Persist the dealer's seat identity so the next hand rotates by seat, not by
+  // a (mutable) player record. Seatless AI dealer stores a MAX sentinel.
+  const dealerSeatIndex =
+    seatIndexByParticipant.get(participantIds[dealerButtonIndex]!) ??
+    Number.MAX_SAFE_INTEGER;
   const openingCommunityTiles = hideCommunityTiles(roundDeal.communityTiles);
-  const totalBlinds = config.smallBlind + config.bigBlind;
 
   // 3. Deal hands + activate.
   await dealHands(
@@ -614,22 +604,22 @@ async function orchestrateGameStart(
     game._id,
     participantIds,
     roundDeal.hands,
-    smallBlindIndex,
-    bigBlindIndex,
     now,
     config,
+    startingChipsByParticipant,
   );
   await ctx.db.patch(game._id, {
     status: "active",
     stage: "preflop",
     communityTiles: openingCommunityTiles,
     deck: roundDeal.deck,
-    pot: totalBlinds,
-    currentBet: config.bigBlind,
+    pot: 0,
+    currentBet: 0,
     currentPlayerIndex: firstActionIndex,
     dealerButtonIndex,
-    smallBlindIndex,
-    bigBlindIndex,
+    dealerSeatIndex,
+    smallBlindIndex: undefined,
+    bigBlindIndex: undefined,
     raisesThisRound: 0,
     config,
     ...getNewTurnStateFields(now),
@@ -644,13 +634,11 @@ async function orchestrateGameStart(
       .filter((tile) => tile.revealed)
       .map((tile) => tile.kind === "single" ? tile.letter : `[${tile.options.join("/")}]`)
       .join(" "),
-    potAfter: totalBlinds,
+    potAfter: 0,
     metadata: {
       participantIds,
       playersDealt: participantIds.length,
       dealerButtonIndex,
-      smallBlindIndex,
-      bigBlindIndex,
       communityChoiceTileCount: roundDeal.communityChoiceTileCount,
       handChoiceTileCounts: roundDeal.handChoiceTileCounts,
       source: options.source,
@@ -850,8 +838,8 @@ export async function resetTutorialGameForRoomHandler(
     currentBet: 0,
     currentPlayerIndex: 0,
     dealerButtonIndex: 0,
-    smallBlindIndex: 0,
-    bigBlindIndex: 0,
+    smallBlindIndex: undefined,
+    bigBlindIndex: undefined,
     raisesThisRound: 0,
     winnerId: undefined,
     winningWord: undefined,

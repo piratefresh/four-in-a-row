@@ -1,20 +1,48 @@
-# P0: Insufficient wallet
-#
-# Verifies that a player with insufficient funds cannot join
-# a balance game table.
-#
-# Precondition: wallet is seeded below the table's buy-in amount.
-# Postcondition: no seat is created, no wallet transaction occurs.
+# STO-249: a wallet below the fixed buy-in cannot take a seat.
 
-url: http://localhost:3000/rooms
+url: http://localhost:3000/login
+name: STO-249 insufficient wallet blocks joining
+tags:
+  - economy
+  - table-stakes
+  - sto-249
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "NEW ROOM"
+- runFlow: ../shared/login.yaml
 
-# The E2E setup script should have:
-# 1. Created a balance table with buyIn = 500
-# 2. Set the E2E user's wallet to 100 (below buy-in)
-# 3. Signed the user in
-#
-# When the user clicks the table card, the join should fail with
-# an "Insufficient balance" error.
+- runScript:
+    file: ../../scripts/setup-insufficient-wallet.js
+- assertTrue:
+    condition: ${output.insufficientWallet.wallet === 100}
+    label: Fixture wallet is below the table buy-in
+- assertTrue:
+    condition: ${output.insufficientWallet.buyIn === 500}
+    label: Fixture table keeps its exact fixed buy-in
+
+- openLink: http://localhost:3000/rooms
+- extendedWaitUntil:
+    visible: "STO-249 Insufficient Wallet"
+    timeout: 30000
+- tapOn: "STO-249 Insufficient Wallet"
+
+# The table details remain visible, but the join action is disabled before a
+# confirmation or server-side debit can occur.
+- assertVisible: "Wallet balance"
+- assertVisible: "Buy-in"
+- assertVisible: "Balance after join"
+- assertVisible: 'You need \$500 to buy in to this table\.'
+# Maestro Web does not currently expose HTML's disabled attribute in its
+# accessibility hierarchy. Attempt the action and prove it is inert instead.
+- tapOn: "Insufficient balance"
+- assertNotVisible: "Confirm your buy-in"
+
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 100}
+    label: A rejected join does not debit the wallet
+- assertTrue:
+    condition: ${output.tableStakesState.activeRoomCode === null}
+    label: A rejected join does not create an active seat

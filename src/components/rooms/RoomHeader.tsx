@@ -80,6 +80,7 @@ export function RoomHeader({
     <header className="grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-white/5 bg-felt-deep px-3 text-white sm:px-4">
       <div className="flex items-center">
         <button
+          id="leave-room-button"
           type="button"
           onClick={handleBack}
           disabled={isLeaving}

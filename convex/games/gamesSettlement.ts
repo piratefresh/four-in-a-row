@@ -19,11 +19,7 @@
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import {
-  buildOperationKey,
-  creditWallet,
-  OPERATION_NAMESPACES,
-} from "../wallet/ledger";
+import { awardPotToStack } from "./tableSession";
 import { getHighestScoringTileValue } from "./gamesScoring";
 import { AI_DEALER_PLAYER_ID, DEV_BOT_AUTH_PREFIX } from "./gamesShared";
 import { recordGameCompletion } from "../activityFeed";
@@ -252,27 +248,23 @@ export async function settleGameHandler(
     args.foldWin ?? false,
   );
 
-  // --- 2. Apply wallet payouts for balance games ---
+  // --- 2. Award pot winnings to seat stacks for balance games ---
+  // In the seat-lifecycle economy, chips stay on the seat: each player's
+  // uncommitted stack was already reduced as they wagered, so settlement only
+  // adds each winner's pot share to their persistent `tableStack`. No wallet
+  // payout is written — the wallet is credited only on leave / cash-out.
   const payoutEntries: SettlementEntry[] = [];
-  for (const payout of context.payouts) {
-    if (context.isBalanceGame && !payout.isBot && payout.authUserId) {
-      await creditWallet(ctx, {
-        authUserId: payout.authUserId,
-        amount: payout.amount,
-        source: "payout",
-        operationKey: buildOperationKey(
-          OPERATION_NAMESPACES.payout,
-          payout.authUserId,
-          String(game._id),
-        ),
-        gameId: game._id,
-      });
+  if (context.isBalanceGame) {
+    for (const [playerId, share] of context.potShares) {
+      if (share <= 0) continue;
+      await awardPotToStack(ctx, { playerId, amount: share });
+      const player = context.playerById.get(playerId);
       payoutEntries.push({
         ruleId: "payout",
-        playerId: payout.playerId,
-        authUserId: payout.authUserId,
-        amount: payout.amount,
-        description: "Table cash-out",
+        playerId,
+        authUserId: player?.authUserId ?? "",
+        amount: share,
+        description: "Pot award",
       });
     }
   }

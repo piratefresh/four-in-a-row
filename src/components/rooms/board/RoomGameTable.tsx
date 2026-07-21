@@ -186,6 +186,11 @@ export function RoomGameTable({
     readyCount,
     totalPlayers,
     allPlayersReady,
+    isOutOfChips,
+    buyIn: outOfChipsBuyIn,
+    canAffordRebuy,
+    isRebuying,
+    onRebuy,
     isBetting,
     isMyTurn,
     canCheck,
@@ -204,6 +209,7 @@ export function RoomGameTable({
     raiseLabel,
     raiseAmount,
     raiseOptions,
+    isOpeningBet,
     turnClockTimeRemaining,
     isShowdownSubmissionOpen,
   } = useRoomGameContext();
@@ -653,20 +659,32 @@ export function RoomGameTable({
               </>
             )}
 
-            {showReadyButton && (
-              <RoomActionControls
-                ready={{
-                  readyCount,
-                  totalPlayers,
-                  allPlayersReady,
-                  isReady,
-                  isTogglingReady,
-                  lobbyInactivityTimeRemainingMs,
-                  onReady,
-                }}
-                helperTip={actionsHelperTip}
-              />
-            )}
+            {showReadyButton &&
+              (isOutOfChips ? (
+                <RoomActionControls
+                  outOfChips={{
+                    buyIn: outOfChipsBuyIn,
+                    canAfford: canAffordRebuy,
+                    isRebuying,
+                    onRebuy,
+                    onLeave: onLeaveRoom,
+                  }}
+                  helperTip={actionsHelperTip}
+                />
+              ) : (
+                <RoomActionControls
+                  ready={{
+                    readyCount,
+                    totalPlayers,
+                    allPlayersReady,
+                    isReady,
+                    isTogglingReady,
+                    lobbyInactivityTimeRemainingMs,
+                    onReady,
+                  }}
+                  helperTip={actionsHelperTip}
+                />
+              ))}
 
             {!isPhase0 && (
               <>
@@ -701,6 +719,7 @@ export function RoomGameTable({
                             raiseLabel,
                             raiseAmount,
                             raiseOptions,
+                            isOpeningBet,
                           }
                         : undefined
                     }

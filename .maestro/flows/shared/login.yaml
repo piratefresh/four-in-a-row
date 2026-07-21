@@ -3,19 +3,35 @@
 # Prerequisite: Convex is running with E2E_TESTING=true and the
 # E2E account has been provisioned via `bun run test:maestro:setup`.
 #
-# This subflow navigates to /login, fills credentials, and verifies
-# the user lands on the home page.
+# This subflow navigates to /login, waits for auth state to resolve,
+# fills credentials if needed, and verifies the user lands on home.
 
 url: http://localhost:3000/login
 ---
 - launchApp
-- assertVisible: "Email"
-- tapOn:
-    id: "email"
-- inputText: "e2e-test@wordpoker.app"
-- tapOn:
-    id: "password"
-- inputText: "E2eTest1234!"
-- tapOn:
-    text: "Sign in with Email"
+
+# Wait for the auth check to resolve — Better Auth is async, so the
+# page may briefly show neither form nor "signed in" state.
+- extendedWaitUntil:
+    visible: "Email|You're signed in"
+    timeout: 15000
+
+- runFlow:
+    when:
+      visible:
+        id: "email"
+    commands:
+      - tapOn:
+          id: "email"
+      - inputText: "e2e-test@wordpoker.app"
+      - tapOn:
+          id: "password"
+      - inputText: "E2eTest1234!"
+      - tapOn:
+          text: "Sign in with Email"
+- runFlow:
+    when:
+      visible: "Go to home"
+    commands:
+      - tapOn: "Go to home"
 - assertVisible: "Online Mode"

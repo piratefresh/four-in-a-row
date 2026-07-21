@@ -8,6 +8,7 @@ import {
   findTransactionByOperationKey,
 } from "../wallet/ledger";
 import { DEV_BOT_AUTH_PREFIX } from "../games/gamesShared";
+import { joinAuthenticatedUserToRoom } from "../rooms/players";
 
 const HUMAN_USER = "human-user-1";
 const BOT_USER = `${DEV_BOT_AUTH_PREFIX}bot:room:1`;
@@ -26,6 +27,14 @@ async function seedRoomAndGame(
     });
   });
 
+  // In the seat-lifecycle economy the buy-in is charged on join, seeding the
+  // seat's table stack. These tests seed players directly, so mirror that so
+  // balance hands have eligible, chipped seats to deal.
+  const seatStackFields =
+    economyMode === "balance" && buyIn
+      ? { tableStack: buyIn, tableSessionVersion: 1, rebuyCount: 0 }
+      : {};
+
   const playerId = await t.mutation(async (ctx) => {
     return await ctx.db.insert("players", {
       roomId,
@@ -36,6 +45,7 @@ async function seedRoomAndGame(
       status: "active",
       readyStatus: true,
       lastSeenAt: Date.now(),
+      ...seatStackFields,
     });
   });
 
@@ -50,6 +60,7 @@ async function seedRoomAndGame(
       status: "active",
       readyStatus: true,
       lastSeenAt: Date.now(),
+      ...seatStackFields,
     });
   });
 
@@ -71,13 +82,13 @@ async function seedRoomAndGame(
   return { roomId, playerId, botPlayerId, gameId };
 }
 
-describe("balance game buy-in reservation", () => {
-  test("debits human wallet on balance game start", async () => {
+describe("seat-lifecycle economy — hand start (table stakes M1)", () => {
+  test("does not debit any wallet at hand start (buy-in happens on join)", async () => {
     const t = convexTest(schema);
 
     const { gameId } = await seedRoomAndGame(t, "balance", 500);
 
-    // Seed wallet with enough funds
+    // Wallet already spent its buy-in on join; the seat holds the chips.
     await t.mutation(async (ctx) => {
       return await getOrCreateWallet(ctx, HUMAN_USER);
     });
@@ -87,7 +98,6 @@ describe("balance game buy-in reservation", () => {
     });
     expect(balanceBefore).toBe(1000); // starter grant
 
-    // Start the game
     const result = await t.mutation(async (ctx) => {
       const { internalStartGameHandler } = await import("../games/gamesSetup");
       return await internalStartGameHandler(ctx, { gameId });
@@ -98,20 +108,16 @@ describe("balance game buy-in reservation", () => {
     const balanceAfter = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, HUMAN_USER);
     });
-    expect(balanceAfter).toBe(500); // 1000 - 500 buy-in
+    expect(balanceAfter).toBe(1000); // unchanged — no buy-in at hand start
 
-    // Verify buy_in transaction exists
+    // No buy-in transaction keyed to the game is written at start.
     const tx = await t.query(async (ctx) => {
       return await findTransactionByOperationKey(
         ctx,
         `buy_in:${HUMAN_USER}:${gameId}`,
       );
     });
-    expect(tx).not.toBeNull();
-    expect(tx!.amount).toBe(-500);
-    expect(tx!.source).toBe("buy_in");
-    expect(tx!.balanceBefore).toBe(1000);
-    expect(tx!.balanceAfter).toBe(500);
+    expect(tx).toBeNull();
   });
 
   test("does not debit bot wallets on balance game start", async () => {
@@ -174,53 +180,6 @@ describe("balance game buy-in reservation", () => {
     expect(tx).toBeNull();
   });
 
-  test("fails with INSUFFICIENT_FUNDS when human lacks buy-in amount", async () => {
-    const t = convexTest(schema);
-
-    const { gameId } = await seedRoomAndGame(t, "balance", 5000);
-
-    // Seed wallet with only starter grant (1000), not enough for 5000 buy-in
-    await t.mutation(async (ctx) => {
-      return await getOrCreateWallet(ctx, HUMAN_USER);
-    });
-
-    await expect(
-      t.mutation(async (ctx) => {
-        const { internalStartGameHandler } = await import("../games/gamesSetup");
-        return await internalStartGameHandler(ctx, { gameId });
-      }),
-    ).rejects.toMatchObject({ data: { code: "INSUFFICIENT_FUNDS" } });
-
-    // Balance should be unchanged (rolled back)
-    const balance = await t.query(async (ctx) => {
-      return await getWalletBalance(ctx, HUMAN_USER);
-    });
-    expect(balance).toBe(1000);
-
-    // No buy_in transaction should exist (rolled back)
-    const tx = await t.query(async (ctx) => {
-      return await findTransactionByOperationKey(
-        ctx,
-        `buy_in:${HUMAN_USER}:${gameId}`,
-      );
-    });
-    expect(tx).toBeNull();
-  });
-
-  test("fails with INSUFFICIENT_FUNDS when human has no wallet at all", async () => {
-    const t = convexTest(schema);
-
-    // Buy-in larger than starter grant so no wallet means insufficient funds
-    const { gameId } = await seedRoomAndGame(t, "balance", 5000);
-
-    await expect(
-      t.mutation(async (ctx) => {
-        const { internalStartGameHandler } = await import("../games/gamesSetup");
-        return await internalStartGameHandler(ctx, { gameId });
-      }),
-    ).rejects.toMatchObject({ data: { code: "INSUFFICIENT_FUNDS" } });
-  });
-
   test("sets startingChips to buyIn amount in balance games", async () => {
     const t = convexTest(schema);
 
@@ -253,6 +212,41 @@ describe("balance game buy-in reservation", () => {
       return await ctx.db.get(gameId);
     });
     expect(game!.config?.startingChips).toBe(2000);
+  });
+
+  test("deals full stacks and starts betting with no forced bets", async () => {
+    const t = convexTest(schema);
+    const { gameId } = await seedRoomAndGame(t, "balance", 500);
+
+    await t.mutation(async (ctx) => {
+      await getOrCreateWallet(ctx, HUMAN_USER);
+      const { internalStartGameHandler } = await import("../games/gamesSetup");
+      await internalStartGameHandler(ctx, { gameId });
+    });
+
+    const state = await t.query(async (ctx) => {
+      const game = await ctx.db.get(gameId);
+      const hands = await ctx.db
+        .query("playerHands")
+        .withIndex("by_game", (q) => q.eq("gameId", gameId))
+        .collect();
+      return { game, hands };
+    });
+
+    expect(state.game).toMatchObject({
+      pot: 0,
+      currentBet: 0,
+      dealerButtonIndex: 0,
+      currentPlayerIndex: 1,
+    });
+    expect(state.game?.smallBlindIndex).toBeUndefined();
+    expect(state.game?.bigBlindIndex).toBeUndefined();
+    expect(state.hands).toHaveLength(2);
+    for (const hand of state.hands) {
+      expect(hand.chips).toBe(500);
+      expect(hand.betThisRound).toBe(0);
+      expect(hand.totalBet).toBe(0);
+    }
   });
 
   test("non-balance games use default startingChips", async () => {
@@ -304,59 +298,12 @@ describe("balance game buy-in reservation", () => {
     expect(r2.ok).toBe(false);
     expect(r2.reason).toBe("Game not in waiting state");
 
-    // Balance should only be deducted once
+    // The wallet is never debited at start, so repeated starts leave it
+    // untouched (buy-in was charged once, on join).
     const balance = await t.query(async (ctx) => {
       return await getWalletBalance(ctx, HUMAN_USER);
     });
-    expect(balance).toBe(500); // 1000 - 500, not 0
-  });
-
-  test("error message includes player names with insufficient funds", async () => {
-    const t = convexTest(schema);
-
-    const { roomId, gameId } = await seedRoomAndGame(t, "balance", 500);
-
-    // Add a second human player
-    await t.mutation(async (ctx) => {
-      await ctx.db.insert("players", {
-        roomId,
-        authUserId: "human-user-2",
-        name: "Alice",
-        seatIndex: 2,
-        isHost: false,
-        status: "active",
-        readyStatus: true,
-        lastSeenAt: Date.now(),
-      });
-    });
-
-    // Seed Human 1 with funds (auto 1000)
-    await t.mutation(async (ctx) => {
-      return await getOrCreateWallet(ctx, HUMAN_USER);
-    });
-    // Seed Alice with wallet then deplete to 100 (insufficient for 500)
-    await t.mutation(async (ctx) => {
-      const { debitWallet } = await import("../wallet/ledger");
-      await getOrCreateWallet(ctx, "human-user-2");
-      return await debitWallet(ctx, {
-        authUserId: "human-user-2",
-        amount: 900,
-        source: "buy_in",
-        operationKey: "test:deplete:alice",
-      });
-    });
-
-    await expect(
-      t.mutation(async (ctx) => {
-        const { internalStartGameHandler } = await import("../games/gamesSetup");
-        return await internalStartGameHandler(ctx, { gameId });
-      }),
-    ).rejects.toMatchObject({
-      data: {
-        code: "INSUFFICIENT_FUNDS",
-        message: expect.stringContaining("Alice") as unknown,
-      },
-    });
+    expect(balance).toBe(1000);
   });
 
   test("blocks start when player has an unsettled game via activeGameId", async () => {
@@ -472,5 +419,382 @@ describe("balance game buy-in reservation", () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("seat-lifecycle economy — buy-in on join (table stakes M1)", () => {
+  async function createBalanceRoom(
+    t: ReturnType<typeof convexTest>,
+    buyIn: number,
+  ) {
+    return await t.mutation(async (ctx) => {
+      const { createOpenRoom } = await import("../rooms/lifecycle");
+      const { roomId } = await createOpenRoom(ctx, {
+        title: "Join test room",
+        economyMode: "balance",
+        buyIn,
+      });
+      return roomId;
+    });
+  }
+
+  test("charges the buy-in once on join and seeds the seat stack", async () => {
+    const t = convexTest(schema);
+    const roomId = await createBalanceRoom(t, 500);
+
+    await t.mutation(async (ctx) => getOrCreateWallet(ctx, HUMAN_USER));
+
+    const { playerId } = await t.mutation(async (ctx) => {
+      const room = await ctx.db.get(roomId);
+      return await joinAuthenticatedUserToRoom(ctx, room!, HUMAN_USER, "Human");
+    });
+
+    // Wallet debited exactly once.
+    const balance = await t.query(async (ctx) => getWalletBalance(ctx, HUMAN_USER));
+    expect(balance).toBe(500); // 1000 - 500 buy-in
+
+    // Seat stack seeded to the buy-in; session opened at v1.
+    const seat = await t.query(async (ctx) => ctx.db.get(playerId));
+    expect(seat?.tableStack).toBe(500);
+    expect(seat?.tableSessionVersion).toBe(1);
+    expect(seat?.rebuyCount).toBe(0);
+
+    // A buy-in transaction keyed to (player, session v1, rebuy 0) exists.
+    const tx = await t.query(async (ctx) =>
+      findTransactionByOperationKey(
+        ctx,
+        `buy_in:${HUMAN_USER}:${playerId}:v1:r0`,
+      ),
+    );
+    expect(tx).not.toBeNull();
+    expect(tx!.amount).toBe(-500);
+  });
+
+  test("reconnecting to the same active seat does not charge again", async () => {
+    const t = convexTest(schema);
+    const roomId = await createBalanceRoom(t, 500);
+
+    await t.mutation(async (ctx) => getOrCreateWallet(ctx, HUMAN_USER));
+
+    await t.mutation(async (ctx) => {
+      const room = await ctx.db.get(roomId);
+      return await joinAuthenticatedUserToRoom(ctx, room!, HUMAN_USER, "Human");
+    });
+    // Second join to the same room = reconnect to the preserved active seat.
+    await t.mutation(async (ctx) => {
+      const room = await ctx.db.get(roomId);
+      return await joinAuthenticatedUserToRoom(ctx, room!, HUMAN_USER, "Human");
+    });
+
+    const balance = await t.query(async (ctx) => getWalletBalance(ctx, HUMAN_USER));
+    expect(balance).toBe(500); // charged once, not twice
+  });
+
+  test("rejects the join with INSUFFICIENT_FUNDS and seats nobody", async () => {
+    const t = convexTest(schema);
+    const roomId = await createBalanceRoom(t, 5000);
+
+    await t.mutation(async (ctx) => getOrCreateWallet(ctx, HUMAN_USER)); // 1000
+
+    await expect(
+      t.mutation(async (ctx) => {
+        const room = await ctx.db.get(roomId);
+        return await joinAuthenticatedUserToRoom(ctx, room!, HUMAN_USER, "Human");
+      }),
+    ).rejects.toMatchObject({ data: { code: "INSUFFICIENT_FUNDS" } });
+
+    // The whole transaction rolled back: no seat, no debit.
+    const balance = await t.query(async (ctx) => getWalletBalance(ctx, HUMAN_USER));
+    expect(balance).toBe(1000);
+    const seats = await t.query(async (ctx) =>
+      ctx.db
+        .query("players")
+        .withIndex("roomId_status", (q) =>
+          q.eq("roomId", roomId).eq("status", "active"),
+        )
+        .collect(),
+    );
+    expect(seats).toHaveLength(0);
+  });
+
+  test("non-balance join does not debit the wallet", async () => {
+    const t = convexTest(schema);
+    const roomId = await t.mutation(async (ctx) => {
+      const { createOpenRoom } = await import("../rooms/lifecycle");
+      const { roomId } = await createOpenRoom(ctx, {
+        title: "Non-balance room",
+        economyMode: "nonBalance",
+      });
+      return roomId;
+    });
+
+    await t.mutation(async (ctx) => getOrCreateWallet(ctx, HUMAN_USER));
+
+    const { playerId } = await t.mutation(async (ctx) => {
+      const room = await ctx.db.get(roomId);
+      return await joinAuthenticatedUserToRoom(ctx, room!, HUMAN_USER, "Human");
+    });
+
+    const balance = await t.query(async (ctx) => getWalletBalance(ctx, HUMAN_USER));
+    expect(balance).toBe(1000); // unchanged
+
+    const seat = await t.query(async (ctx) => ctx.db.get(playerId));
+    expect(seat?.tableStack).toBeUndefined();
+  });
+});
+
+describe("seat-tied dealer button rotation (table stakes M1)", () => {
+  test("button advances by real seat when eligibility changes (bust)", async () => {
+    // Regression for index-based rotation: dealer at seat 1 of [0,1,2]; seat 0
+    // busts to [1,2]. Index rotation would give (1+1)%2 = 0 → seat 1 again.
+    // Seat-tied rotation must advance clockwise past seat 1 → seat 2.
+    const t = convexTest(schema);
+
+    const roomId = await t.mutation(async (ctx) => {
+      const { createOpenRoom } = await import("../rooms/lifecycle");
+      const { roomId } = await createOpenRoom(ctx, {
+        title: "Dealer rotation room",
+        economyMode: "balance",
+        buyIn: 500,
+      });
+      return roomId;
+    });
+
+    // Three seats, all chipped (buy-in already done on join).
+    const seatIds = await t.mutation(async (ctx) => {
+      const ids: string[] = [];
+      for (let seatIndex = 0; seatIndex < 3; seatIndex++) {
+        const id = await ctx.db.insert("players", {
+          roomId,
+          authUserId: `human-seat-${seatIndex}`,
+          name: `Seat ${seatIndex}`,
+          seatIndex,
+          isHost: seatIndex === 0,
+          status: "active",
+          readyStatus: true,
+          lastSeenAt: Date.now(),
+          tableStack: 500,
+          tableSessionVersion: 1,
+          rebuyCount: 0,
+        });
+        ids.push(String(id));
+      }
+      return ids;
+    });
+
+    // A previous completed hand whose dealer button sat on seat 1.
+    await t.mutation(async (ctx) => {
+      await ctx.db.insert("games", {
+        roomId: String(roomId),
+        stage: "showdown",
+        communityTiles: [],
+        deck: [],
+        pot: 0,
+        currentBet: 0,
+        currentPlayerIndex: 0,
+        dealerButtonIndex: 1,
+        dealerSeatIndex: 1,
+        status: "completed",
+        settlementState: "settled",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      // Seat 0 busts out — excluded from the next hand.
+      await ctx.db.patch(ctx.db.normalizeId("players", seatIds[0]!)!, {
+        tableStack: 0,
+      });
+    });
+
+    const nextGameId = await t.mutation(async (ctx) => {
+      return await ctx.db.insert("games", {
+        roomId: String(roomId),
+        stage: "preflop",
+        communityTiles: [],
+        deck: [],
+        pot: 0,
+        currentBet: 0,
+        currentPlayerIndex: 0,
+        status: "waiting",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const result = await t.mutation(async (ctx) => {
+      const { internalStartGameHandler } = await import("../games/gamesSetup");
+      return await internalStartGameHandler(ctx, { gameId: nextGameId });
+    });
+    expect(result.ok).toBe(true);
+
+    // The participant sitting on the button must be seat 2, not seat 1.
+    const dealerPlayerId = await t.query(async (ctx) => {
+      const game = await ctx.db.get(nextGameId);
+      const hands = await ctx.db
+        .query("playerHands")
+        .withIndex("by_game", (q) => q.eq("gameId", nextGameId))
+        .collect();
+      const ordered = [...hands].sort((a, b) =>
+        a.createdAt !== b.createdAt
+          ? a.createdAt - b.createdAt
+          : a.playerId.localeCompare(b.playerId),
+      );
+      return ordered[game!.dealerButtonIndex ?? 0]?.playerId;
+    });
+
+    expect(dealerPlayerId).toBe(seatIds[2]);
+  });
+
+  test("rotation uses the persisted dealer seat, not a re-seated player", async () => {
+    // Previous dealer was on seat 1. That player later left and rejoined into
+    // seat 3. Rotation must advance clockwise from the HISTORICAL seat 1
+    // (→ seat 2), independent of where the old dealer sits now. Reconstructing
+    // the dealer from the mutable player record would wrongly rotate from
+    // seat 3 and wrap to seat 0.
+    const t = convexTest(schema);
+
+    const roomId = await t.mutation(async (ctx) => {
+      const { createOpenRoom } = await import("../rooms/lifecycle");
+      const { roomId } = await createOpenRoom(ctx, {
+        title: "Reseat rotation room",
+        economyMode: "balance",
+        buyIn: 500,
+      });
+      return roomId;
+    });
+
+    // Current occupied seats: 0, 2, and 3 (seat 1 now empty; the former
+    // seat-1 dealer has rejoined into seat 3).
+    const seatIndexById = new Map<number, string>();
+    await t.mutation(async (ctx) => {
+      for (const seatIndex of [0, 2, 3]) {
+        const id = await ctx.db.insert("players", {
+          roomId,
+          authUserId: `human-seat-${seatIndex}`,
+          name: `Seat ${seatIndex}`,
+          seatIndex,
+          isHost: seatIndex === 0,
+          status: "active",
+          readyStatus: true,
+          lastSeenAt: Date.now(),
+          tableStack: 500,
+          tableSessionVersion: 1,
+          rebuyCount: 0,
+        });
+        seatIndexById.set(seatIndex, String(id));
+      }
+    });
+
+    // Previous completed hand recorded the dealer on seat 1.
+    await t.mutation(async (ctx) => {
+      await ctx.db.insert("games", {
+        roomId: String(roomId),
+        stage: "showdown",
+        communityTiles: [],
+        deck: [],
+        pot: 0,
+        currentBet: 0,
+        currentPlayerIndex: 0,
+        dealerButtonIndex: 0,
+        dealerSeatIndex: 1,
+        status: "completed",
+        settlementState: "settled",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const nextGameId = await t.mutation(async (ctx) => {
+      return await ctx.db.insert("games", {
+        roomId: String(roomId),
+        stage: "preflop",
+        communityTiles: [],
+        deck: [],
+        pot: 0,
+        currentBet: 0,
+        currentPlayerIndex: 0,
+        status: "waiting",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const result = await t.mutation(async (ctx) => {
+      const { internalStartGameHandler } = await import("../games/gamesSetup");
+      return await internalStartGameHandler(ctx, { gameId: nextGameId });
+    });
+    expect(result.ok).toBe(true);
+
+    const game = await t.query(async (ctx) => ctx.db.get(nextGameId));
+    // Clockwise from historical seat 1 → seat 2.
+    expect(game!.dealerSeatIndex).toBe(2);
+  });
+});
+
+describe("busted-seat start handling (table stakes M1.4)", () => {
+  test("start throws REBUY_REQUIRED when occupied seats are out of chips", async () => {
+    // Two occupied seats, but only one has chips — the other must re-buy. This
+    // is distinct from NOT_ENOUGH_PLAYERS so the UI can prompt a re-buy.
+    const t = convexTest(schema);
+
+    const roomId = await t.mutation(async (ctx) => {
+      const { createOpenRoom } = await import("../rooms/lifecycle");
+      const { roomId } = await createOpenRoom(ctx, {
+        title: "Busted seat room",
+        economyMode: "balance",
+        buyIn: 500,
+      });
+      return roomId;
+    });
+
+    await t.mutation(async (ctx) => {
+      await ctx.db.insert("players", {
+        roomId,
+        authUserId: "human-a",
+        name: "A",
+        seatIndex: 0,
+        isHost: true,
+        status: "active",
+        readyStatus: true,
+        lastSeenAt: Date.now(),
+        tableStack: 500, // chipped
+        tableSessionVersion: 1,
+        rebuyCount: 0,
+      });
+      await ctx.db.insert("players", {
+        roomId,
+        authUserId: "human-b",
+        name: "B",
+        seatIndex: 1,
+        isHost: false,
+        status: "active",
+        readyStatus: false,
+        lastSeenAt: Date.now(),
+        tableStack: 0, // busted — must re-buy
+        tableSessionVersion: 1,
+        rebuyCount: 0,
+      });
+    });
+
+    const gameId = await t.mutation(async (ctx) => {
+      return await ctx.db.insert("games", {
+        roomId: String(roomId),
+        stage: "preflop",
+        communityTiles: [],
+        deck: [],
+        pot: 0,
+        currentBet: 0,
+        currentPlayerIndex: 0,
+        status: "waiting",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    await expect(
+      t.mutation(async (ctx) => {
+        const { internalStartGameHandler } = await import("../games/gamesSetup");
+        return await internalStartGameHandler(ctx, { gameId });
+      }),
+    ).rejects.toMatchObject({ data: { code: "REBUY_REQUIRED" } });
   });
 });

@@ -1,20 +1,67 @@
-# P0: Leave and cash-out
+# P0: Leave table and cash out
 #
 # Verifies that leaving a balance game table returns the remaining
-# stack to the wallet:
+# table stack to the wallet:
 # 1. Leaving returns the remaining stack to the wallet
-# 2. Table stack becomes zero
-# 3. Seat becomes available
-# 4. Repeated leave attempts cannot pay twice
+# 2. The table seat becomes available
+# 3. Repeated leave attempts cannot pay twice
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run test:maestro:setup
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: Leave table returns chips to wallet
+tags:
+  - lifecycle
+  - economy
+  - cashout
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
 
-# Precondition: player is at a balance table with some chips.
-# Step 1: Note current wallet balance
-# Step 2: Leave the table via the back/leave button
-# Step 3: Verify wallet increased by the table stack amount
-# Step 4: Verify the table seat is now available
-# Step 5: Verify leaving again does not pay twice
+- runScript:
+    file: ../../scripts/setup-table-stakes.js
+- assertTrue:
+    condition: ${output.tableStakes.initialWallet === 1000}
+    label: Wallet starts at exactly 1,000 coins
+
+# Join and ready up so the player has an active seat with chips.
+- openLink: ${"http://localhost:3000/rooms/" + output.tableStakes.code}
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- tapOn: "I'm Ready!"
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 60000
+
+# Capture state before leaving.
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 500}
+    label: Wallet holds exactly 500 coins after the buy-in
+- assertTrue:
+    condition: ${output.tableStakesState.tableStack === 500}
+    label: The 500 coin table stack exists before leaving
+
+# Navigate home and leave the room via the leave-room button.
+- tapOn:
+    id: "leave-room-button"
+- extendedWaitUntil:
+    visible: "Online Mode"
+    timeout: 30000
+
+# Verify the full stack was returned to the wallet.
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 1000}
+    label: Leaving returns the remaining table stack to the wallet
+- assertTrue:
+    condition: ${output.tableStakesState.activeRoomCode === null}
+    label: Leaving frees the player's active table seat

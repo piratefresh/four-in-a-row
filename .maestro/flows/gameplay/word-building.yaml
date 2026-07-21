@@ -1,0 +1,51 @@
+# P0: Word building and submission
+#
+# Exercises the full word-building pipeline:
+# 1. Fast-forward to showdown phase
+# 2. Submit a word from available tiles
+# 3. Verify the submission is recorded and results display
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run test:maestro:setup
+
+url: http://localhost:3000/login
+name: Word building and submission
+tags:
+  - gameplay
+  - showdown
+  - word-builder
+env:
+  CONVEX_URL: http://127.0.0.1:3210
+---
+- launchApp
+- runFlow: ../shared/login.yaml
+
+# Create the game and fast-forward to showdown server-side.
+- runScript:
+    file: ../../scripts/seed-word-building.js
+
+- openLink: ${"http://localhost:3000/rooms/" + output.wordBuild.code}
+
+# Wait for the showdown (word-building) phase.
+- extendedWaitUntil:
+    visible: "SHOWDOWN"
+    timeout: 60000
+
+# Submit a word via the Convex API (builds from available tiles).
+- runScript:
+    file: ../../scripts/submit-test-word.js
+
+# The script tells us what word was submitted and whether it was valid.
+- assertTrue:
+    condition: ${output.wordSubmission.tilesUsed >= 2}
+    label: At least 2 tiles were used in the submission
+
+# After submission, the hand resolves and shows results.
+- extendedWaitUntil:
+    visible: "Play Another"
+    timeout: 30000
+
+# Verify the results screen shows the submitted word or winner info.
+- assertVisible: "Play Another"

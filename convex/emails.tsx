@@ -10,7 +10,7 @@ import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 
 export const resend = new Resend(components.resend, {
-  testMode: process.env.RESEND_TEST_MODE !== "false",
+  testMode: process.env.RESEND_TEST_MODE === "true",
 });
 
 export const sendVerificationEmail = action({
@@ -19,6 +19,7 @@ export const sendVerificationEmail = action({
     url: v.string(),
   },
   handler: async (ctx, { to, url }) => {
+    if (process.env.E2E_TESTING === "true") return;
     const html = await render(<VerificationEmail url={url} />);
     await resend.sendEmail(ctx, {
       from: process.env.RESEND_FROM_EMAIL || "noreply@contact.wordpoker.app",
@@ -35,6 +36,7 @@ export const sendResetPasswordEmail = action({
     url: v.string(),
   },
   handler: async (ctx, { to, url }) => {
+    if (process.env.E2E_TESTING === "true") return;
     const html = await render(<ResetPasswordEmail url={url} />);
     await resend.sendEmail(ctx, {
       from: process.env.RESEND_FROM_EMAIL || "noreply@contact.wordpoker.app",

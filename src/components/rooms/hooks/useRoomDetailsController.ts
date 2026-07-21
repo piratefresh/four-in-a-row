@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
+import { api } from "../../../../convex/_generated/api";
 import type {
   RoomTableContextValue,
   RoomBettingContextValue,
@@ -30,7 +33,7 @@ import {
 import { RAISE_LADDER } from "../../../../convex/gameState";
 import { useRoomPresence } from "./useRoomPresence";
 
-const ANTE_AMOUNT = 20;
+const ANTE_AMOUNT = 0;
 
 export function useRoomDetailsController(
   code: string,
@@ -243,6 +246,37 @@ export function useRoomDetailsController(
     game.stage !== "showdown" &&
     !isTutorialBettingPaused;
 
+  // --- Out-of-chips re-buy (table-stakes epic M1.7) ---
+  const rebuyMutation = useMutation(api.rooms.rebuy);
+  const walletData = useQuery(api.wallet.getMyBalance);
+  const [isRebuying, setIsRebuying] = useState(false);
+
+  const isBalanceRoom = roomData?.room.economyMode === "balance";
+  const roomBuyIn = roomData?.room.buyIn ?? null;
+  const myTableStack =
+    roomData?.members.find((member) => String(member._id) === playerId)
+      ?.tableStack ?? null;
+  // Busted only counts between hands — never mid-active-hand.
+  const isOutOfChips = Boolean(
+    isBalanceRoom && game?.status !== "active" && myTableStack === 0,
+  );
+  const canAffordRebuy =
+    roomBuyIn != null && (walletData?.balance ?? 0) >= roomBuyIn;
+
+  const handleRebuy = useCallback(async () => {
+    setIsRebuying(true);
+    try {
+      await rebuyMutation({ code });
+    } catch (error) {
+      const message =
+        (error as { data?: { message?: string } })?.data?.message ??
+        "Could not re-buy. Try again.";
+      toast.error(message);
+    } finally {
+      setIsRebuying(false);
+    }
+  }, [rebuyMutation, code]);
+
   const roomTableContextValue: RoomTableContextValue = useMemo(
     () => ({
       anteAmount: ANTE_AMOUNT,
@@ -267,11 +301,21 @@ export function useRoomDetailsController(
       isShowdownSubmissionOpen,
       isTutorialBettingPaused,
       isTutorialRoom,
+      isOutOfChips,
+      buyIn: roomBuyIn,
+      canAffordRebuy,
+      isRebuying,
+      onRebuy: isOutOfChips ? handleRebuy : undefined,
     }),
     [
       raisesThisRound,
       maxRaisesPerRound,
       game?.status,
+      isOutOfChips,
+      roomBuyIn,
+      canAffordRebuy,
+      isRebuying,
+      handleRebuy,
       ready.handleToggleReady,
       ready.isTogglingReady,
       myPlayer?.readyStatus,
@@ -311,10 +355,13 @@ export function useRoomDetailsController(
       callAmount: callAmt,
       raiseLabel:
         selectedRaiseAmount !== null
-          ? `Raise to ${selectedRaiseAmount}`
+          ? (game?.currentBet ?? 0) === 0
+            ? `Bet ${selectedRaiseAmount}`
+            : `Raise to ${selectedRaiseAmount}`
           : "Maxed",
       raiseAmount: selectedRaiseAmount,
       raiseOptions,
+      isOpeningBet: (game?.currentBet ?? 0) === 0,
     }),
     [
       bettingActions.gameMessage,
@@ -335,6 +382,7 @@ export function useRoomDetailsController(
       raiseOptions,
       setSelectedRaiseAmount,
       leave.handleBack,
+      game?.currentBet,
     ],
   );
 

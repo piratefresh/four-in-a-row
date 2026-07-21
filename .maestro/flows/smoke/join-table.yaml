@@ -1,11 +1,58 @@
-# Smoke: Join a table
+# P0: Join a table
 #
-# Creates a test table via the E2E fixture, opens it in the browser,
-# and verifies the room UI loads.
+# Exercises the join flow end-to-end from the lobby through the
+# buy-in confirmation modal:
+# - Navigate to a table from the lobby
+# - Verify the join confirmation modal shows wallet balance and buy-in
+# - Confirm the buy-in
+# - Verify the player arrives at the room setup phase
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run test:maestro:setup
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: Join table flow with buy-in confirmation
+tags:
+  - smoke
+  - economy
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-# The test setup script should have created a table and seeded the wallet.
-# Navigate to the online tables list.
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
+
+- runScript:
+    file: ../../scripts/setup-table-stakes.js
+- assertTrue:
+    condition: ${output.tableStakes.initialWallet === 1000}
+    label: Wallet starts at exactly 1,000 coins
+- assertTrue:
+    condition: ${output.tableStakes.buyIn === 500}
+    label: Table has a fixed 500 coin buy-in
+
+# Navigate to the lobby and tap the table card.
+- openLink: http://localhost:3000/rooms
+- extendedWaitUntil:
+    visible: "STO-249 Table Stakes"
+    timeout: 30000
+- tapOn: "STO-249 Table Stakes"
+
+# The join modal must show wallet balance and the fixed buy-in before confirming.
+- assertVisible: "Wallet balance"
+- assertVisible: "Balance after join"
+- tapOn: "Join table"
+- assertVisible: "Confirm your buy-in"
+- assertVisible: "Fixed buy-in"
+- assertVisible: "1,000 coins"
+- assertVisible: "500 coins"
+- assertVisible: "Confirm & Join"
+- tapOn: "Confirm & Join"
+
+# After confirming, the player should land in the room setup phase.
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- assertVisible: "E2E Test Player"
+- assertVisible: "I'm Ready!"

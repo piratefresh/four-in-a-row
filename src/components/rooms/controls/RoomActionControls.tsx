@@ -33,6 +33,8 @@ type BettingControlsProps = {
   raiseLabel: string;
   raiseAmount?: number | null;
   raiseOptions?: number[];
+  /** No live bet this round → the raise button reads "Bet" instead of "Raise". */
+  isOpeningBet?: boolean;
 };
 
 type UtilityControlsProps = {
@@ -44,11 +46,20 @@ type FoldedControlsProps = {
   onLeaveRoom?: () => void;
 };
 
+type OutOfChipsControlsProps = {
+  buyIn: number | null;
+  canAfford: boolean;
+  isRebuying: boolean;
+  onRebuy?: () => void;
+  onLeave?: () => void;
+};
+
 type RoomActionControlsProps = {
   ready?: ReadyControlsProps;
   betting?: BettingControlsProps;
   utility?: UtilityControlsProps;
   folded?: FoldedControlsProps;
+  outOfChips?: OutOfChipsControlsProps;
   helperTip?: ReactNode;
 };
 
@@ -85,11 +96,14 @@ export function RoomActionControls({
   betting,
   utility,
   folded,
+  outOfChips,
   helperTip,
 }: RoomActionControlsProps) {
   const tutorial = useTutorialAdapterContext();
   const [isConfirmingFold, setIsConfirmingFold] = useState(false);
   const showRaiseChip = !!betting && (betting.raiseAmount ?? 0) > 0;
+  // With no forced blinds, opening the action is a "Bet", not a "Raise".
+  const raiseChipVerb = betting?.isOpeningBet ? "Bet" : "Raise to";
   const foldActionState = getFoldActionState({
     isConfirmingFold,
     isBetting: betting?.isBetting ?? false,
@@ -119,6 +133,60 @@ export function RoomActionControls({
     tutorial.onBettingAction();
     setIsConfirmingFold(false);
   };
+
+  if (outOfChips) {
+    const rebuyLabel =
+      outOfChips.buyIn != null
+        ? `Re-buy - $${outOfChips.buyIn.toLocaleString()}`
+        : "Re-buy";
+    return (
+      <div
+        id="tutorial-room-actions"
+        className="flex w-full items-center justify-center"
+      >
+        <div className="flex w-full max-w-md flex-col items-center gap-2.5">
+          {helperTip}
+          <div className="text-center">
+            <div className="font-serif text-base font-semibold text-cream">
+              You&rsquo;re out of chips
+            </div>
+            <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.16em] text-cream/45">
+              Re-buy to keep playing, or leave the table
+            </div>
+          </div>
+          <div className="flex w-full flex-wrap items-center justify-center gap-2">
+            <ActionButton
+              variant="raise"
+              size="wide"
+              onClick={() => outOfChips.onRebuy?.()}
+              disabled={
+                outOfChips.isRebuying ||
+                !outOfChips.canAfford ||
+                !outOfChips.onRebuy
+              }
+              aria-label={rebuyLabel}
+            >
+              {outOfChips.isRebuying ? "Re-buying..." : rebuyLabel}
+            </ActionButton>
+            <ActionButton
+              variant="fold"
+              size="wide"
+              onClick={() => outOfChips.onLeave?.()}
+              disabled={outOfChips.isRebuying || !outOfChips.onLeave}
+              aria-label="Leave table"
+            >
+              Leave room
+            </ActionButton>
+          </div>
+          {!outOfChips.canAfford ? (
+            <p className="text-center font-mono text-[11px] text-game-red">
+              Not enough coins in your wallet to re-buy.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   if (ready) {
     const handleReadyClick = () => {
@@ -323,7 +391,7 @@ export function RoomActionControls({
                       disabled={betting.isBetting || !betting.canRaise}
                       aria-label={
                         showRaiseChip
-                          ? `Raise to ${(betting.raiseAmount ?? 0).toLocaleString()} coins`
+                          ? `${raiseChipVerb} ${(betting.raiseAmount ?? 0).toLocaleString()} coins`
                           : betting.raiseLabel
                       }
                     >
@@ -331,7 +399,7 @@ export function RoomActionControls({
                         "Betting..."
                       ) : showRaiseChip ? (
                         <span className="inline-flex items-center gap-2">
-                          <span>Raise to</span>
+                          <span>{raiseChipVerb}</span>
                           {betting.raiseAmount ?? 0}
                         </span>
                       ) : (
@@ -422,7 +490,7 @@ export function RoomActionControls({
                         disabled={betting.isBetting || !betting.canRaise}
                         aria-label={
                           showRaiseChip
-                            ? `Raise to ${(betting.raiseAmount ?? 0).toLocaleString()} coins`
+                            ? `${raiseChipVerb} ${(betting.raiseAmount ?? 0).toLocaleString()} coins`
                             : betting.raiseLabel
                         }
                       >
@@ -430,7 +498,7 @@ export function RoomActionControls({
                           "Betting..."
                         ) : showRaiseChip ? (
                           <span className="inline-flex items-center gap-2">
-                            <span>Raise to</span>
+                            <span>{raiseChipVerb}</span>
                             {betting.raiseAmount ?? 0}
                           </span>
                         ) : (

@@ -6,7 +6,8 @@ interface RoomRowProps {
   configLabel: string;
   activePlayers: number;
   maxPlayers: number;
-  pot: number;
+  economyMode?: string | null;
+  buyIn?: number | null;
   status: "live" | "open" | "full";
   lastActiveAt: number;
   currentTime: number;
@@ -55,7 +56,8 @@ export function RoomRow({
   configLabel,
   activePlayers,
   maxPlayers,
-  pot,
+  economyMode,
+  buyIn,
   status,
   lastActiveAt,
   currentTime,
@@ -66,6 +68,7 @@ export function RoomRow({
 }: RoomRowProps) {
   const sc = statusConfig[status];
   const isEmpty = activePlayers === 0;
+  const isBalance = economyMode === "balance" && buyIn != null;
   const nextTimer = formatNextTimer(lastActiveAt, currentTime, status);
 
   return (
@@ -73,6 +76,11 @@ export function RoomRow({
       type="button"
       onClick={onClick}
       disabled={isJoining || status === "full"}
+      aria-label={
+        isBalance
+          ? `${roomTitle || `Room ${roomCode}`}, Buy-in: ${buyIn.toLocaleString()} coins, ${activePlayers}/${maxPlayers} players`
+          : `${roomTitle || `Room ${roomCode}`}, Non-balance, ${activePlayers}/${maxPlayers} players`
+      }
       className={`group relative grid min-h-[118px] w-full grid-cols-1 gap-4 rounded-lg border px-5 py-4 text-left transition-all duration-200 sm:grid-cols-[minmax(220px,1.6fr)_minmax(112px,1fr)_minmax(94px,0.9fr)_minmax(94px,0.8fr)_60px] sm:items-start ${
         isHot
           ? "border-gold/30 bg-gold/[0.06]"
@@ -140,16 +148,22 @@ export function RoomRow({
       </div>
 
       <div className="relative z-10 sm:pt-4">
-        <div className="font-serif text-[18px] font-bold leading-none text-gold tabular-nums">
-          ${pot.toLocaleString()}
-        </div>
+        {isBalance ? (
+          <div className="font-serif text-[18px] font-bold leading-none text-gold tabular-nums">
+            ${buyIn.toLocaleString()}
+          </div>
+        ) : (
+          <div className="font-serif text-[18px] font-bold leading-none text-cream/45">
+            Free
+          </div>
+        )}
         <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.16em] text-cream/35">
-          pot
+          {isBalance ? "buy-in" : "non-balance"}
         </div>
       </div>
 
       <div className="relative z-10 hidden sm:flex sm:justify-center sm:pt-3.5">
-        <TrendSparkline seed={roomCode} active={status !== "full" && pot > 0} />
+        <TrendSparkline seed={roomCode} active={status !== "full" && activePlayers > 0} />
       </div>
 
       <div className="relative z-10 text-left sm:pt-4 sm:text-right">

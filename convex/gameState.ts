@@ -87,9 +87,11 @@ export const CHOICE_TILE_OPTIONS: Array<[string, string]> = [
 ];
 
 // Betting constants
-export const SMALL_BLIND = 10;
-export const BIG_BLIND = 20;
-export const ANTE_AMOUNT = 20; // Kept for backwards compatibility
+// Legacy configuration fields remain for stored-game compatibility. Word
+// Poker has no forced opening bets, so all three amounts resolve to zero.
+export const SMALL_BLIND = 0;
+export const BIG_BLIND = 0;
+export const ANTE_AMOUNT = 0;
 export const RAISE_LADDER = [20, 40, 60, 80, 100, 120, 140, 160, 200];
 export const MAX_RAISES_PER_ROUND = 3;
 
@@ -165,8 +167,6 @@ export function createInitialGameDocument(
     currentBet: 0,
     currentPlayerIndex: 0,
     dealerButtonIndex: 0,
-    smallBlindIndex: 1,
-    bigBlindIndex: 2,
     raisesThisRound: 0,
     status: "waiting" as const,
     turnStartedAt: undefined,

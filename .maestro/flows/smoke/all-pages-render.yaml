@@ -1,0 +1,87 @@
+# Smoke: every product page renders
+#
+# Covers every user-facing product route. Scaffold demo routes, dev-only
+# showcases, admin tools, and API handlers are intentionally out of scope.
+# Parameterized routes are exercised with real E2E data so this checks the
+# useful page state rather than a loading or not-found fallback.
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run scripts/maestro-setup.ts
+
+url: http://localhost:3000/login
+name: All product pages render
+tags:
+  - smoke
+env:
+  CONVEX_URL: http://127.0.0.1:3210
+---
+- launchApp
+
+# Public account pages. The auth forms intentionally render a signed-in state
+# when another smoke flow has already authenticated this browser.
+- assertVisible: "Email|You're signed in"
+- openLink: http://localhost:3000/register
+- assertVisible: "Name|You're signed in"
+- openLink: http://localhost:3000/forgot-password
+- assertVisible: "Forgot password?"
+- openLink: http://localhost:3000/reset-password
+- assertVisible: "Invalid link"
+- openLink: http://localhost:3000/verify-email
+- assertVisible: "Verify your email"
+
+# Authenticate only when this Maestro browser does not already have a session.
+- runFlow: ../shared/login.yaml
+
+# Authenticated static product pages.
+- openLink: http://localhost:3000
+- assertVisible: "Online Mode"
+- openLink: http://localhost:3000/rooms
+- assertVisible: "NEW ROOM"
+- openLink: http://localhost:3000/leaderboard
+- assertVisible: "Leaderboard"
+- openLink: http://localhost:3000/achievements
+- assertVisible: "UNLOCKED"
+- openLink: http://localhost:3000/friends
+- assertVisible: "Friends"
+- openLink: http://localhost:3000/settings
+- assertVisible: "Account"
+- openLink: http://localhost:3000/wallet
+- assertVisible: "Coin Balance"
+
+# River Run index and its parameterized play page.
+- openLink: http://localhost:3000/river-run
+- assertVisible: "River Run"
+- tapOn: "Start solo run"
+- extendedWaitUntil:
+    visible: "Phase 1: Draft"
+    timeout: 30000
+
+# Create a real table for /rooms/$code, then finish the shortest possible hand
+# so /results/$code has valid showdown data to render.
+- runScript:
+    file: ../../scripts/create-basic-game.js
+- openLink: ${"http://localhost:3000/rooms/" + output.basicGame.code}
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- assertVisible: "Maestro Player"
+- tapOn: "I'm Ready!"
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 60000
+- extendedWaitUntil:
+    visible: "Fold"
+    timeout: 60000
+- tapOn: "Fold"
+- assertVisible: "Confirm fold"
+- tapOn: "Confirm fold"
+- extendedWaitUntil:
+    visible: "Play Another"
+    timeout: 30000
+
+- openLink: ${"http://localhost:3000/results/" + output.basicGame.code}
+- extendedWaitUntil:
+    visible: "Play Another"
+    timeout: 30000

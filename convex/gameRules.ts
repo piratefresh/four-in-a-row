@@ -77,8 +77,8 @@ Word Poker is a multiplayer word game combining poker-style betting with strateg
 Players receive private letter tiles and share community tiles, betting on their ability to form high-scoring words.
 
 ## Game Flow
-1. **Blinds & Deal**: Small blind and big blind post forced bets; each player receives 2 private tiles
-2. **Pre-Flop**: Betting round using only private tiles
+1. **Deal**: Each player receives 2 private tiles before any betting occurs
+2. **Pre-Flop**: The first player may check or bet using only private tiles
 3. **Flop**: 3 community tiles revealed (shared by all) -> Betting round
 4. **Turn**: 1 additional community tile revealed (4 total) -> Betting round
 5. **River**: 1 additional community tile revealed (5 total) -> Last betting round
@@ -123,9 +123,8 @@ Players receive private letter tiles and share community tiles, betting on their
 - **All-In**: Bet all remaining chips
 
 ## Betting Constants
-- **Small blind**: 10 chips
-- **Big blind**: 20 chips
-- **Starting chips**: 1000
+- **Forced bets**: None
+- **Starting chips**: Determined by the table's fixed buy-in
 - **Raise ladder**: Fixed increments (20 → 40 → 60 → 80 → 100 → 120 → 140 → 160 → 200)
 
 ## Winning & Tie-Breakers

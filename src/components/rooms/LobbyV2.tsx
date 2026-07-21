@@ -1,3 +1,5 @@
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import { Header } from "./lobbyv2/Header";
 import { LiveFeed } from "./lobbyv2/LiveFeed";
 import { RoomList } from "./lobbyv2/RoomList";
@@ -20,7 +22,6 @@ type RoomListItem = {
   lastActiveAt: number;
   createdAt: number;
   playerInitials?: string[];
-  pot?: number;
 };
 
 type LobbyV2Props = {
@@ -57,17 +58,25 @@ export function LobbyV2({
 }: LobbyV2Props) {
   const canResumeActiveRoom = Boolean(activeRoomCode && !activeRoomTutorialId);
 
+  const walletBalance = useQuery(api.wallet.getMyBalance);
+
   const enrichedRooms = rooms?.map((room) => ({
     ...room,
-    pot: room.pot ?? 0,
     isHot: room.activePlayers >= 3,
     playerInitials: room.playerInitials ?? [],
   }));
 
+  const chipsValue =
+    walletBalance === undefined
+      ? "…"
+      : walletBalance.hasWallet && walletBalance.balance != null
+        ? `$${walletBalance.balance.toLocaleString()}`
+        : "$0";
+
   const statItems = [
     {
       label: "Your chips",
-      value: "$1,000",
+      value: chipsValue,
       isPersonal: true,
     },
     {

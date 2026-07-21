@@ -27,6 +27,13 @@ export type RoomTableContextValue = {
   isShowdownSubmissionOpen: boolean;
   isTutorialBettingPaused: boolean;
   isTutorialRoom: boolean;
+  // Out-of-chips re-buy state (table-stakes epic M1.7). When a balance-table
+  // seat is busted between hands it must re-buy or leave rather than ready up.
+  isOutOfChips: boolean;
+  buyIn: number | null;
+  canAffordRebuy: boolean;
+  isRebuying: boolean;
+  onRebuy?: () => void;
 };
 
 const RoomTableContext = createContext<RoomTableContextValue | null>(null);
@@ -69,6 +76,9 @@ export type RoomBettingContextValue = {
   raiseLabel: string;
   raiseAmount: number | null;
   raiseOptions: number[];
+  // No live bet yet this round → the raise action is an opening "Bet"
+  // (table-stakes epic M1.7, no forced blinds).
+  isOpeningBet: boolean;
 };
 
 const RoomBettingContext = createContext<RoomBettingContextValue | null>(null);

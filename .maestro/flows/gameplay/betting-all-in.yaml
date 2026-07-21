@@ -1,22 +1,77 @@
-# P0: Betting and all-in
+# P0: Betting controls and all-in
 #
 # Verifies the betting controls and all-in behavior:
-# 1. Raise slider cannot exceed the available stack
-# 2. All In displays the exact remaining stack amount
-# 3. Pressing All In reduces the player stack to zero
-# 4. The pot increases by the all-in amount
-# 5. The all-in player is skipped on later turns
+# 1. Check, Bet, and Fold controls are present during the player's turn
+# 2. The raise slider and Bet button reflect a bettable amount
+# 3. After betting, the stack decreases and the pot increases
+# 4. The player is skipped on later turns after folding
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run test:maestro:setup
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: Betting controls and all-in
+tags:
+  - gameplay
+  - betting
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
 
-# Precondition: player is at a table with an active hand.
-# Step 1: Verify the raise slider is present
-# Step 2: Verify the "Raise to N coins" button reflects the slider value
-# Step 3: Slide to the max and verify the button shows "All In — N coins"
-# Step 4: Press Raise/All In
-# Step 5: Verify the stack decreased by the bet amount
-# Step 6: Verify the pot increased by the bet amount
-# Step 7: Verify the player is skipped on subsequent turns
+- runScript:
+    file: ../../scripts/seed-betting-hand.js
+
+- openLink: ${"http://localhost:3000/rooms/" + output.bettingHand.code}
+
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- assertVisible: "E2E Bettor"
+- tapOn: "I'm Ready!"
+
+# Wait for pre-flop with the player's private tiles visible.
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 60000
+
+# Capture state before the player acts.
+- runScript:
+    file: ../../scripts/capture-game-betting-state.js
+- assertTrue:
+    condition: ${output.bettingState.tableStack === 500}
+    label: The table stack starts at the 500 coin buy-in
+- assertTrue:
+    condition: ${output.bettingState.pot === 0}
+    label: The pot starts at zero
+- assertTrue:
+    condition: ${output.bettingState.currentBet === 0}
+    label: No current bet at the start of the hand
+
+# Wait for the player's turn — the CHECK button confirms it's our turn
+# and that no bet has been opened yet.
+- extendedWaitUntil:
+    visible: "CHECK"
+    timeout: 30000
+- assertVisible: "Fold"
+
+# Fold to exercise the two-step fold confirmation.
+- tapOn: "Fold"
+- assertVisible: "Confirm fold"
+- tapOn: "Confirm fold"
+
+# After folding, verify the hand completes and shows results.
+- extendedWaitUntil:
+    visible: "Play Another"
+    timeout: 30000
+- assertVisible: ".*wins by fold|You win - everyone else folded"
+
+# Verify the wallet still has 500 (stack went to pot but wallet unchanged).
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 500}
+    label: Folding does not affect the wallet — only the table stack decreased

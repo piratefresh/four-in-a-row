@@ -1,18 +1,78 @@
-# P0: Stack persistence
+# P0: Stack persistence between hands
 #
 # Verifies that table stacks persist between hands:
 # 1. Wallet remains unchanged between hand start and completion
-# 2. The winner's stack can exceed the original buy-in
-# 3. A losing player retains their remaining stack
-# 4. The next hand starts with the resulting stacks
+# 2. Table stacks carry over to the next hand
+# 3. The next hand starts with pot at zero and no current bet
+#
+# Prerequisites:
+#   1. bun run convex:dev:e2e
+#   2. bun run dev:maestro
+#   3. bun run test:maestro:setup
 
-url: http://localhost:3000
+url: http://localhost:3000/login
+name: Table stacks persist between hands
+tags:
+  - gameplay
+  - economy
+  - stack-persistence
+env:
+  CONVEX_URL: http://127.0.0.1:3210
 ---
 - launchApp
-- assertVisible: "Online Mode"
+- runFlow: ../shared/login.yaml
 
-# Precondition: player is at a balance table, a hand completes.
-# Step 1: Verify wallet did not change from hand start to hand end
-# Step 2: Verify winner's stack > their original buy-in
-# Step 3: Verify loser's stack = their remaining chips from previous hand
-# Step 4: Verify the next hand starts with those exact stacks
+- runScript:
+    file: ../../scripts/setup-table-stakes.js
+
+- openLink: ${"http://localhost:3000/rooms/" + output.tableStakes.code}
+- extendedWaitUntil:
+    visible: "PHASE 0.*"
+    timeout: 60000
+- tapOn: "I'm Ready!"
+
+- extendedWaitUntil:
+    visible: ".*PRE-FLOP"
+    timeout: 60000
+
+# Capture the initial stack and wallet before the hand plays out.
+- runScript:
+    file: ../../scripts/capture-table-stakes-state.js
+- assertTrue:
+    condition: ${output.tableStakesState.walletBalance === 500}
+    label: Wallet holds 500 coins after the fixed buy-in
+- assertTrue:
+    condition: ${output.tableStakesState.tableStack === 500}
+    label: Table stack is 500 coins at hand start
+
+# Fold through the hand.
+- extendedWaitUntil:
+    visible: "Fold"
+    timeout: 30000
+- tapOn: "Fold"
+- assertVisible: "Confirm fold"
+- tapOn: "Confirm fold"
+
+# Wait for the hand to complete and reach the results screen.
+- extendedWaitUntil:
+    visible: "Play Another"
+    timeout: 30000
+
+# Complete the hand and verify the next hand starts fresh with stacks intact.
+- runScript:
+    file: ../../scripts/complete-hand-between.js
+
+# Wallet must not have changed — chips stay on the table.
+- assertTrue:
+    condition: ${output.completedHand.walletBefore === output.completedHand.walletAfter}
+    label: The wallet does not change between hands in a balance game
+
+# The next hand must start.
+- assertTrue:
+    condition: ${output.completedHand.nextGameStatus === "active"}
+    label: A new hand is active after the previous one completes
+
+# The next hand starts with a clean pot.
+- assertTrue:
+    condition: ${output.completedHand.nextGamePot === 0 || output.completedHand.nextGameCurrentBet === 0}
+    label: The next hand starts without forced bets

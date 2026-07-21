@@ -7,6 +7,7 @@ import {
 } from "../gameState";
 import type { GameDeckTile, GameStage, GameTile } from "../gameState";
 import { resolveConfig } from "../gameConfig";
+import { isDisconnected } from "../rooms/helpers";
 import {
   AI_DEALER_PLAYER_ID,
   BOT_ACTION_DELAY_MS,
@@ -450,11 +451,17 @@ export async function scheduleBotTurnIfNeeded(
         `scheduleBotTurnIfNeeded: Scheduling turn timeout for ${currentTurnHand.playerId}`,
       );
       const config = game.config ?? resolveConfig();
+      // A disconnected seat auto-folds near-immediately (table-stakes epic
+      // M1.6) so the hand never stalls waiting the full turn clock on it. This
+      // reuses the existing turn-clock → fold resolution path.
+      const seatId = ctx.db.normalizeId("players", currentTurnHand.playerId);
+      const seat = seatId ? await ctx.db.get(seatId) : null;
+      const disconnected = seat ? isDisconnected(seat, Date.now()) : false;
       await scheduleTurnTimeout(ctx, {
         gameId,
         playerId: currentTurnHand.playerId,
         turnStartedAt: game.turnStartedAt,
-        timeoutMs: config.turnClockGraceMs,
+        timeoutMs: disconnected ? 0 : config.turnClockGraceMs,
       });
     }
     console.log("scheduleBotTurnIfNeeded: Current player is not a bot, skipping bot action");
@@ -593,4 +600,87 @@ export async function handlePostActionProgression(
   }
 
   await scheduleBotTurnIfNeeded(ctx, game._id);
+}
+
+/**
+ * Forfeit a leaving player's live hand (table-stakes epic M1.5). Their
+ * committed bets stay in the pot; only the fold is recorded here — the caller
+ * cashes out the uncommitted table stack separately.
+ *
+ * Progression after the forfeit:
+ *  - Betting stage: if the leaver held the turn (or only one player now
+ *    remains) run the normal post-action progression so the turn advances or
+ *    the hand completes as a fold win. If a waiting (non-turn) seat leaves and
+ *    more than one player remains, the turn simply stays put.
+ *  - Showdown/final: if only one player remains, complete as a fold win;
+ *    otherwise leave it for the showdown resolver.
+ *
+ * No-op when there is no active hand or the player has no live (un-folded)
+ * hand in it.
+ */
+export async function forfeitHandOnLeave(
+  ctx: MutationCtx,
+  roomId: Id<"rooms">,
+  playerId: string,
+): Promise<void> {
+  const activeGame = await ctx.db
+    .query("games")
+    .withIndex("by_room_status", (q) =>
+      q.eq("roomId", String(roomId)).eq("status", "active"),
+    )
+    .unique();
+  if (!activeGame) return;
+
+  const hands = await ctx.db
+    .query("playerHands")
+    .withIndex("by_game", (q) => q.eq("gameId", activeGame._id))
+    .collect();
+  const ordered = sortHandsByTurnOrder(hands);
+  const leaverHand = ordered.find((hand) => hand.playerId === playerId);
+  if (!leaverHand || leaverHand.hasFolded) return;
+
+  const now = Date.now();
+  await ctx.db.patch(leaverHand._id, {
+    hasFolded: true,
+    hasActed: true,
+    lastAction: "fold",
+    updatedAt: now,
+  });
+
+  const updated: PlayerHand[] = ordered.map((hand) =>
+    hand._id === leaverHand._id
+      ? { ...hand, hasFolded: true, hasActed: true, lastAction: "fold" as const }
+      : hand,
+  );
+
+  const wasCurrentTurn =
+    ordered[activeGame.currentPlayerIndex]?.playerId === playerId;
+  const isBettingStage =
+    activeGame.stage !== "showdown" && activeGame.stage !== "final";
+
+  if (isBettingStage) {
+    if (wasCurrentTurn || onlyOnePlayerRemains(updated)) {
+      await handlePostActionProgression(ctx, activeGame, updated);
+    }
+    return;
+  }
+
+  // Showdown / final: complete as a fold win only if a single player remains.
+  if (onlyOnePlayerRemains(updated)) {
+    const winner = updated.find((hand) => !hand.hasFolded);
+    if (winner) {
+      await completeGame(ctx, {
+        gameId: activeGame._id,
+        winnerId: winner.playerId,
+        reason: "player_left_showdown",
+        foldWin: true,
+        extraPatch: {
+          stage: "showdown",
+          showdownStartedAt: undefined,
+          turnStartedAt: undefined,
+          ...getClearedTurnClockFields(),
+        },
+      });
+    }
+  }
 }

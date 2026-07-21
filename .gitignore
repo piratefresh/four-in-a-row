@@ -17,6 +17,18 @@ nul
 .auth/
 playwright-report/
 test-results/
+.nyc_output/
+coverage/
+blob-report/
+
+# Local browser and exploratory-test artifacts
+dogfood-output/
+chromedriver-tmp/
+/*chromedriver*.zip
+
+# Temporary test/dev-server logs
+/.tmp-*.log
+
 .maestro/screenshots/
 .maestro/reports/
 
